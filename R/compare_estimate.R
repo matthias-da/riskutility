@@ -7,6 +7,8 @@
 #' @param y a vector
 #' @param estimator a function with a vector of lenght 1 as output
 #' @param R number of bootstrap replicates
+#' @importFrom stats median
+#' @importFrom stats quantile
 #' @return A list with the following elements:
 #' \describe{
 #'   \item{m_x}{The point estimate of the function provided in function
@@ -23,7 +25,6 @@
 #' @examples
 #' x <- rnorm(100, 10)
 #' y <- x + runif(100, 0, 1)
-#' compare_estimator(x, y, estimator = mean)
 #'
 #' ci_overlap(x, y, R = 1000)
 #'

@@ -5,8 +5,24 @@
 #' @param X data frame
 #' @param Y data frame with the same structure as X
 #' @param form formula. If NULL all variables are used as predictors
+#' @param method method for propensity score estimation. Default is rf
+#' (random forest)
+#' @param adjust_size for very unbalanced sizes of original and synthetic data.
+#' Instead of using a constant c, observations are drawn from the smaller
+#' data set so that the both data sets has the same size. If a cluster
+#' structure is present (e.g. person in housholds), draws are taken from the
+#' clusters (e.g. households).
+#' @param cluster vector specifiying the cluster structure. Should be NULL
+#' if no cluster structure is present in the data.
+#' @param na missing value treatment. Either stop, remove or impute
+#' (using a kNN from R package VIM).
+#' @importFrom randomForest randomForest
+#' @importFrom reshape2 melt
+#' @importFrom stats terms.formula
+#' @importFrom stats complete.cases
 #' @author Matthias Templ
 #' @return Propensity score measures
+#' @export
 #' @references
 #' Templ, M. Statistical Disclosure Control for Microdata: Methods and Applications in R.
 #' \emph{Springer International Publishing}, 287 pages, 2017. ISBN 978-3-319-50272-4. \doi{10.1007/978-3-319-50272-4}
@@ -226,17 +242,33 @@ propscore <- function(X, Y,
 
 }
 
+#' Print method for propscore objects
+#'
+#' @param x an object of class "propscore"
+#' @param ... additional arguments passed to the print method
+#' @export
 print.propscore <- function(x, ...){
   cat("mean propensity scores for x: ", x$mean_ps_x)
   cat("\nmean propensity scores for y: ", x$mean_ps_y)
   cat("\npropensity score statistics: ", x$ps_score, "\n")
 }
 
+#' Summary method for propscore objects
+#'
+#' @param object an object of class "propscore"
+#' @param ... additional arguments passed to the summary method
+#' @export
 summary.propscore <- function(object, ...){
   cat("TBD")
 }
 
-
+#' Plot method for propscore objects
+#'
+#' @param x an object of class "propscore"
+#' @param y not used
+#' @param ... additional arguments passed to the plot method
+#' @param which which plot to show: 1 for density, 2 for density ratio
+#' @export
 plot.propscore <- function(x, y, ..., which = 1){
 
   is_list_of_lists <- function(obj) {

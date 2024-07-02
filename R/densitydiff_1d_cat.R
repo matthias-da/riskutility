@@ -3,6 +3,7 @@
 #' Computes the compositional Aitchison distance between densities of two categorical variables
 #' @param x a factor variable
 #' @param y a factor variable
+#' @importFrom robCompositions aDist
 #' @author Matthias Templ
 #' @return The Aitchison distance between two densities
 #' @examples

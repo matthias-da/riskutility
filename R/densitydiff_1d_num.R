@@ -13,6 +13,14 @@
 #' to which strata. If not NULL, density estimation is applied on each strata.
 #' It must have the same levels than strata_x and there must be observed values
 #' for each level.
+#' @export
+#' @importFrom robCompositions gm
+#' @importFrom stats density
+#' @importFrom stats approx
+#' @importFrom stats sd
+#' @examples
+#' # example code
+#'
 #' library(simPop)
 #' data(eusilc13puf)
 #' x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
@@ -20,7 +28,26 @@
 #' densitydiff_1d_num(x, y)
 #' strata_x <- factor(sample(c("one", "two","three"), length(x), replace = TRUE))
 #' strata_y <- factor(sample(c("one", "two","three"), length(y), replace = TRUE))
-#' densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
+#' d1 <- densitydiff_1d_num(x, y, bayesspace = TRUE)
+#' d1e <- densitydiff_1d_num(x, y, bayesspace = FALSE)
+#' d1$density_ratio
+#' d1e$density_ratio
+#' d2 <- densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
+#' data("eusilc13puf")
+#' x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
+#' y <- x + runif(nrow(eusilc13puf), min = 0, max = 2)
+#' densitydiff_1d_num(x, y)
+#' strata_x <- factor(sample(c("one", "two","three"), length(x), replace = TRUE))
+#' strata_y <- factor(sample(c("one", "two","three"), length(y), replace = TRUE))
+#' d1 <- densitydiff_1d_num(x, y, bayesspace = TRUE)
+#' d1e <- densitydiff_1d_num(x, y, bayesspace = FALSE)
+#' d1$density_ratio
+#' d1e$density_ratio
+#' d2 <- densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
+#'plot(d2, which = 1:2)
+# plot(d1)
+# plot(d1, which = 1:2)
+# plot(d1e, which = 1:2)
 densitydiff_1d_num <- function(x,
                                y,
                                bayesspace = TRUE,
@@ -122,14 +149,18 @@ densitydiff_1d_num <- function(x,
       distance <- sqrt(sum((density_X - density_Y)^2))
       # Compute the density ratio
       density_ratio <- density_X / density_Y
-      kl <- sum(density_X * log(density_ratio))
+      #kl <- sum(density_X * log(density_ratio))
+      kl <- KLDiv(density_X, density_Y)
+      jsd <- JSDiv(density_X, density_Y)
     } else{
       density_X <- log(density_X / gm(density_X))
       density_Y <- log(density_Y / gm(density_Y))
       distance <- sqrt(sum((density_X - density_Y)^2, na.rm=TRUE))
       # Compute the density ratio
       density_ratio <- density_X - density_Y
-      kl <- length(density_X_orig) / 2 * log(mean(density_X_orig / density_Y_orig, na.rm = TRUE) * mean(density_Y_orig / density_X_orig, na.rm = TRUE))
+      # kl <- length(density_X_orig) / 2 * log(mean(density_X_orig / density_Y_orig, na.rm = TRUE) * mean(density_Y_orig / density_X_orig, na.rm = TRUE))
+      kl <- KLDiv_bayes(density_X, density_Y)
+      jsd <- JSDiv_bayes(density_X, density_Y)
     }
 
     mean_ratio <- mean(density_ratio, na.rm = TRUE)
@@ -138,6 +169,7 @@ densitydiff_1d_num <- function(x,
     return(list("distance" = distance,
                 "density_ratio" = density_ratio,
                 "kl" = kl,
+                "jsd" = jsd,
                 "mean_ratio" = mean_ratio,
                 "sd_ratio" = sd_ratio,
                 "denX" = density_X,
@@ -263,29 +295,6 @@ plot.denratio <- function(x, y, ..., which = 1){
 }
 
 
-library(simPop)
-data("eusilc13puf")
-x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
-y <- x + runif(nrow(eusilc13puf), min = 0, max = 2)
-densitydiff_1d_num(x, y)
-strata_x <- factor(sample(c("one", "two","three"), length(x), replace = TRUE))
-strata_y <- factor(sample(c("one", "two","three"), length(y), replace = TRUE))
-d1 <- densitydiff_1d_num(x, y, bayesspace = TRUE)
-d1e <- densitydiff_1d_num(x, y, bayesspace = FALSE)
-d1$density_ratio
-d1e$density_ratio
-
-# plot(d1$points, d1$density_ratio)
-# plot(d1e$points, d1e$density_ratio)
-#
-
-d2 <- densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
-#plot(d1)
-# plot(d1, which = 1:2)
-# plot(d1e, which = 1:2)
-
-
-plot(d2, which = 1:2)
 
 #
 # # Plot the results

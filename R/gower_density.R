@@ -3,6 +3,7 @@
 #' Computes the Gower distance based on densities
 #' @param X data frame
 #' @param Y data frame
+#' @importFrom VIM gowerD
 #' @author Matthias Templ
 gower_density <- function(X, Y){
   ## wie bei kategorischen?

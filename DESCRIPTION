@@ -5,7 +5,8 @@ Authors@R:
     person("Matthias", "Templ", , "matthias.templ@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "YOUR-ORCID-ID"))
 Description: What the package does (one paragraph).
-Depends: sdcMicro, simPop
+Depends: robCompositions
+Imports: MASS, VIM, misc3d, randomForest, reshape2, ggplot2, caret
 License: `use_gpl3_license()` 
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

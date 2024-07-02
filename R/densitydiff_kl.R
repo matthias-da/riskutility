@@ -14,11 +14,14 @@
 #'
 #' \deqn{KLD(X,Y) = \sum{X \times \log\left(\frac{X}{Y}\right)}}
 #' \deqn{KLD(X,Y) = \sum_{i,j}{X_{i,j} ( \log\left(\frac{X_{i,j}{Y_{i,j}} +
-#' log(Y) - log(X) \right))}}
+#' log(Y) - log(X) \right))}}}
 #' with \deqn{X = \sum{X}_{i,j}} and \deqn{Y = \sum{Y}_{i,j}}
 #'
-#' @param Either a numeric vector or a matrix or data frame with numeric entries.
-#' @param Either a numeric vector or a matrix or data frame with numeric entries.
+#' @param X a numeric vector or a matrix or data frame with numeric entries.
+#' @param Y a numeric vector or a matrix or data frame with numeric entries.
+#' @param stepsize number of interval points where the density is evaluated.
+#' @importFrom misc3d kde3d
+#' @importFrom MASS kde2d
 #' @author Matthias Templ
 #' @return The Kullback-Leibler divergence of \code{X} and \code{Y}.
 #'
@@ -37,6 +40,7 @@
 #' densitydiff_kl_num(X, Y)
 #'
 densitydiff_kl_num <- function(X, Y, stepsize = 1000) {
+  # TBD
   # Check if X and Y are either numeric vectors, matrices or data frames with numeric values
   is_valid_input <- function(data) {
     if (is.numeric(data) && is.vector(data)) {
@@ -81,8 +85,8 @@ densitydiff_kl_num <- function(X, Y, stepsize = 1000) {
   # univariate
   if(is.numeric(X) & is.vector((X))){
     # Kernel Density Estimation
-    kde_x <- density(x)
-    kde_y <- density(y)
+    kde_x <- density(X)
+    kde_y <- density(Y)
 
     # Define a sequence of points
     points <- seq(min(kde_x$x, kde_y$x),
@@ -98,8 +102,8 @@ densitydiff_kl_num <- function(X, Y, stepsize = 1000) {
 
   # bivariate
   if(ncol(X) == 0){
-    dX <- kde2d(x = X[, 1], y = X[, 2])
-    dY <- kde2d(x = Y[, 1], y = Y[, 2])
+    dX <- MASS::kde2d(x = X[, 1], y = X[, 2])
+    dY <- MASS::kde2d(x = Y[, 1], y = Y[, 2])
     return(dX$z * log(dX$z / dY$z))
   }
 
@@ -113,22 +117,4 @@ densitydiff_kl_num <- function(X, Y, stepsize = 1000) {
   if(ncol(X) > 3){
    stop("not implemented for more than three-dimensional data")
   }
-}
-
-#' Computes the Jensen-Shannon divergence between two probabiliy distributions. TBD
-#'
-#' @param P A probility distribution (vector summing to one).
-#' @param Q A probility distribution (vector summing to one).
-#' @return The JSD of \code{P} and \code{Q}.
-#'
-#' @examples
-#' P = prop.table(sample(1:10, 20, replace = TRUE))
-#' Q = prop.table(sample(5:15, 20, replace = TRUE))
-#'
-#' JSD(P,Q)
-#' JSD(Q,P)
-JSD = function(P, Q) {
-  M = (P + Q)/2
-  jsd = 0.5 * KLD(P, M) + 0.5 * KLD(Q, M)
-  return(jsd)
 }
