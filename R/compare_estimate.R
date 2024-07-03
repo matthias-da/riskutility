@@ -9,6 +9,8 @@
 #' @param R number of bootstrap replicates
 #' @importFrom stats median
 #' @importFrom stats quantile
+#' @export
+#' @rdname ci_overlap
 #' @return A list with the following elements:
 #' \describe{
 #'   \item{m_x}{The point estimate of the function provided in function
