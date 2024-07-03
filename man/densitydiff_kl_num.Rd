@@ -20,19 +20,19 @@ The Kullback-Leibler divergence of \code{X} and \code{Y}.
 Kullback-Leibler divergence between two variables or two matrices/data.frames.
 }
 \details{
-First the probability distributions are estimated before the Kullback-Leiber
-divergence is calculated.
+First the probability distributions are estimated before the
+Kullback-Leiber divergence is calculated.
 
 The Kullback-Leibler divergence is defined as:
 \deqn{KLD(X,Y) = \sum{X \times \log\left(\frac{X}{Y}\right)}}
 
-If the data are multivariate, an Kullback-Leibler inspired divergence
+If the data are multivariate, a Kullback-Leibler inspired divergence
 is calculated through
 
 \deqn{KLD(X,Y) = \sum{X \times \log\left(\frac{X}{Y}\right)}}
-\deqn{KLD(X,Y) = \sum_{i,j}{X_{i,j} ( \log\left(\frac{X_{i,j}{Y_{i,j}} +
-log(Y) - log(X) \right))}}}
-with \deqn{X = \sum{X}_{i,j}} and \deqn{Y = \sum{Y}_{i,j}}
+\deqn{KLD(X,Y) = \sum_{i,j}{X_{i,j} \left( \log\left(\frac{X_{i,j}}{Y_{i,j}}\right) +
+\log(Y) - \log(X) \right)}}
+with \deqn{X = \sum{X_{i,j}}} and \deqn{Y = \sum{Y_{i,j}}}
 }
 \examples{
 x <- rnorm(100)

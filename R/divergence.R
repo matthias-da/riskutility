@@ -2,6 +2,10 @@
 #'
 #' Kullback-Leibler and Jensen-Shannon divergence
 #'
+#' @details
+#' The Kullback-Leibler divergence is defined as:
+#' \deqn{KLD(X,Y) = \sum X \times \log\left(\frac{X}{Y}\right)}
+#'
 #' @param A a vector of probability densities
 #' @param B a vector of probability densities
 #' @return The divergence measure

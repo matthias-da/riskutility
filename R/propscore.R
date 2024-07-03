@@ -17,6 +17,8 @@
 #' @param na missing value treatment. Either stop, remove or impute
 #' (using a kNN from R package VIM).
 #' @importFrom randomForest randomForest
+#' @importFrom stats as.formula formula
+#' @importFrom simPop specifyInput simStructure simCategorical simContinuous pop
 #' @importFrom reshape2 melt
 #' @importFrom stats terms.formula
 #' @importFrom stats complete.cases
@@ -26,42 +28,52 @@
 #' @references
 #' Templ, M. Statistical Disclosure Control for Microdata: Methods and Applications in R.
 #' \emph{Springer International Publishing}, 287 pages, 2017. ISBN 978-3-319-50272-4. \doi{10.1007/978-3-319-50272-4}
+#' @examples
+#' # example code
+#'
 #' data(eusilc13puf, package = "simPop")
 #' eusilc13puf$age <- as.numeric(as.character(eusilc13puf$age))
 #' keyvars <- c("age", "rb090", "db040", "pl031", "pb220a")
-#' require(sdcMicro)
-#' sdc <- createSdcObj(eusilc13puf,
-#'          keyVars = keyvars,
-#'          numVars = "pgrossIncome",
-#'          w = "rb050",
-#'          hhId = "db030")
-#' sdc <- globalRecode(sdc,
-#'          column = "age",
-#'          breaks = c(1,9,19,29,39,49,59,69,100),
-#'          labels = 1:8)
-#' sdc <- localSuppression(sdc)
-#' sdc <- microaggregation(sdc)
-#' eusilc13puf_anon <- extractManipData(sdc)
+#' sdc <- sdcMicro::createSdcObj(eusilc13puf,
+#'                               keyVars = keyvars,
+#'                               numVars = "pgrossIncome",
+#'                               w = "rb050",
+#'                               hhId = "db030")
+#' sdc <- sdcMicro::globalRecode(sdc,
+#'                               column = "age",
+#'                               breaks = c(1,9,19,29,39,49,59,69,100),
+#'                               labels = 1:8)
+#' sdc <- sdcMicro::localSuppression(sdc)
+#' sdc <- sdcMicro::microaggregation(sdc)
+#' eusilc13puf_anon <- sdcMicro::extractManipData(sdc)
 #'
-#' propscore(eusilc13puf, eusilc13puf_anon, na = "remove")
+#' propscore(eusilc13puf, eusilc13puf_anon, na = "remove",
+#'    form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"))
+#' propscore(eusilc13puf, eusilc13puf_anon, na = "remove",
+#'    form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"),
+#'    adjust_size = FALSE)
 #'
+#' \dontrun{
+#'   ## approx. 20 seconds computation time
+#'   inp <- simPop::specifyInput(data=eusilc13puf, hhid="db030",
+#'                    hhsize="hsize", strata="db040", weight="rb050")
+#'   simPop <- simPop::simStructure(data = inp, method = "direct",
+#'                       basicHHvars=c("age", "rb090", "hsize", "db040"))
+#'   simPop <- simPop::simCategorical(simPop, additional=c("pl031", "pb220a"),
+#'                       method = "multinom", nr_cpus = 1)
+#'   # multinomial model with random draws
+#'   simPop <- simPop::simContinuous(simPop, additional="pgrossIncome",
+#'                                   regModel = ~rb090+hsize+pl031+pb220a,
+#'                                   upper=200000, equidist=FALSE, nr_cpus=1)
+#'   eusilc13puf_synth <- data.frame(simPop::pop(simPop))
 #'
-#' #' \dontrun{
-#' ## approx. 20 seconds computation time
-#' require(simPop)
-#' inp <- specifyInput(data=eusilc13puf, hhid="db030", hhsize="hsize", strata="db040", weight="rb050")
-#' simPop <- simStructure(data = inp, method = "direct",
-#'   basicHHvars=c("age", "rb090", "hsize", "db040"))
-#' simPop <- simCategorical(simPop, additional=c("pl031", "pb220a"), method = "multinom", nr_cpus = 1)
-#' # multinomial model with random draws
-#' simPop <- simContinuous(simPop, additional="pgrossIncome",
-#'               regModel = ~rb090+hsize+pl031+pb220a,
-#'               upper=200000, equidist=FALSE, nr_cpus=1)
-#' eusilc13puf_synth <- data.frame(pop(simPop))
-#'
-#' propscore(eusilc13puf, eusilc13puf_synth, na = "remove")
-#' propscore(eusilc13puf, eusilc13puf_synth, na = "remove", cluster = "db030")
-#'
+#' propscore(eusilc13puf, eusilc13puf_synth, na = "remove",
+#'   form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"))
+#' propscore(eusilc13puf, eusilc13puf_synth, na = "remove", cluster = "db030",
+#'   form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"))
+#' propscore(eusilc13puf, eusilc13puf_synth, na = "remove", cluster = "db030",
+#'   form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"),
+#'   adjust_size = FALSE)
 #' }
 propscore <- function(X, Y,
                form = NULL,
@@ -77,6 +89,16 @@ propscore <- function(X, Y,
     stop("Y must be a data frame.")
   }
 
+  # Helper function to check and modify the formula
+  check_and_modify_formula <- function(form) {
+    form_str <- deparse(form)
+    if (!grepl("^group ~", form_str)) {
+      form_str <- paste("group ~", sub("^~", "", form_str))
+      form <- as.formula(form_str)
+    }
+    return(form)
+  }
+
   if (is.null(form)) {
     # If no formula is provided, check if X and Y have the same structure
     if (!all(names(X) == names(Y))) {
@@ -85,12 +107,15 @@ propscore <- function(X, Y,
     if (!all(sapply(X, class) == sapply(Y, class))) {
       stop("X and Y must have the same column classes.")
     }
-    form <- paste("group", paste(colnames(X), collapse = " + "), collapse = " ~ ")
+    #form <- paste("group", paste(colnames(X), collapse = " + "), collapse = " ~ ")
+    form <- formula("group ~ .")
   } else {
     # Check if form is of class 'formula'
     if (!inherits(form, "formula")) {
       stop("form must be a valid formula.")
     }
+
+    form <- check_and_modify_formula(form)
 
     # Extract variable names from the formula
     formula_vars <- all.vars(form)[-1]
@@ -370,44 +395,6 @@ plot.propscore <- function(x, y, ..., which = 1){
 
 
 
-# data(eusilc13puf, package = "simPop")
-# eusilc13puf$age <- as.numeric(as.character(eusilc13puf$age))
-# keyvars <- c("age", "rb090", "db040", "pl031", "pb220a")
-# require(sdcMicro)
-# sdc <- createSdcObj(eusilc13puf,
-#          keyVars = keyvars,
-#          numVars = "pgrossIncome",
-#          w = "rb050",
-#          hhId = "db030")
-# sdc <- globalRecode(sdc,
-#          column = "age",
-#          breaks = c(1,9,19,29,39,49,59,69,100),
-#          labels = 1:8)
-# sdc <- localSuppression(sdc)
-# sdc <- microaggregation(sdc)
-# eusilc13puf_anon <- extractManipData(sdc)
-#
-# propscore(eusilc13puf, eusilc13puf_anon, na = "remove")
-#
-#
-# ## approx. 20 seconds computation time
-# require(simPop)
-# inp <- specifyInput(data=eusilc13puf, hhid="db030", hhsize="hsize", strata="db040", weight="rb050")
-# simPop <- simStructure(data = inp, method = "direct",
-#   basicHHvars=c("age", "rb090", "hsize", "db040"))
-# simPop <- simCategorical(simPop, additional=c("pl031", "pb220a"), method = "multinom", nr_cpus = 1)
-# # multinomial model with random draws
-# simPop <- simContinuous(simPop, additional="pgrossIncome",
-#               regModel = ~rb090+hsize+pl031+pb220a,
-#               upper=200000, equidist=FALSE, nr_cpus=1)
-# eusilc13puf_synth <- data.frame(pop(simPop))
-#
-# propscore(eusilc13puf, eusilc13puf_synth, na = "remove")
-# propscore(eusilc13puf, eusilc13puf_synth, na = "remove", method = "rf")
-# propscore(eusilc13puf, eusilc13puf_synth, na = "remove", adjust_size = FALSE)
-# propscore(eusilc13puf, eusilc13puf_synth, na = "remove", adjust_size = FALSE, method = "rf")
-# propscore(eusilc13puf, eusilc13puf_synth, na = "remove", method = "rf")
-# propscore(eusilc13puf, eusilc13puf_synth, na = "remove", cluster = "db030")
-#
+
 
 

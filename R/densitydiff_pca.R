@@ -19,18 +19,9 @@
 #' for each level.
 #' @importFrom stats princomp
 #' @importFrom stats runif
+#' @export
 #' @examples
 #' # example code
-#'
-#' data(eusilc13puf, package = "simPop")
-#' x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
-#' y <- x + runif(nrow(eusilc13puf), min = 0, max = 2)
-#' densitydiff_1d_num(x, y)
-#' strata_x <- factor(sample(c("one", "two","three"), length(x),
-#'                           replace = TRUE))
-#' strata_y <- factor(sample(c("one", "two","three"), length(y),
-#'                           replace = TRUE))
-#' densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
 #'
 #' library(simPop)
 #' data("eusilc13puf")
@@ -218,8 +209,22 @@ densitydiff_pca <- function(X,
   return(result)
 }
 
-#' @rdname densitydiff_pca
-#' @exportS3Method riskutility::denratio
+# Register global variables to avoid NOTE
+utils::globalVariables(c("x", "y"))
+
+NULL
+
+#' Plot method for denpca objects
+#'
+#' This function plots objects of class \code{denpca}.
+#'
+#' @param x An object of class \code{denpca}.
+#' @param y Not used.
+#' @param ... Additional arguments passed to the plotting functions.
+#' @param which Which plot to show: 1 for density, 2 for density ratio.
+#' @return A plot.
+#' @rdname plot.denpca
+#' @method plot denpca
 #' @export
 plot.denpca <- function(x, y, ..., which = 1){
   # TBD

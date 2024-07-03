@@ -2,7 +2,6 @@
 % Please edit documentation in R/densitydiff_pca.R
 \name{densitydiff_pca}
 \alias{densitydiff_pca}
-\alias{plot.denpca}
 \title{Density ratio and entropy of first PC's}
 \usage{
 densitydiff_pca(
@@ -13,8 +12,6 @@ densitydiff_pca(
   strata_x = NULL,
   strata_y = NULL
 )
-
-\method{denratio}{plot.denpca}(x, y, ..., which = 1)
 }
 \arguments{
 \item{X}{a numeric vector}
@@ -41,16 +38,6 @@ and provides entropy measures and more.
 }
 \examples{
 # example code
-
-data(eusilc13puf, package = "simPop")
-x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
-y <- x + runif(nrow(eusilc13puf), min = 0, max = 2)
-densitydiff_1d_num(x, y)
-strata_x <- factor(sample(c("one", "two","three"), length(x),
-                          replace = TRUE))
-strata_y <- factor(sample(c("one", "two","three"), length(y),
-                          replace = TRUE))
-densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
 
 library(simPop)
 data("eusilc13puf")

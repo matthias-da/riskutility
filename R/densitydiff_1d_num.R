@@ -18,36 +18,37 @@
 #' @importFrom stats density
 #' @importFrom stats approx
 #' @importFrom stats sd
+#' @importFrom ggplot2 theme_minimal
+#' @importFrom ggplot2 geom_hline
 #' @examples
 #' # example code
 #'
-#' library(simPop)
-#' data(eusilc13puf)
+#' data(eusilc13puf, package = "simPop")
 #' x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
 #' y <- x + runif(nrow(eusilc13puf), min = 0, max = 2)
-#' densitydiff_1d_num(x, y)
+#' d <- densitydiff_1d_num(x, y)
+#' plot(d)
 #' strata_x <- factor(sample(c("one", "two","three"), length(x), replace = TRUE))
 #' strata_y <- factor(sample(c("one", "two","three"), length(y), replace = TRUE))
 #' d1 <- densitydiff_1d_num(x, y, bayesspace = TRUE)
 #' d1e <- densitydiff_1d_num(x, y, bayesspace = FALSE)
-#' d1$density_ratio
-#' d1e$density_ratio
+#' summary(d1$density_ratio)
+#' summary(d1e$density_ratio)
 #' d2 <- densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
 #' data("eusilc13puf")
 #' x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
 #' y <- x + runif(nrow(eusilc13puf), min = 0, max = 2)
-#' densitydiff_1d_num(x, y)
 #' strata_x <- factor(sample(c("one", "two","three"), length(x), replace = TRUE))
 #' strata_y <- factor(sample(c("one", "two","three"), length(y), replace = TRUE))
 #' d1 <- densitydiff_1d_num(x, y, bayesspace = TRUE)
 #' d1e <- densitydiff_1d_num(x, y, bayesspace = FALSE)
-#' d1$density_ratio
-#' d1e$density_ratio
+#' summary(d1$density_ratio)
+#' summary(d1e$density_ratio)
 #' d2 <- densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
-#'plot(d2, which = 1:2)
-# plot(d1)
-# plot(d1, which = 1:2)
-# plot(d1e, which = 1:2)
+#' plot(d2, which = 1:2)
+#' plot(d1)
+#' plot(d1, which = 1:2)
+#' plot(d1e, which = 1:2)
 densitydiff_1d_num <- function(x,
                                y,
                                bayesspace = TRUE,
@@ -194,7 +195,20 @@ densitydiff_1d_num <- function(x,
   class(result) <- "denratio"
   return(result)
 }
+NULL
 
+#' Plot method for denpca objects
+#'
+#' This function plots objects of class \code{denpca}.
+#'
+#' @param x An object of class \code{denpca}.
+#' @param y Not used.
+#' @param ... Additional arguments passed to the plotting functions.
+#' @param which Which plot to show: 1 for density, 2 for density ratio.
+#' @return A plot.
+#' @rdname plot.denratio
+#' @method plot denratio
+#' @export
 plot.denratio <- function(x, y, ..., which = 1){
 
   is_list_of_lists <- function(obj) {
@@ -313,4 +327,8 @@ plot.denratio <- function(x, y, ..., which = 1){
 #      xlab = "Points", ylab = "Density Ratio",
 #      main = "Density Ratio Between Two Distributions")
 # abline(h = 1, lty = 2, col = "gray")
+
+
+
+
 

@@ -1,13 +1,17 @@
 Package: riskutility
-Title: What the Package Does (One Line, Title Case)
+Title: Risk and utility measurement for anonymized and synthetic data
 Version: 0.0.0.9000
-Authors@R: 
-    person("Matthias", "Templ", , "matthias.templ@gmail.com", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
-Depends: robCompositions
-Imports: MASS, VIM, misc3d, randomForest, reshape2, ggplot2, caret
-License: `use_gpl3_license()` 
+Authors@R: c(
+    person("Matthias", "Templ", email = "matthias.templ@gmail.com", 
+           role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-8638-5276")),
+    person("FirstName", "LastName", email = "author@example.com",
+           role = c("aut"),
+           comment = c(ORCID = "ID")))
+Description: The package provides a bunch of methods to measure risk and utility for anonymized and synthetized data. Note that this package is also be used in R package simPop, where the methods are incoorperated within the simPop S4 class structure. 
+Depends: ggplot2
+Imports: MASS, VIM, misc3d, randomForest, reshape2, caretEnsemble, caret, robCompositions, simPop, sdcMicro
+License: GPL-3 | file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.1

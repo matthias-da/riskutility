@@ -36,30 +36,32 @@ Computes the density ratio between two vectors and provides entropy measures and
 \examples{
 # example code
 
-library(simPop)
-data(eusilc13puf)
+data(eusilc13puf, package = "simPop")
 x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
 y <- x + runif(nrow(eusilc13puf), min = 0, max = 2)
-densitydiff_1d_num(x, y)
+d <- densitydiff_1d_num(x, y)
+plot(d)
 strata_x <- factor(sample(c("one", "two","three"), length(x), replace = TRUE))
 strata_y <- factor(sample(c("one", "two","three"), length(y), replace = TRUE))
 d1 <- densitydiff_1d_num(x, y, bayesspace = TRUE)
 d1e <- densitydiff_1d_num(x, y, bayesspace = FALSE)
-d1$density_ratio
-d1e$density_ratio
+summary(d1$density_ratio)
+summary(d1e$density_ratio)
 d2 <- densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
 data("eusilc13puf")
 x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
 y <- x + runif(nrow(eusilc13puf), min = 0, max = 2)
-densitydiff_1d_num(x, y)
 strata_x <- factor(sample(c("one", "two","three"), length(x), replace = TRUE))
 strata_y <- factor(sample(c("one", "two","three"), length(y), replace = TRUE))
 d1 <- densitydiff_1d_num(x, y, bayesspace = TRUE)
 d1e <- densitydiff_1d_num(x, y, bayesspace = FALSE)
-d1$density_ratio
-d1e$density_ratio
+summary(d1$density_ratio)
+summary(d1e$density_ratio)
 d2 <- densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
 plot(d2, which = 1:2)
+plot(d1)
+plot(d1, which = 1:2)
+plot(d1e, which = 1:2)
 }
 \author{
 Matthias Templ

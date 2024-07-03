@@ -48,19 +48,18 @@ quality than the original data.
 data(eusilc13puf, package = "simPop")
 eusilc13puf$age <- as.numeric(as.character(eusilc13puf$age))
 keyvars <- c("age", "rb090", "db040", "pl031", "pb220a")
-require(sdcMicro)
-sdc <- createSdcObj(eusilc13puf,
+sdc <- sdcMicro::createSdcObj(eusilc13puf,
                     keyVars = keyvars,
                     numVars = "pgrossIncome",
                     w = "rb050",
                     hhId = "db030")
-sdc <- globalRecode(sdc,
+sdc <- sdcMicro::globalRecode(sdc,
                     column = "age",
                     breaks = c(1,9,19,29,39,49,59,69,100),
                     labels = 1:8)
-sdc <- localSuppression(sdc)
-sdc <- microaggregation(sdc)
-eusilc13puf_anon <- extractManipData(sdc)
+sdc <- sdcMicro::localSuppression(sdc)
+sdc <- sdcMicro::microaggregation(sdc)
+eusilc13puf_anon <- sdcMicro::extractManipData(sdc)
 
 m1 <- mqs(eusilc13puf, eusilc13puf_anon, na = "remove",
           form = formula("rb090 ~ age + rb090 + pl031 +
@@ -70,19 +69,19 @@ m2 <- mqs(eusilc13puf, eusilc13puf_anon, na = "remove",
           form = formula("pgrossIncome ~ age + rb090 + pl031 +
                           pb220a + db040"), methods = c("glm", "rpart"))
 
+\dontrun{
 ## approx. 20 seconds computation time
-require(simPop)
-inp <- specifyInput(data=eusilc13puf, hhid="db030", hhsize="hsize",
+inp <- simPop::specifyInput(data=eusilc13puf, hhid="db030", hhsize="hsize",
                     strata="db040", weight="rb050")
-simPop <- simStructure(data = inp, method = "direct",
+simPop <- simPop::simStructure(data = inp, method = "direct",
   basicHHvars=c("age", "rb090", "hsize", "db040"))
-simPop <- simCategorical(simPop, additional=c("pl031", "pb220a"),
+simPop <- simPop::simCategorical(simPop, additional=c("pl031", "pb220a"),
                          method = "multinom", nr_cpus = 1)
 # multinomial model with random draws
-simPop <- simContinuous(simPop, additional="pgrossIncome",
+simPop <- simPop::simContinuous(simPop, additional="pgrossIncome",
               regModel = ~rb090+hsize+pl031+pb220a,
               upper=200000, equidist=FALSE, nr_cpus=1)
-eusilc13puf_synth <- data.frame(pop(simPop))
+eusilc13puf_synth <- data.frame(simPop::pop(simPop))
 m1 <- mqs(eusilc13puf, eusilc13puf_synth, na = "remove",
           form = formula("rb090 ~ age + rb090 + pl031 + pb220a +
                           db040 + pgrossIncome"),
@@ -91,6 +90,7 @@ m2 <- mqs(eusilc13puf, eusilc13puf_synth, na = "remove",
           form = formula("pgrossIncome ~ age + rb090 + pl031 +
                           pb220a + db040"),
           methods = c("glm", "rpart"))
+}
 }
 \author{
 Matthias Templ
