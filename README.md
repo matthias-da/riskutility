@@ -25,7 +25,8 @@ solve everything. `ci_overlap` ... almost ready\
 `densitydiff_1d_num` ... probably another name for the function, and
 maybe to join together with `densitydiff_1d_cat`. New function arguments
 `conditional` instead of `strata_x` and `strata_y`. Also for more than
-one variable, such as function `compare`. `densitydiff_pca` ... TBD:
+one variable, such as function `compare`.   
+`densitydiff_pca` ... TBD:
 plot method\
 `plot.denratio` ... adapt similar to `plot.compare` `densitydiff_kl_num`
 ... Not ready, TBD\
