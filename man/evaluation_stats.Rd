@@ -7,7 +7,7 @@
 \alias{mse}
 \alias{rmse}
 \alias{ait}
-\title{evaluation statistics}
+\title{Evaluation statistics}
 \usage{
 mape(x, y)
 

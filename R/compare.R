@@ -1,36 +1,60 @@
 #' Compare Two Data Sets
 #'
 #' This function calculates and compares the empirical cumulative distribution
-#' functions (ECDF) of a sample (\code{S}) and a population (\code{U}) for
+#' functions (ECDF) of a sample (\code{X}) and a population (\code{Y}) for
 #' specified variables. It can handle weighted samples and provides options for
 #' conditional CDFs, and approximation.
 #'
-#' @param S A data frame or data table representing the sample.
-#' @param U A data frame or data table representing the population.
-#' @param variables A character vector specifying the variables for which the CDFs are computed. Must be present in both \code{S} and \code{U}.
-#' @param conditional A character vector specifying conditioning variables, or \code{NULL} if no conditioning is desired. Must be of length 1 if specified.
-#' @param weights A character vector of length 1 specifying the weights variable in \code{S}, or \code{NULL} if no weights are used.
-#' @param approx A logical vector of length 2 indicating whether to approximate the CDFs in \code{S} and \code{U}, respectively.
-#' @param n_approx A numeric value specifying the number of points to use for the approximation.
-#' @param bounds A logical value indicating whether to use bounds in the CDF calculation.
-#' @param addplot A logical value indicating whether to add the plot of the CDFs.
-#' @param kindplot A character string specifying the type of plot to generate. Default is "compare".
-#' @param ... Additional arguments passed to the plot function.
-#'
-#' @return A list with class \code{"compare"} containing the following components:
+#' @param X A data frame or data table.
+#' @param Y A data frame or data table to compare with \code{X}.
+#' @param variables A character vector specifying the variables for which the
+#' comparisons are made. Must be present in both \code{X} and \code{Y}. The
+#' class of variables determines the default kind of calculation. See details.
+#' @param kind To be set when changing the default kind of calculation. See
+#' details.
+#' @param conditional A character vector specifying conditioning variables, or
+#' \code{NULL} if no conditioning is desired. Must be of length 1 if specified.
+#' @param weights A character vector of length 1 specifying the weights variable
+#' in \code{X} and/or \code{Y}, or \code{NULL} if no weights are used.
+#' @param approx A logical vector of length 2 indicating whether to approximate
+#' the CDFs in \code{X} and \code{Y}, respectively. \code{TRUE} is recommended
+#' for large data.
+#' @param n_approx A numeric value specifying the number of points to use for
+#' the approximation.
+#' @param bounds A logical value indicating whether to use bounds in the CDF
+#' calculation.
+#' @export
+#' @return A list with class \code{"compare"} containing the following
+#' components:
 #' \describe{
 #'   \item{\code{formula}}{A formula representing the CDF comparison.}
 #'   \item{\code{ecdf}}{A data frame with the ECDF values.}
-#'   \item{\code{kind}}{A character string indicating the type of comparison ("numeric").}
+#'   \item{\code{kind}}{A character string indicating the type of comparison
+#'   ("numeric").}
 #' }
 #'
 #' @details
-#' The function calculates the ECDFs for the specified variables in the sample and population data sets. If weights are provided, the weighted ECDFs are computed. The function supports conditional CDFs, which are computed by conditioning on the specified variables.
+#' The following default calculations are taken:
 #'
-#' If the \code{approx} argument is set to \code{TRUE}, the ECDFs are approximated using the specified number of points (\code{n_approx}). The function also provides an option to add plots of the CDFs.
+#' If \code{variables} links to one or two numeric variables: the (weighted)
+#' ECDF is calculated for both data sets. With \code{kind} one can change to
+#' \code{"density"}, \code{"density_bayes"}, \code{"density_ratio"} and
+#' \code{"density_ratio_bayes"}.
 #'
-#' @import data.table
-#' @import simPop
+#' If \code{variables} links to one, two or three categorical variables:
+#' barcharts and mosaic plots are made.
+#'
+#' If \code{variables} links to one numeric and one categorical variable:
+#' boxplots statistics are calculated.
+#'
+#' If weights are provided, the weighted versions are
+#' computed. The function supports conditional estimates, which are computed by
+#' conditioning on the specified variable.
+#'
+#' If the \code{approx} argument is set to \code{TRUE}, the ECDFs are
+#' approximated using the specified number of points (\code{n_approx}).
+#'
+#' @importFrom data.table data.table as.data.table
 #'
 #' @examples
 #' # Example data
@@ -45,17 +69,16 @@
 #' )
 #'
 #' # Compare ECDFs for age and income
-#' result <- compareSU_cdf(S, U, variables = c("age", "income"), weights = "weights")
+#' result <- compare(S, U, variables = c("age", "income"), weights = "weights")
 #'
 #' # View the result
 #' print(result$formula)
 #' head(result$ecdf)
+#' plot(result)
 #'
-#' @export
-compareSU_cdf <- function (S, U, variables = NULL, conditional = NULL,
+compare <- function(X, Y, variables = NULL, kind = NULL, conditional = NULL,
                           weights = NULL, approx = c(FALSE, TRUE),
-                          n_approx = 10000, bounds = TRUE, addplot = TRUE,
-                          kindplot = "compare", ...)
+                          n_approx = 10000, bounds = TRUE)
 {
   # Function to check and convert to data.table if necessary
   convert_to_data_table <- function(X) {
@@ -66,11 +89,11 @@ compareSU_cdf <- function (S, U, variables = NULL, conditional = NULL,
   }
 
   # Convert to data.table if necessary
-  S <- convert_to_data_table(S)
-  U <- convert_to_data_table(U)
+  X <- convert_to_data_table(X)
+  Y <- convert_to_data_table(Y)
 
-  n <- nrow(S)
-  N <- nrow(U)
+  n <- nrow(X)
+  N <- nrow(Y)
 
   validate_weights <- function(weights) {
     # Check if weights is NULL
@@ -90,17 +113,17 @@ compareSU_cdf <- function (S, U, variables = NULL, conditional = NULL,
   validate_weights(weights)
 
   if(is.null(weights)){
-    S$weights <- rep(1, n)
+    X$weights <- rep(1, n)
     weights.samp <- weights <- "weights"
   } else{
     weights.samp <- weights
   }
 
-  if (!(weights %in% colnames(S))) {
+  if (!(weights %in% colnames(X))) {
     stop("The variables names specified in argument 'weight' must be available
          in the sample.\n")
   }
-  if (weights %in% colnames(U)) {
+  if (weights %in% colnames(Y)) {
     weights.pop <- "weights"
   } else{
     weights.pop <- NULL
@@ -109,7 +132,7 @@ compareSU_cdf <- function (S, U, variables = NULL, conditional = NULL,
   if (!is.character(variables) || length(variables) == 0) {
     stop("'variables' must be a character vector of positive length!\n")
   }
-  if (!(all(variables %in% colnames(U)) & (all(variables %in% colnames(S))))) {
+  if (!(all(variables %in% colnames(Y)) & (all(variables %in% colnames(X))))) {
     stop("The variables names specified in argument 'variables' must be available
          both in the population and the sample.\n")
   }
@@ -119,7 +142,7 @@ compareSU_cdf <- function (S, U, variables = NULL, conditional = NULL,
       stop("argument 'conditional' must have length 1!\n")
     }
   }
-  if (!(all(conditional %in% colnames(U)) & (all(conditional %in% colnames(S))))) {
+  if (!(all(conditional %in% colnames(Y)) & (all(conditional %in% colnames(X))))) {
     stop("The variables names specified in argument 'conditional' must be
          available both in the population and the sample.")
   }
@@ -132,12 +155,12 @@ compareSU_cdf <- function (S, U, variables = NULL, conditional = NULL,
   else n_approx <- ifelse(approx, n_approx[1], NA)
   bounds <- isTRUE(bounds)
   lab <- c("Sample", "Population")
-  tmp <- simPop::getCdf(variables, weights.samp, conditional, S, approx = approx[1],
+  tmp <- simPop::getCdf(variables, weights.samp, conditional, X, approx = approx[1],
                 n = n_approx[1], name = lab[1])
   values <- tmp$values
   values$.x <- as.numeric(as.character(values$.x))
   app <- t(tmp$approx)
-  tmp <- simPop::getCdf(variables, weights.pop, conditional, U, approx = approx[2],
+  tmp <- simPop::getCdf(variables, weights.pop, conditional, Y, approx = approx[2],
                 n = n_approx[2], name = lab[2])
   values$.x <- as.numeric(as.character(values$.x))
   values <- rbind(values, tmp$values)
@@ -157,7 +180,132 @@ compareSU_cdf <- function (S, U, variables = NULL, conditional = NULL,
   class(results) <- "compare"
   return(results)
 }
+NULL
 
+#' Plot Method for Objects of Class "compare"
+#'
+#' This function provides visualizations for objects of class \code{"compare"}
+#' produced by the \code{\link{compare}} function. It generates plots of the
+#' empirical cumulative distribution functions (ECDF) and can optionally
+#' produce interactive plots.
+#'
+#' @param x An object of class \code{"compare"}.
+#' @param y Not used.
+#' @param ... Additional arguments passed to the plotting function.
+#' @param which A character string specifying the type of plot to generate.
+#' Options include \code{"ecdf"}, \code{"density"}, \code{"density_bayes"},
+#' \code{"density_ratio"}, and \code{"density_ratio_bayes"}.
+#' Default is \code{"ecdf"}.
+#' @param interactive A logical value indicating whether to produce an
+#' interactive plot using \code{plotly}. Default is \code{FALSE}.
+#'
+#' @return Invisibly returns the ggplot2 object or the plotly object if
+#' \code{interactive = TRUE}.
+#'
+#' @details
+#' The \code{plot.compare} function generates various types of plots for
+#' objects of class \code{"compare"}. The primary plot type is the ECDF plot,
+#' which can be generated by setting \code{which} to \code{"ecdf"}.
+#' Additional plot types (\code{"density"}, \code{"density_bayes"},
+#' \code{"density_ratio"}, and \code{"density_ratio_bayes"}) are currently not
+#' implemented and will raise an error if requested.
+#'
+#' The function supports both static and interactive plots.
+#' If \code{interactive = TRUE}, the function will use \code{plotly} to
+#' create an interactive version of the plot.
+#'
+#' @importFrom plotly ggplotly
+#' @importFrom ggh4x facet_grid2
+#'
+#' @examples
+#' S <- data.frame(
+#'   age = sample(20:80, 100, replace = TRUE),
+#'   income = rnorm(100, mean = 50000, sd = 10000),
+#'   weights = runif(100, 0.5, 2)
+#' )
+#' U <- data.frame(
+#'   age = sample(20:80, 10000, replace = TRUE),
+#'   income = rnorm(10000, mean = 50000, sd = 10000)
+#' )
+#'
+#' # Compare ECDFs for age and income
+#' result <- compare(S, U, variables = c("age", "income"), weights = "weights")
+#'
+#' # Plot the ECDF
+#' plot(result)
+#'
+#' \dontrun{
+#' # Interactive plot
+#' plot(result, interactive = TRUE)
+#'
+#' ## approx. 20 seconds computation time
+#' data("eusilc13puf", package = "simPop")
+#' # Function to replace NAs in factor columns with a new level
+#' replace_na_in_factor <- function(factor_col, new_level = "not unique") {
+#'   # Convert the factor to character
+#'   char_col <- as.character(factor_col)
+#'   # Replace NA with the new level
+#'   char_col[is.na(char_col)] <- new_level
+#'   # Convert back to factor and include the new level
+#'   factor_col <- factor(char_col, levels = unique(c(levels(factor_col), new_level)))
+#'   return(factor_col)
+#' }
+#'
+#' # Apply the function to the relevant columns
+#' eusilc13puf$pb220a <- replace_na_in_factor(eusilc13puf$pb220a)
+#' eusilc13puf$pl031 <- replace_na_in_factor(eusilc13puf$pl031, new_level = "child")
+#' eusilc13puf[is.na(eusilc13puf)] <- 0
+#' eusilc13puf$age <- as.numeric(as.character(eusilc13puf$age))
+#'
+#' inp <- simPop::specifyInput(data=eusilc13puf, hhid="db030",
+#'                             hhsize="hsize", strata="db040", weight="rb050")
+#' simPop <- simPop::simStructure(data = inp, method = "direct",
+#'                               basicHHvars=c("age", "rb090", "hsize", "db040", "pb220a"))
+#' simPop <- simPop::simCategorical(simPop, additional=c("pl031"),
+#'                                  method = "multinom", nr_cpus = 1)
+#' # multinomial model with random draws
+#' simPop <- simPop::simContinuous(simPop, additional="pgrossIncome",
+#'                                 regModel = ~rb090+hsize+pl031+pb220a+age,
+#'                                 upper=200000, equidist=FALSE, nr_cpus=1)
+#'
+#' eusilc13puf_synth <- data.frame(simPop::pop(simPop))
+#' eusilc13puf_synth$age <- as.numeric(as.character(eusilc13puf_synth$age))
+#'
+#'
+#' c1 <- compare(eusilc13puf, eusilc13puf_synth,
+#'               variables = c("age", "pgrossIncome"),
+#'               weights = "rb050",
+#'               n_approx = 10000)
+#' p1 <- plot(c1)
+#' p1
+#' p1$ggplot_object + theme_dark()
+#' c2 <- compare(eusilc13puf, eusilc13puf_synth,
+#'               variables = c("age", "pgrossIncome"),
+#'               weights = "rb050",
+#'               conditional = "pb220a",
+#'               n_approx = 10000)
+#' plot(c2)
+#' c3 <- compare(eusilc13puf, eusilc13puf_synth,
+#'               variables = c("pgrossIncome"),
+#'               weights = "rb050",
+#'               conditional = "rb090",
+#'               n_approx = 10000)
+#' plot(c3)
+#' c4 <- compareSU_cdf(eusilc13puf, eusilc13puf_synth,
+#'                     variables = c("age"),
+#'                     weights = "rb050",
+#'                     conditional = "rb090",
+#'                    n_approx = 10000)
+#' plot(c4)
+#' c5 <- compareSU_cdf(eusilc13puf, eusilc13puf_synth,
+#'                     variables = c("age"),
+#'                     weights = "rb050",
+#'                     conditional = "db040",
+#'                     n_approx = 10000)
+#' plot(c5)
+#' }
+#'
+#' @export
 plot.compare <- function(x, y, ..., which = "ecdf", interactive = FALSE){
 
   if(x$kind == "numeric" && (which == 1 || which == "ecdf")){
@@ -244,68 +392,3 @@ plot.compare <- function(x, y, ..., which = "ecdf", interactive = FALSE){
 }
 
 
-## approx. 20 seconds computation time
-data("eusilc13puf", package = "simPop")
-# Function to replace NAs in factor columns with a new level
-replace_na_in_factor <- function(factor_col, new_level = "not unique") {
-  # Convert the factor to character
-  char_col <- as.character(factor_col)
-  # Replace NA with the new level
-  char_col[is.na(char_col)] <- new_level
-  # Convert back to factor and include the new level
-  factor_col <- factor(char_col, levels = unique(c(levels(factor_col), new_level)))
-  return(factor_col)
-}
-
-# Apply the function to the relevant columns
-eusilc13puf$pb220a <- replace_na_in_factor(eusilc13puf$pb220a)
-eusilc13puf$pl031 <- replace_na_in_factor(eusilc13puf$pl031, new_level = "child")
-eusilc13puf[is.na(eusilc13puf)] <- 0
-eusilc13puf$age <- as.numeric(as.character(eusilc13puf$age))
-
-inp <- simPop::specifyInput(data=eusilc13puf, hhid="db030",
-                   hhsize="hsize", strata="db040", weight="rb050")
-simPop <- simPop::simStructure(data = inp, method = "direct",
-                      basicHHvars=c("age", "rb090", "hsize", "db040", "pb220a"))
-simPop <- simPop::simCategorical(simPop, additional=c("pl031"),
-                      method = "multinom", nr_cpus = 1)
-# multinomial model with random draws
-simPop <- simPop::simContinuous(simPop, additional="pgrossIncome",
-                                  regModel = ~rb090+hsize+pl031+pb220a+age,
-                                  upper=200000, equidist=FALSE, nr_cpus=1)
-
-eusilc13puf_synth <- data.frame(simPop::pop(simPop))
-eusilc13puf_synth$age <- as.numeric(as.character(eusilc13puf_synth$age))
-
-# debugonce(compareSU_cdf)
-c1 <- compareSU_cdf(eusilc13puf, eusilc13puf_synth,
-              variables = c("age", "pgrossIncome"),
-              weights = "rb050",
-              n_approx = 10000)
-p1 <- plot(c1)
-p1
-p1$ggplot_object + theme_dark()
-c2 <- compareSU_cdf(eusilc13puf, eusilc13puf_synth,
-              variables = c("age", "pgrossIncome"),
-              weights = "rb050",
-              conditional = "pb220a",
-              n_approx = 10000)
-plot(c2)
-c3 <- compareSU_cdf(eusilc13puf, eusilc13puf_synth,
-              variables = c("pgrossIncome"),
-              weights = "rb050",
-              conditional = "rb090",
-              n_approx = 10000)
-plot(c3)
-c4 <- compareSU_cdf(eusilc13puf, eusilc13puf_synth,
-              variables = c("age"),
-              weights = "rb050",
-              conditional = "rb090",
-              n_approx = 10000)
-plot(c4)
-c5 <- compareSU_cdf(eusilc13puf, eusilc13puf_synth,
-              variables = c("age"),
-              weights = "rb050",
-              conditional = "db040",
-              n_approx = 10000)
-plot(c5)

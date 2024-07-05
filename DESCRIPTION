@@ -10,7 +10,7 @@ Authors@R: c(
            comment = c(ORCID = "ID")))
 Description: The package provides a bunch of methods to measure risk and utility for anonymized and synthetized data. Note that this package is also be used in R package simPop, where the methods are incoorperated within the simPop S4 class structure. 
 Depends: ggplot2
-Imports: MASS, VIM, misc3d, randomForest, reshape2, caretEnsemble, caret, robCompositions, simPop, sdcMicro
+Imports: data.table, MASS, VIM, misc3d, randomForest, reshape2, caretEnsemble, caret, robCompositions, simPop, sdcMicro, ggh4x, plotly
 License: GPL-3 | file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

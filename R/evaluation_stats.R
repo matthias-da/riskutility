@@ -1,4 +1,4 @@
-#' evaluation statistics
+#' Evaluation statistics
 #'
 #' Several kinds of evaluation statistics (MAPE, MAE, MSE, RMSE, AIT)
 #'
@@ -7,7 +7,6 @@
 #' @author Matthias Templ
 #' @rdname evaluation_stats
 #' @name evaluation_stats
-#' @export
 #' @aliases mape mae mse rmse ait
 #' @return The MAPE, MAE, MSE, RMSE, and (normalized) AIT (Aitchison distance)
 #' between two vectors.
