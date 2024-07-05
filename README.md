@@ -25,9 +25,8 @@ solve everything. `ci_overlap` ... almost ready\
 `densitydiff_1d_num` ... probably another name for the function, and
 maybe to join together with `densitydiff_1d_cat`. New function arguments
 `conditional` instead of `strata_x` and `strata_y`. Also for more than
-one variable, such as function `compare`.   
-`densitydiff_pca` ... TBD:
-plot method\
+one variable, such as function `compare`.\
+`densitydiff_pca` ... TBD: plot method\
 `plot.denratio` ... adapt similar to `plot.compare` `densitydiff_kl_num`
 ... Not ready, TBD\
 `gower_density` ... TBD\
@@ -35,7 +34,7 @@ plot method\
 
 ## Missing features:
 
-Risk measurement for synthetic data 
+Risk measurement for synthetic data
 
 -   Differential Correct Attribution Probability (DCAP)
 -   Within Equivalence Class Attribution Probability (WEAP) and Targeted
@@ -50,26 +49,26 @@ Risk measurement for synthetic data
     the fact that someone is contained in a database already reveals
     sensitive information, if the database only contains a specific
     subgroup of the population such as the Survey of Prison Inmates.*
-- Kolmogorov-Smirnov distance between the two distributions 
-(they call this measure SPECKS for Synthetic data generation)
+-   Kolmogorov-Smirnov distance between the two distributions (they call
+    this measure SPECKS for Synthetic data generation)
 -   and many more
 
 Risk measures for traditionally anonymized data
 
-- Identity and attribute disclosure risk measures based on record linkage
-- Better formula for individual risk as in sdcMicro
-- Bayesian approaches?
+-   Identity and attribute disclosure risk measures based on record
+    linkage
+-   Better formula for individual risk as in sdcMicro
+-   Bayesian approaches?
 
 Risk measures for longitudinal data
 
-- ...
-
+-   ...
 
 Utility
 
 -   chi\^2 statitics for comparison of tables (maybe directly included
     in mosaic-plots)
 -   correlation statistics similar to synthpop.
--   PCA-biplot comparison. There are versions for categorical variables as well.
+-   PCA-biplot comparison. There are versions for categorical variables
+    as well.
 -   Utility for longitudinal data (random mixed effects models, ...)
-
