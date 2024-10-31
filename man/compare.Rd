@@ -8,6 +8,7 @@ compare(
   X,
   Y,
   variables = NULL,
+  kind = NULL,
   conditional = NULL,
   weights = NULL,
   approx = c(FALSE, TRUE),
@@ -24,6 +25,9 @@ compare(
 comparisons are made. Must be present in both \code{X} and \code{Y}. The
 class of variables determines the default kind of calculation. See details.}
 
+\item{kind}{To be set when changing the default kind of calculation. See
+details.}
+
 \item{conditional}{A character vector specifying conditioning variables, or
 \code{NULL} if no conditioning is desired. Must be of length 1 if specified.}
 
@@ -39,9 +43,6 @@ the approximation.}
 
 \item{bounds}{A logical value indicating whether to use bounds in the CDF
 calculation.}
-
-\item{kind}{To be set when changing the default kind of calculation. See
-details.}
 }
 \value{
 A list with class \code{"compare"} containing the following

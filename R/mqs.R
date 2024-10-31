@@ -79,10 +79,12 @@
 #'           form = formula("rb090 ~ age + rb090 + pl031 + pb220a +
 #'                           db040 + pgrossIncome"),
 #'           methods = c("glm", "rpart"))
+#' m1
 #' m2 <- mqs(eusilc13puf, eusilc13puf_synth, na = "remove",
 #'           form = formula("pgrossIncome ~ age + rb090 + pl031 +
 #'                           pb220a + db040"),
 #'           methods = c("glm", "rpart"))
+#' m2
 #' }
 mqs <- function(X, Y, form,
                 methods = c("glm", "knn", "simpls", "rpart", "ranger"),

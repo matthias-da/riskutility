@@ -182,6 +182,9 @@ compare <- function(X, Y, variables = NULL, kind = NULL, conditional = NULL,
 }
 NULL
 
+
+
+
 #' Plot Method for Objects of Class "compare"
 #'
 #' This function provides visualizations for objects of class \code{"compare"}
