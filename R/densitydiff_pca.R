@@ -37,6 +37,7 @@
 #' Y$hgrossIncome <- Y$hgrossIncome * runif(nrow(Y), 0.8, 1.2)
 #' Y$hx050 <- Y$hx050 * runif(nrow(Y), 0.8, 1.2)
 #' d1 <- densitydiff_pca(X, Y, bayesspace = FALSE)
+#' d1
 densitydiff_pca <- function(X,
                             Y,
                             bayesspace = TRUE,
