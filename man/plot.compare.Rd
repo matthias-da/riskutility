@@ -4,14 +4,10 @@
 \alias{plot.compare}
 \title{Plot Method for Objects of Class "compare"}
 \usage{
-\method{plot}{compare}(x, y, ..., which = "ecdf", interactive = FALSE)
+\method{plot}{compare}(x, which = "ecdf", interactive = FALSE)
 }
 \arguments{
 \item{x}{An object of class \code{"compare"}.}
-
-\item{y}{Not used.}
-
-\item{...}{Additional arguments passed to the plotting function.}
 
 \item{which}{A character string specifying the type of plot to generate.
 Options include \code{"ecdf"}, \code{"density"}, \code{"density_bayes"},
@@ -20,6 +16,10 @@ Default is \code{"ecdf"}.}
 
 \item{interactive}{A logical value indicating whether to produce an
 interactive plot using \code{plotly}. Default is \code{FALSE}.}
+
+\item{y}{Not used.}
+
+\item{...}{Additional arguments passed to the plotting function.}
 }
 \value{
 Invisibly returns the ggplot2 object or the plotly object if

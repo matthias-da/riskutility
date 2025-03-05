@@ -2,7 +2,7 @@
 % Please edit documentation in R/compare.R
 \name{compare}
 \alias{compare}
-\title{Compare Two Data Sets}
+\title{Compare continuous distributions conditionally}
 \usage{
 compare(
   X,
@@ -82,7 +82,7 @@ If the \code{approx} argument is set to \code{TRUE}, the ECDFs are
 approximated using the specified number of points (\code{n_approx}).
 }
 \examples{
-# Example data
+# Example data 1: Complex sample and population data
 S <- data.frame(
   age = sample(20:80, 100, replace = TRUE),
   income = rnorm(100, mean = 50000, sd = 10000),
@@ -100,5 +100,48 @@ result <- compare(S, U, variables = c("age", "income"), weights = "weights")
 print(result$formula)
 head(result$ecdf)
 plot(result)
+plot(result, which = "density")
+plot(result, which = "density_bayes")
 
+# Example data 2: Complex sample and complex sample data
+X <- data.frame(
+  age = sample(20:80, 100, replace = TRUE),
+  income = rnorm(100, mean = 50000, sd = 10000),
+  weights = runif(100, 0.5, 2)
+)
+Y <- data.frame(
+  age = sample(20:80, 100, replace = TRUE),
+  income = rnorm(10000, mean = 50000, sd = 10000),
+  weights = runif(100, 0.5, 2)
+)
+
+# Compare ECDFs for age and income
+result <- compare(X, Y, variables = c("age", "income"), weights = "weights")
+
+# View the result
+print(result$formula)
+head(result$ecdf)
+plot(result)
+plot(result, which = "density")
+plot(result, which = "density_bayes")
+
+# Example data 3: Sample and sample data
+X <- data.frame(
+  age = sample(20:80, 100, replace = TRUE),
+  income = rnorm(100, mean = 50000, sd = 10000)
+)
+Y <- data.frame(
+  age = sample(20:80, 100, replace = TRUE),
+  income = rnorm(100, mean = 50000, sd = 10000)
+)
+
+# Compare ECDFs for age and income
+result <- compare(X, Y, variables = c("age", "income"), n_approx = 100)
+
+# View the result
+print(result$formula)
+head(result$ecdf)
+plot(result)
+plot(result, which = "density")
+plot(result, which = "density_bayes")
 }
