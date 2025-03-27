@@ -57,3 +57,10 @@ JSDiv_bayes <- function(A, B) {
   jsd <- 0.5 * KLDiv_bayes(A, M) + 0.5 * KLDiv_bayes(B, M)
   return(jsd)
 }
+
+#' @rdname Entropy
+CrossEntropy <- function(A, B) {
+  A <- A[A > 0]
+  B <- B[A > 0]
+  -sum(A * log(B))
+}

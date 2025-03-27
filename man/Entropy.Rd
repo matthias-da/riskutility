@@ -6,6 +6,7 @@
 \alias{KLDiv_bayes}
 \alias{JSDiv}
 \alias{JSDiv_bayes}
+\alias{CrossEntropy}
 \title{Entropy measures}
 \usage{
 KLDiv(A, B)
@@ -15,6 +16,8 @@ KLDiv_bayes(A, B)
 JSDiv(A, B)
 
 JSDiv_bayes(A, B)
+
+CrossEntropy(A, B)
 }
 \arguments{
 \item{A}{a vector of probability densities}
