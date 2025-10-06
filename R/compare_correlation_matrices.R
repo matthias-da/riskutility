@@ -32,7 +32,6 @@
 #' is computed otherwise.
 #'
 #' @importFrom data.table as.data.table
-#' @importFrom robustbase covMcd
 #' @importFrom MASS cov.rob
 #' @export
 #'
@@ -69,10 +68,6 @@
 #' print(res3$corr_Y)
 compare_correlation_matrices <- function(X, Y, vars, method = "pearson", mixed_method = "point_biserial") {
 
-  library(data.table)
-  library(robustbase)
-  library(MASS)
-
   # Convert X and Y to data.table if needed
   X <- as.data.table(X)
   Y <- as.data.table(Y)
@@ -93,7 +88,10 @@ compare_correlation_matrices <- function(X, Y, vars, method = "pearson", mixed_m
   }
 
   compute_robust_mcd_corr <- function(x, y) {
-    cov_mcd <- covMcd(cbind(x, y))
+    if (!requireNamespace("robustbase", quietly = TRUE)) {
+      stop("Package 'robustbase' is required for this function. Please install it.")
+    }
+    cov_mcd <- robustbase::covMcd(cbind(x, y))
     cor(cov_mcd$cov)[1, 2]
   }
 

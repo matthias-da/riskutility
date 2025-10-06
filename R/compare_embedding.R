@@ -13,12 +13,9 @@
 #' @param side_by_side Logical: if TRUE, plots embeddings for X and Y side by side.
 #'
 #' @return A list containing the embeddings and a ggplot2 visualization.
-#' @importFrom Rtsne Rtsne
-#' @importFrom uwot umap
 #' @importFrom MASS sammon
 #' @import ggplot2
 #' @import data.table
-#' @import gridExtra
 #' @export
 #'
 #' @examples
@@ -68,8 +65,14 @@ compare_embedding <- function(X, Y, vars, method = 'tsne', perplexity = 30, n_ne
 
   get_embedding <- function(data, method) {
     if (method == 'tsne') {
+      if (!requireNamespace("Rtsne", quietly = TRUE)) {
+        stop("Package 'Rtsne' is required for this function. Please install it.")
+      }
       emb <- Rtsne::Rtsne(data, perplexity = perplexity)$Y
     } else if (method == 'umap') {
+      if (!requireNamespace("uwot", quietly = TRUE)) {
+        stop("Package 'uwot' is required for this function. Please install it.")
+      }
       emb <- uwot::umap(data, n_neighbors = n_neighbors)
     } else if (method == 'mds') {
       dist_matrix <- dist(scale(data))
@@ -99,6 +102,9 @@ compare_embedding <- function(X, Y, vars, method = 'tsne', perplexity = 30, n_ne
   } else {
     plot_X <- plot_embedding(emb_X, paste(toupper(method), "Embedding: Original (X)"))
     plot_Y <- plot_embedding(emb_Y, paste(toupper(method), "Embedding: Synthetic (Y)"))
+    if (!requireNamespace("gridExtra", quietly = TRUE)) {
+      stop("Package 'gridExtra' is required for this function. Please install it.")
+    }
     plot <- gridExtra::grid.arrange(plot_X, plot_Y, ncol = 2)
   }
 

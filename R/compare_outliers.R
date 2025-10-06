@@ -19,7 +19,6 @@
 #' @param threshold Numeric. For \code{"zscore"}, the absolute z-score cutoff (default = 3). For \code{"robust"},
 #' the significance level for the chi-square cutoff (default = 0.975). Ignored for \code{"iqr"} and \code{"dbscan"}.
 #' @param ... Additional arguments passed to the underlying method (e.g., \code{eps} and \code{minPts} for DBSCAN).
-#' @importFrom dbscan dbscan
 #' @importFrom robustbase covMcd
 #' @return A list with:
 #' \itemize{

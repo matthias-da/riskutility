@@ -98,7 +98,6 @@
 #' print(res_shap$comparison)
 #'
 #' @importFrom caret train varImp trainControl
-#' @importFrom vip vi_permute
 #' @importFrom data.table data.table
 #' @export
 compare_feature_importance <- function(X, Y, formula, method,
@@ -136,6 +135,9 @@ compare_feature_importance <- function(X, Y, formula, method,
     }
   } else if (importance_type == "permutation") {
     if (is.null(pred_wrapper)) stop("pred_wrapper must be provided for permutation importance.")
+    if (!requireNamespace("vip", quietly = TRUE)) {
+      stop("Package 'vip' is required for this function. Please install it.")
+    }
     imp_X <- vip::vi_permute(model_X, train = X, target = target_var, metric = metric,
                              pred_wrapper = pred_wrapper, nsim = nsim)
     importance_X <- setNames(imp_X$Importance, imp_X$Variable)
