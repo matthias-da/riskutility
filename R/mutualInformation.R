@@ -28,24 +28,17 @@
 #'
 #' @param X A matrix, data frame or probability vector representing the true data distribution.
 #' @param Y A matrix, data frame or probability vector representing the observed or obfuscated data.
+#' @param joint A joint probability matrix for X and Y.
 #' @param Z Optional third variable (matrix or data.frame) representing prior knowledge for conditional metrics.
 #' @param normalized Logical; whether to normalize mutual information (default: FALSE).
 #' @return A list of privacy metrics: MI, NMI, CPL, CMI, and RLA (if Z is provided).
 #' @examples
-#' # Example using the 'arules' dataset
-#' data("AdultUCI", package = "arules")
-#' tab <- table(AdultUCI$education, AdultUCI$occupation)
-#' probX <- prop.table(rowSums(tab))
-#' probY <- prop.table(colSums(tab))
-#' joint <- prop.table(tab)
-#' mutualInformation(probX, probY, joint)
-#'
-#' # Privacy example with synthetic data
+#' # Privacy example with synthetic probability distributions
 #' X <- c(0.2, 0.5, 0.3)
 #' Y <- c(0.25, 0.45, 0.3)
 #' jointXY <- matrix(c(0.1, 0.05, 0.05,
 #'                     0.1, 0.2,  0.15,
-#'                     0.05,0.2,  0.1), nrow = 3, byrow = TRUE)
+#'                     0.05, 0.2, 0.1), nrow = 3, byrow = TRUE)
 #' mutualInformation(X, Y, jointXY, normalized = TRUE)
 #'
 #' @export

@@ -47,6 +47,9 @@ rmse <- function(x, y) {
 #' @rdname evaluation_stats
 #' @export
 ait <- function(x, y) {
+  if (!requireNamespace("robCompositions", quietly = TRUE)) {
+    stop("Package 'robCompositions' is required for ait(). Please install it.")
+  }
   n <- length(c(x))
   x <- c(x)
   y <- c(y)

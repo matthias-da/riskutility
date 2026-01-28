@@ -3,7 +3,6 @@
 #' Computes the compositional Aitchison distance between densities of two categorical variables
 #' @param x a factor variable
 #' @param y a factor variable
-#' @importFrom robCompositions aDist
 #' @author Matthias Templ
 #' @return The Aitchison distance between two densities
 #' @examples
@@ -13,10 +12,13 @@
 #' y <- sample(1:5, 100, replace = TRUE)
 
 densitydiff_1d_cat <- function(x, y){
+  if (!requireNamespace("robCompositions", quietly = TRUE)) {
+    stop("Package 'robCompositions' is required for densitydiff_1d_cat(). Please install it.")
+  }
   # estimate densities
   tabx <- prop.table(table(x))
   taby <- prop.table(table(y))
   tabx <- table(x)
   taby <- table(y)
-  aDist(as.numeric(tabx), as.numeric(taby))
+  robCompositions::aDist(as.numeric(tabx), as.numeric(taby))
 }

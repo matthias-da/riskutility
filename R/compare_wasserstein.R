@@ -16,7 +16,7 @@
 #' @param weight_X Optional. A character string specifying the sampling weight variable in X.
 #' @param weight_Y Optional. A character string specifying the sampling weight variable in Y.
 #' @param var_type A character string specifying the type of variable: "continuous" or "nominal".
-#'        Default is "auto", which infers "continuous" if X[[num_var]] is numeric, else "nominal".
+#'        Default is "auto", which infers "continuous" if the variable is numeric, else "nominal".
 #' @param n_grid Number of grid points for quantile approximation (for continuous variables). Default is 1000.
 #'
 #' @return A data.table with the computed Wasserstein distance for each group (or overall if no grouping is provided).
@@ -24,7 +24,6 @@
 #'         quantile functions. For nominal variables, the result is the total variation distance.
 #'
 #' @importFrom data.table as.data.table rbindlist
-#' @importFrom Hmisc wtd.quantile
 #' @export
 #'
 #' @examples
@@ -39,7 +38,7 @@
 #' Y <- data.frame(
 #'   income = rnorm(1000, mean = 48000, sd = 12000),
 #'   gender = sample(c("Male", "Female"), 1000, replace = TRUE),
-#'   region = sample(c("North", "South", "East", "West"), 500, replace = TRUE),
+#'   region = sample(c("North", "South", "East", "West"), 1000, replace = TRUE),
 #'   weight = runif(1000, 0.5, 1.5)
 #' )
 #'
@@ -79,11 +78,9 @@
 compare_wasserstein <- function(X, Y, num_var, cat_vars = NULL,
                                 weight_X = NULL, weight_Y = NULL,
                                 var_type = "auto", n_grid = 1000) {
-  library(data.table)
-
-  # Convert datasets to data.table
-  X <- as.data.table(X)
-  Y <- as.data.table(Y)
+  # Convert datasets to data.table (use copy to avoid side effects)
+  X <- copy(as.data.table(X))
+  Y <- copy(as.data.table(Y))
 
   # Check if num_var exists in both datasets
   if (!(num_var %in% names(X) && num_var %in% names(Y))) {
@@ -117,11 +114,17 @@ compare_wasserstein <- function(X, Y, num_var, cat_vars = NULL,
     p_grid <- seq(0, 1, length.out = n_grid)
     # If weights provided, use Hmisc::wtd.quantile
     if (!is.null(wx)) {
+      if (!requireNamespace("Hmisc", quietly = TRUE)) {
+        stop("Package 'Hmisc' is required for weighted quantiles. Please install it.")
+      }
       qx <- as.numeric(Hmisc::wtd.quantile(x, weights = wx, probs = p_grid, na.rm = TRUE))
     } else {
       qx <- as.numeric(quantile(x, probs = p_grid, na.rm = TRUE))
     }
     if (!is.null(wy)) {
+      if (!requireNamespace("Hmisc", quietly = TRUE)) {
+        stop("Package 'Hmisc' is required for weighted quantiles. Please install it.")
+      }
       qy <- as.numeric(Hmisc::wtd.quantile(y, weights = wy, probs = p_grid, na.rm = TRUE))
     } else {
       qy <- as.numeric(quantile(y, probs = p_grid, na.rm = TRUE))

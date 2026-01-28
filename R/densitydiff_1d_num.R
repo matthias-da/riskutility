@@ -14,41 +14,23 @@
 #' It must have the same levels than strata_x and there must be observed values
 #' for each level.
 #' @export
-#' @importFrom robCompositions gm
 #' @importFrom stats density
 #' @importFrom stats approx
 #' @importFrom stats sd
 #' @importFrom ggplot2 theme_minimal
 #' @importFrom ggplot2 geom_hline
 #' @examples
-#' # example code
-#'
-#' data(eusilc13puf, package = "simPop")
-#' x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
-#' y <- x + runif(nrow(eusilc13puf), min = 0, max = 2)
+#' # Simple example
+#' set.seed(123)
+#' x <- rnorm(200, mean = 40, sd = 10)
+#' y <- rnorm(200, mean = 42, sd = 11)
 #' d <- densitydiff_1d_num(x, y)
 #' plot(d)
-#' strata_x <- factor(sample(c("one", "two","three"), length(x), replace = TRUE))
-#' strata_y <- factor(sample(c("one", "two","three"), length(y), replace = TRUE))
-#' d1 <- densitydiff_1d_num(x, y, bayesspace = TRUE)
-#' d1e <- densitydiff_1d_num(x, y, bayesspace = FALSE)
-#' summary(d1$density_ratio)
-#' summary(d1e$density_ratio)
+#'
+#' # With stratification
+#' strata_x <- factor(sample(c("A", "B"), length(x), replace = TRUE))
+#' strata_y <- factor(sample(c("A", "B"), length(y), replace = TRUE))
 #' d2 <- densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
-#' data("eusilc13puf")
-#' x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
-#' y <- x + runif(nrow(eusilc13puf), min = 0, max = 2)
-#' strata_x <- factor(sample(c("one", "two","three"), length(x), replace = TRUE))
-#' strata_y <- factor(sample(c("one", "two","three"), length(y), replace = TRUE))
-#' d1 <- densitydiff_1d_num(x, y, bayesspace = TRUE)
-#' d1e <- densitydiff_1d_num(x, y, bayesspace = FALSE)
-#' summary(d1$density_ratio)
-#' summary(d1e$density_ratio)
-#' d2 <- densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
-#' plot(d2, which = 1:2)
-#' plot(d1)
-#' plot(d1, which = 1:2)
-#' plot(d1e, which = 1:2)
 densitydiff_1d_num <- function(x,
                                y,
                                bayesspace = TRUE,
@@ -154,6 +136,8 @@ densitydiff_1d_num <- function(x,
       kl <- KLDiv(density_X, density_Y)
       jsd <- JSDiv(density_X, density_Y)
     } else{
+      # Geometric mean (inline to avoid robCompositions dependency)
+      gm <- function(x) exp(mean(log(x[x > 0]), na.rm = TRUE))
       density_X <- log(density_X / gm(density_X))
       density_Y <- log(density_Y / gm(density_Y))
       distance <- sqrt(sum((density_X - density_Y)^2, na.rm=TRUE))

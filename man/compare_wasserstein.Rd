@@ -29,7 +29,7 @@ compare_wasserstein(
 \item{weight_Y}{Optional. A character string specifying the sampling weight variable in Y.}
 
 \item{var_type}{A character string specifying the type of variable: "continuous" or "nominal".
-Default is "auto", which infers "continuous" if X[\link{num_var}] is numeric, else "nominal".}
+Default is "auto", which infers "continuous" if the variable is numeric, else "nominal".}
 
 \item{n_grid}{Number of grid points for quantile approximation (for continuous variables). Default is 1000.}
 }
@@ -61,7 +61,7 @@ X <- data.frame(
 Y <- data.frame(
   income = rnorm(1000, mean = 48000, sd = 12000),
   gender = sample(c("Male", "Female"), 1000, replace = TRUE),
-  region = sample(c("North", "South", "East", "West"), 500, replace = TRUE),
+  region = sample(c("North", "South", "East", "West"), 1000, replace = TRUE),
   weight = runif(1000, 0.5, 1.5)
 )
 

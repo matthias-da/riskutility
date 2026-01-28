@@ -16,10 +16,10 @@
 #' if no cluster structure is present in the data.
 #' @param na missing value treatment. Either stop, remove or impute
 #' (using a kNN from R package VIM).
+#' @param ... additional arguments passed to methods (currently unused)
 #' @importFrom randomForest randomForest
 #' @importFrom stats as.formula formula
 #' @importFrom simPop specifyInput simStructure simCategorical simContinuous pop
-#' @importFrom reshape2 melt
 #' @importFrom stats terms.formula
 #' @importFrom stats complete.cases
 #' @author Matthias Templ
@@ -29,29 +29,39 @@
 #' Templ, M. Statistical Disclosure Control for Microdata: Methods and Applications in R.
 #' \emph{Springer International Publishing}, 287 pages, 2017. ISBN 978-3-319-50272-4. \doi{10.1007/978-3-319-50272-4}
 #' @examples
-#' # example code
+#' # Simple example with synthetic data
+#' set.seed(123)
+#' X <- data.frame(
+#'   age = sample(20:60, 100, replace = TRUE),
+#'   gender = sample(c("M", "F"), 100, replace = TRUE),
+#'   income = rnorm(100, 50000, 10000)
+#' )
+#' Y <- data.frame(
+#'   age = sample(20:60, 100, replace = TRUE),
+#'   gender = sample(c("M", "F"), 100, replace = TRUE),
+#'   income = rnorm(100, 48000, 12000)
+#' )
+#' propscore(X, Y, form = ~ age + gender + income)
 #'
-#' data(eusilc13puf, package = "simPop")
-#' eusilc13puf$age <- as.numeric(as.character(eusilc13puf$age))
-#' keyvars <- c("age", "rb090", "db040", "pl031", "pb220a")
-#' sdc <- sdcMicro::createSdcObj(eusilc13puf,
-#'                               keyVars = keyvars,
-#'                               numVars = "pgrossIncome",
-#'                               w = "rb050",
-#'                               hhId = "db030")
-#' sdc <- sdcMicro::globalRecode(sdc,
-#'                               column = "age",
-#'                               breaks = c(1,9,19,29,39,49,59,69,100),
-#'                               labels = 1:8)
-#' sdc <- sdcMicro::localSuppression(sdc)
-#' sdc <- sdcMicro::microaggregation(sdc)
-#' eusilc13puf_anon <- sdcMicro::extractManipData(sdc)
-#'
-#' propscore(eusilc13puf, eusilc13puf_anon, na = "remove",
-#'    form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"))
-#' propscore(eusilc13puf, eusilc13puf_anon, na = "remove",
-#'    form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"),
-#'    adjust_size = FALSE)
+#' \donttest{
+#' # Extended example using simPop and sdcMicro (requires these packages)
+#' if (requireNamespace("simPop", quietly = TRUE) &&
+#'     requireNamespace("sdcMicro", quietly = TRUE)) {
+#'   data(eusilc13puf, package = "simPop")
+#'   eusilc13puf$age <- as.numeric(as.character(eusilc13puf$age))
+#'   keyvars <- c("age", "rb090", "db040", "pl031", "pb220a")
+#'   sdc <- sdcMicro::createSdcObj(eusilc13puf,
+#'                                 keyVars = keyvars,
+#'                                 numVars = "pgrossIncome",
+#'                                 w = "rb050",
+#'                                 hhId = "db030")
+#'   sdc <- sdcMicro::localSuppression(sdc)
+#'   sdc <- sdcMicro::microaggregation(sdc)
+#'   eusilc13puf_anon <- sdcMicro::extractManipData(sdc)
+#'   propscore(eusilc13puf, eusilc13puf_anon, na = "remove",
+#'      form = ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome)
+#' }
+#' }
 #'
 #' \dontrun{
 #'   ## approx. 20 seconds computation time
@@ -75,12 +85,36 @@
 #'   form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"),
 #'   adjust_size = FALSE)
 #' }
-propscore <- function(X, Y,
-               form = NULL,
-               method = "rf",
-               adjust_size = TRUE,
-               cluster = NULL,
-               na = "impute"){
+propscore <- function(X, ...) {
+  UseMethod("propscore")
+}
+
+#' @rdname propscore
+#' @export
+propscore.synth_pair <- function(X, form = NULL, ...) {
+  # Build formula from vars if not provided
+  if (is.null(form) && length(X$vars) > 0) {
+    form_str <- paste("~", paste(X$vars, collapse = " + "))
+    form <- as.formula(form_str)
+  }
+
+  propscore.default(
+    X = X$original,
+    Y = X$synthetic,
+    form = form,
+    ...
+  )
+}
+
+#' @rdname propscore
+#' @export
+propscore.default <- function(X, Y,
+                              form = NULL,
+                              method = "rf",
+                              adjust_size = TRUE,
+                              cluster = NULL,
+                              na = "impute",
+                              ...) {
   # Check if X and Y are data frames
   if (!is.data.frame(X)) {
     stop("X must be a data frame.")
@@ -236,8 +270,10 @@ propscore <- function(X, Y,
     # Compute the density ratio
     density_ratio <- density_X / density_Y
     kl <- sum(density_X * log(density_ratio), na.rm = TRUE)
-    density_X <- log(density_X / robCompositions::gm(density_X))
-    density_Y <- log(density_Y / robCompositions::gm(density_Y))
+    # Geometric mean (inline to avoid robCompositions dependency)
+    gm <- function(x) exp(mean(log(x[x > 0]), na.rm = TRUE))
+    density_X <- log(density_X / gm(density_X))
+    density_Y <- log(density_Y / gm(density_Y))
     distance <- sqrt(sum((density_X - density_Y)^2, na.rm=TRUE))
     # Compute the density ratio
     density_ratio_bayes <- density_X - density_Y

@@ -72,54 +72,32 @@ This function supports three types of feature importance measures:
 }
 }
 \examples{
-library(data.table)
+# Model-based importance (Decision Tree) - basic example
 set.seed(123)
-X <- data.table(
-  age = rnorm(500, 40, 10),
-  income = 50000 + rnorm(500, 0, 10000),
-  default = factor(sample(c("Yes", "No"), 500, replace = TRUE))
+X <- data.frame(
+  age = rnorm(100, 40, 10),
+  income = 50000 + rnorm(100, 0, 10000),
+  outcome = factor(sample(c("Yes", "No"), 100, replace = TRUE))
 )
-
-Y <- data.table(
-  age = rnorm(500, 42, 12),
-  income = 3000 + 1200 * rnorm(500, 40, 12) + rnorm(500, 0, 10000),
-  default = sample(c("Yes", "No"), 500, TRUE)
+Y <- data.frame(
+  age = rnorm(100, 42, 12),
+  income = 48000 + rnorm(100, 0, 12000),
+  outcome = factor(sample(c("Yes", "No"), 100, replace = TRUE))
 )
+res_tree <- compare_feature_importance(X, Y, outcome ~ .,
+                                       method = "rpart",
+                                       importance_type = "model")
 
-# Model-based importance (Decision Tree)
-res_tree <- compare_feature_importance(X, Y, default ~ ., method = "rpart", importance_type = "model")
-print(res_tree$comparison)
-
-# Permutation importance (Random Forest)
-pred_wrapper_classif <- function(object, newdata) predict(object, newdata, type = "raw")
-res_perm <- compare_feature_importance(
-  X, Y, default ~ ., method = "rf", importance_type = "permutation",
-  pred_wrapper = pred_wrapper_classif, metric = "Accuracy", nsim = 5
-)
-print(res_perm$comparison)
-
-# Permutation importance (Random Forest)
-pred_wrapper_classif <- function(object, newdata) predict(object, newdata, type = "raw")
-res_perm <- compare_feature_importance(
-  X, Y, income ~ ., method = "rf", importance_type = "permutation",
-  pred_wrapper = pred_wrapper_classif, metric = "RMSE", nsim = 5
-)
-print(res_perm$comparison)
-
-# SHAP importance (using fastshap)
-# For classification tasks, this default wrapper returns the probability of the first class.
-res_shap <- compare_feature_importance(
-  X, Y, default ~ ., method = "rf", importance_type = "shap",
-  nsim = 5
-)
-print(res_shap$comparison)
-
-# SHAP importance (using fastshap)
-# For classification tasks, this default wrapper returns the probability of the first class.
-res_shap <- compare_feature_importance(
-  X, Y, income ~ ., method = "rf", importance_type = "shap",
-  nsim = 5
-)
-print(res_shap$comparison)
+\donttest{
+# Permutation importance (requires vip package)
+if (requireNamespace("vip", quietly = TRUE)) {
+  pred_fn <- function(object, newdata) predict(object, newdata, type = "raw")
+  res_perm <- compare_feature_importance(
+    X, Y, outcome ~ ., method = "rf",
+    importance_type = "permutation",
+    pred_wrapper = pred_fn, metric = "Accuracy", nsim = 5
+  )
+}
+}
 
 }

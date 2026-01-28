@@ -66,8 +66,6 @@
 #' print(result$categorical)
 compare_multivariate_summary_statistics <- function(X, Y, cont_vars, cat_vars,
                                                     weight_X = NULL, weight_Y = NULL) {
-  library(data.table)
-
   # Convert datasets to data.table if needed
   X <- as.data.table(X)
   Y <- as.data.table(Y)
@@ -75,7 +73,8 @@ compare_multivariate_summary_statistics <- function(X, Y, cont_vars, cat_vars,
   ## Continuous variables: Compute multivariate summary statistics
   # Helper function for weighted covariance matrix
   weighted_cov <- function(mat, w) {
-    wm <- colMeans(mat, na.rm = TRUE)
+    # Compute weighted mean for centering
+    wm <- sapply(as.data.frame(mat), weighted.mean, w = w, na.rm = TRUE)
     centered <- sweep(mat, 2, wm)
     cov_mat <- crossprod(centered, centered * w) / (sum(w) - 1)
     return(cov_mat)

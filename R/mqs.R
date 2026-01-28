@@ -22,7 +22,6 @@
 #' methods supported from R package caret can be used.
 #' @param na missing value treatment (remove, impute or stop)
 #' @param ntop number of top models considered for the mqs statistics
-#' @importFrom caret trainControl
 #' @importFrom utils capture.output
 #' @importFrom ggplot2 ggplot
 #' @importFrom ggplot2 aes
@@ -38,32 +37,25 @@
 #' @importFrom stats predict
 #' @export
 #' @examples
-#' data(eusilc13puf, package = "simPop")
-#' eusilc13puf$age <- as.numeric(as.character(eusilc13puf$age))
-#' keyvars <- c("age", "rb090", "db040", "pl031", "pb220a")
-#' sdc <- sdcMicro::createSdcObj(eusilc13puf,
-#'                     keyVars = keyvars,
-#'                     numVars = "pgrossIncome",
-#'                     w = "rb050",
-#'                     hhId = "db030")
-#' sdc <- sdcMicro::globalRecode(sdc,
-#'                     column = "age",
-#'                     breaks = c(1,9,19,29,39,49,59,69,100),
-#'                     labels = 1:8)
-#' sdc <- sdcMicro::localSuppression(sdc)
-#' sdc <- sdcMicro::microaggregation(sdc)
-#' eusilc13puf_anon <- sdcMicro::extractManipData(sdc)
-#'
-#' m1 <- mqs(eusilc13puf, eusilc13puf_anon, na = "remove",
-#'           form = formula("rb090 ~ age + rb090 + pl031 +
-#'                           pb220a + db040 + pgrossIncome"),
-#'                           methods = c("glm", "rpart"))
-#' m2 <- mqs(eusilc13puf, eusilc13puf_anon, na = "remove",
-#'           form = formula("pgrossIncome ~ age + rb090 + pl031 +
-#'                           pb220a + db040"), methods = c("glm", "rpart"))
+#' \dontrun{
+#' # Simple example (requires caret and caretEnsemble packages)
+#' set.seed(123)
+#' X <- data.frame(
+#'   y = factor(sample(c("A", "B"), 100, replace = TRUE)),
+#'   x1 = rnorm(100),
+#'   x2 = rnorm(100)
+#' )
+#' Y <- data.frame(
+#'   y = factor(sample(c("A", "B"), 100, replace = TRUE)),
+#'   x1 = rnorm(100, 0.1, 1),
+#'   x2 = rnorm(100, 0.1, 1)
+#' )
+#' m <- mqs(X, Y, form = y ~ x1 + x2, methods = c("glm", "rpart"))
+#' }
 #'
 #' \dontrun{
 #' ## approx. 20 seconds computation time
+#' data(eusilc13puf, package="simPop")
 #' inp <- simPop::specifyInput(data=eusilc13puf, hhid="db030", hhsize="hsize",
 #'                     strata="db040", weight="rb050")
 #' simPop <- simPop::simStructure(data = inp, method = "direct",
@@ -92,6 +84,15 @@ mqs <- function(X, Y, form,
   # suggestion of models:
   # categorical: glm, xgbTree, rpart, ranger, knn, naive_bayes, simpls, Linda
   # continuous response: glm, rpart, xgbTree, ranger, lars, knn, simpls
+
+  # Check required packages
+  if (!requireNamespace("caret", quietly = TRUE)) {
+    stop("Package 'caret' is required for mqs(). Please install it.")
+  }
+  if (!requireNamespace("caretEnsemble", quietly = TRUE)) {
+    stop("Package 'caretEnsemble' is required for mqs(). Please install it.")
+  }
+
   # Check if X and Y are data frames
   if (!is.data.frame(X)) {
     stop("X must be a data frame.")
@@ -177,7 +178,7 @@ mqs <- function(X, Y, form,
   }
 
   # control for caret
-  my_control <- trainControl(
+  my_control <- caret::trainControl(
     method="cv",
     number=10,
     savePredictions="final",
@@ -198,7 +199,7 @@ mqs <- function(X, Y, form,
       )
     model_list_Y <- caretEnsemble::caretList(
       form,
-      data = X,
+      data = Y,
       trControl = my_control,
       methodList = methods
     )

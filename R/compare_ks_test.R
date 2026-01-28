@@ -38,8 +38,6 @@
 #' compare_ks_test(X, Y, num_var = "income", cat_vars = c("gender"))
 #' compare_ks_test(X, Y, num_var = "income", cat_vars = c("gender","region"))
 compare_ks_test <- function(X, Y, num_var, cat_vars = NULL) {
-  library(data.table)
-
   # Convert X and Y to data.table if they are not already
   X <- as.data.table(X)
   Y <- as.data.table(Y)

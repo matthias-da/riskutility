@@ -48,13 +48,9 @@ compare_boxplots <- function(X, Y, num_var, cat_vars,
                              weight_X = NULL, weight_Y = NULL,
                              facet_type = "wrap", plot_type = "side") {
 
-  library(ggplot2)
-  library(data.table)
-  library(survey)
-
-  # Convert to data.table for efficient processing
-  X <- as.data.table(X)
-  Y <- as.data.table(Y)
+  # Convert to data.table for efficient processing (use copy to avoid side effects)
+  X <- copy(as.data.table(X))
+  Y <- copy(as.data.table(Y))
 
   # Check if the numeric variable exists in both datasets
   if (!(num_var %in% names(X) && num_var %in% names(Y))) {
@@ -147,31 +143,7 @@ compare_boxplots <- function(X, Y, num_var, cat_vars,
     stop("Invalid plot_type. Choose 'side', 'overlap', or 'separate'.")
   }
 
-  # Print plot
+  # Print and return plot
   print(p)
+  invisible(p)
 }
-
-set.seed(123)
-X <- data.frame(
-  age = sample(20:80, 500, replace = TRUE),
-  gender = sample(c("Male", "Female"), 500, replace = TRUE),
-  income = rnorm(500, mean = 50000, sd = 10000),
-  weight = runif(500, 0.5, 1.5)
-)
-
-Y <- data.frame(
-  age = sample(20:80, 1000, replace = TRUE),
-  gender = sample(c("Male", "Female"), 1000, replace = TRUE),
-  income = rnorm(1000, mean = 48000, sd = 12000),
-  weight = runif(1000, 0.5, 1.5)
-)
-
-# Side-by-side boxplots
-compare_boxplots(X, Y, num_var = "income", cat_vars = c("gender"),
-                 weight_X = "weight", weight_Y = "weight",
-                 facet_type = "wrap", plot_type = "side")
-
-# Separate boxplots: original on top, anonymized below
-compare_boxplots(X, Y, num_var = "income", cat_vars = c("gender"),
-                 weight_X = "weight", weight_Y = "weight",
-                 facet_type = "wrap", plot_type = "separate")

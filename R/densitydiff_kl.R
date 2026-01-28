@@ -20,7 +20,6 @@
 #' @param Y a numeric vector or a matrix or data frame with numeric entries.
 #' @param stepsize number of interval points where the density is evaluated.
 #' @export
-#' @importFrom misc3d kde3d
 #' @importFrom MASS kde2d
 #' @author Matthias Templ
 #' @return The Kullback-Leibler divergence of \code{X} and \code{Y}.
@@ -101,7 +100,7 @@ densitydiff_kl_num <- function(X, Y, stepsize = 1000) {
   }
 
   # bivariate
-  if(ncol(X) == 0){
+  if(ncol(X) == 2){
     dX <- MASS::kde2d(x = X[, 1], y = X[, 2])
     dY <- MASS::kde2d(x = Y[, 1], y = Y[, 2])
     return(dX$z * log(dX$z / dY$z))
@@ -109,6 +108,9 @@ densitydiff_kl_num <- function(X, Y, stepsize = 1000) {
 
   # tri-variate
   if(ncol(X) == 3){
+    if (!requireNamespace("misc3d", quietly = TRUE)) {
+      stop("Package 'misc3d' is required for 3D kernel density estimation. Please install it.")
+    }
     dX <- misc3d::kde3d(x = X[, 1], y = X[, 2], z = X[, 3])
     dY <- misc3d::kde3d(x = Y[, 1], y = Y[, 2], z = Y[, 3])
     return(sum(dX$d * log(dX$d / dY$d)))

@@ -47,62 +47,42 @@
 #' }
 #'
 #' @examples
-#' library(data.table)
+#' # Model-based importance (Decision Tree) - basic example
 #' set.seed(123)
-#' X <- data.table(
-#'   age = rnorm(500, 40, 10),
-#'   income = 50000 + rnorm(500, 0, 10000),
-#'   default = factor(sample(c("Yes", "No"), 500, replace = TRUE))
+#' X <- data.frame(
+#'   age = rnorm(100, 40, 10),
+#'   income = 50000 + rnorm(100, 0, 10000),
+#'   outcome = factor(sample(c("Yes", "No"), 100, replace = TRUE))
 #' )
-#'
-#' Y <- data.table(
-#'   age = rnorm(500, 42, 12),
-#'   income = 3000 + 1200 * rnorm(500, 40, 12) + rnorm(500, 0, 10000),
-#'   default = sample(c("Yes", "No"), 500, TRUE)
+#' Y <- data.frame(
+#'   age = rnorm(100, 42, 12),
+#'   income = 48000 + rnorm(100, 0, 12000),
+#'   outcome = factor(sample(c("Yes", "No"), 100, replace = TRUE))
 #' )
+#' res_tree <- compare_feature_importance(X, Y, outcome ~ .,
+#'                                        method = "rpart",
+#'                                        importance_type = "model")
 #'
-#' # Model-based importance (Decision Tree)
-#' res_tree <- compare_feature_importance(X, Y, default ~ ., method = "rpart", importance_type = "model")
-#' print(res_tree$comparison)
+#' \donttest{
+#' # Permutation importance (requires vip package)
+#' if (requireNamespace("vip", quietly = TRUE)) {
+#'   pred_fn <- function(object, newdata) predict(object, newdata, type = "raw")
+#'   res_perm <- compare_feature_importance(
+#'     X, Y, outcome ~ ., method = "rf",
+#'     importance_type = "permutation",
+#'     pred_wrapper = pred_fn, metric = "Accuracy", nsim = 5
+#'   )
+#' }
+#' }
 #'
-#' # Permutation importance (Random Forest)
-#' pred_wrapper_classif <- function(object, newdata) predict(object, newdata, type = "raw")
-#' res_perm <- compare_feature_importance(
-#'   X, Y, default ~ ., method = "rf", importance_type = "permutation",
-#'   pred_wrapper = pred_wrapper_classif, metric = "Accuracy", nsim = 5
-#' )
-#' print(res_perm$comparison)
-#'
-#' # Permutation importance (Random Forest)
-#' pred_wrapper_classif <- function(object, newdata) predict(object, newdata, type = "raw")
-#' res_perm <- compare_feature_importance(
-#'   X, Y, income ~ ., method = "rf", importance_type = "permutation",
-#'   pred_wrapper = pred_wrapper_classif, metric = "RMSE", nsim = 5
-#' )
-#' print(res_perm$comparison)
-#'
-#' # SHAP importance (using fastshap)
-#' # For classification tasks, this default wrapper returns the probability of the first class.
-#' res_shap <- compare_feature_importance(
-#'   X, Y, default ~ ., method = "rf", importance_type = "shap",
-#'   nsim = 5
-#' )
-#' print(res_shap$comparison)
-#'
-#' # SHAP importance (using fastshap)
-#' # For classification tasks, this default wrapper returns the probability of the first class.
-#' res_shap <- compare_feature_importance(
-#'   X, Y, income ~ ., method = "rf", importance_type = "shap",
-#'   nsim = 5
-#' )
-#' print(res_shap$comparison)
-#'
-#' @importFrom caret train varImp trainControl
 #' @importFrom data.table data.table
 #' @export
 compare_feature_importance <- function(X, Y, formula, method,
                                        importance_type = c("model", "permutation", "shap"),
                                        pred_wrapper = NULL, metric = "Accuracy", nsim = 5) {
+  if (!requireNamespace("caret", quietly = TRUE)) {
+    stop("Package 'caret' is required for compare_feature_importance(). Please install it.")
+  }
   importance_type <- match.arg(importance_type)
   target_var <- all.vars(formula)[1]
 
@@ -123,16 +103,21 @@ compare_feature_importance <- function(X, Y, formula, method,
   if (importance_type == "model") {
     vi_X <- caret::varImp(model_X)$importance
     vi_Y <- caret::varImp(model_Y)$importance
-    if ("Overall" %in% colnames(vi_X)) {
-      importance_X <- vi_X[features, "Overall"]
-    } else {
-      importance_X <- vi_X[features, 1]
+
+    # Extract importance values safely, handling missing features
+    extract_importance <- function(vi, features) {
+      col_name <- if ("Overall" %in% colnames(vi)) "Overall" else colnames(vi)[1]
+      # Get available features in the importance matrix
+      available <- intersect(features, rownames(vi))
+      imp <- setNames(rep(NA_real_, length(features)), features)
+      if (length(available) > 0) {
+        imp[available] <- vi[available, col_name]
+      }
+      return(imp)
     }
-    if ("Overall" %in% colnames(vi_Y)) {
-      importance_Y <- vi_Y[features, "Overall"]
-    } else {
-      importance_Y <- vi_Y[features, 1]
-    }
+
+    importance_X <- extract_importance(vi_X, features)
+    importance_Y <- extract_importance(vi_Y, features)
   } else if (importance_type == "permutation") {
     if (is.null(pred_wrapper)) stop("pred_wrapper must be provided for permutation importance.")
     if (!requireNamespace("vip", quietly = TRUE)) {
@@ -175,14 +160,86 @@ compare_feature_importance <- function(X, Y, formula, method,
     importance_Y <- colMeans(abs(shap_Y))
   }
 
+  # Replace NaN with NA for consistent handling
+  importance_X[is.nan(importance_X)] <- NA_real_
+  importance_Y[is.nan(importance_Y)] <- NA_real_
+
   comparison <- data.table::data.table(
     feature = features,
     importance_X = importance_X[features],
-    dataset_X = "X",
     importance_Y = importance_Y[features],
-    dataset_Y = "Y",
     difference = abs(importance_X[features] - importance_Y[features])
   )
 
-  return(list(comparison = comparison, model_X = model_X, model_Y = model_Y))
+  # Compute rank correlation (Spearman) to assess importance ranking similarity
+  # Handle case where all values might be NA
+  valid_pairs <- !is.na(importance_X[features]) & !is.na(importance_Y[features])
+  if (sum(valid_pairs) >= 2) {
+    rank_corr <- cor(importance_X[features], importance_Y[features],
+                     method = "spearman", use = "complete.obs")
+    pearson_corr <- cor(importance_X[features], importance_Y[features],
+                        method = "pearson", use = "complete.obs")
+  } else {
+    rank_corr <- NA_real_
+    pearson_corr <- NA_real_
+    warning("Not enough valid feature importance pairs to compute correlation.")
+  }
+
+  result <- list(
+    comparison = comparison,
+    model_X = model_X,
+    model_Y = model_Y,
+    rank_correlation = rank_corr,
+    pearson_correlation = pearson_corr,
+    mean_abs_difference = mean(comparison$difference, na.rm = TRUE)
+  )
+
+  class(result) <- "compare_feature_importance"
+  return(result)
+}
+
+#' Print method for compare_feature_importance objects
+#'
+#' @param x an object of class "compare_feature_importance"
+#' @param ... additional arguments (ignored)
+#' @export
+print.compare_feature_importance <- function(x, ...) {
+  cat("Feature Importance Comparison\n")
+  cat("=============================\n\n")
+  cat("Rank Correlation (Spearman):", round(x$rank_correlation, 4), "\n")
+  cat("Pearson Correlation:", round(x$pearson_correlation, 4), "\n")
+  cat("Mean Absolute Difference:", round(x$mean_abs_difference, 4), "\n\n")
+  cat("Feature-wise Comparison:\n")
+  print(x$comparison)
+  invisible(x)
+}
+
+#' Plot method for compare_feature_importance objects
+#'
+#' @param x an object of class "compare_feature_importance"
+#' @param y not used
+#' @param ... additional arguments passed to plotting functions
+#' @importFrom graphics barplot par legend
+#' @export
+plot.compare_feature_importance <- function(x, y = NULL, ...) {
+  comp <- x$comparison
+
+  # Create side-by-side bar plot
+  mat <- rbind(comp$importance_X, comp$importance_Y)
+  colnames(mat) <- comp$feature
+
+  op <- par(mar = c(8, 4, 4, 2))
+  on.exit(par(op))
+
+  barplot(mat,
+          beside = TRUE,
+          col = c("steelblue", "coral"),
+          main = paste("Feature Importance Comparison\nRank Corr =",
+                       round(x$rank_correlation, 3)),
+          ylab = "Importance",
+          las = 2, ...)
+  legend("topright", legend = c("Original (X)", "Synthetic (Y)"),
+         fill = c("steelblue", "coral"))
+
+  invisible(x)
 }

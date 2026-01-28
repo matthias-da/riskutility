@@ -10,7 +10,7 @@ compare_model_performance(
   formula,
   method = "rpart",
   metric = ifelse(is.factor(X[[as.character(formula[[2]])]]), "Accuracy", "RMSE"),
-  trControl = trainControl(method = "cv", number = 10)
+  trControl = NULL
 )
 }
 \arguments{
@@ -33,6 +33,8 @@ List containing trained models, performance metrics for X and Y, and comparison 
 This function evaluates and compares predictive model performance between an original dataset (X) and a synthetic/anonymized dataset (Y). The model is trained separately within each dataset using cross-validation, and various performance metrics are computed.
 }
 \examples{
+\donttest{
+if (requireNamespace("caret", quietly = TRUE)) {
 library(caret)
 set.seed(123)
 X <- data.frame(income = rnorm(500, 50000, 10000),
@@ -51,4 +53,6 @@ result <- compare_model_performance(X, Y,
            metric = 'Accuracy')
 
 print(result$comparison)
+}
+}
 }

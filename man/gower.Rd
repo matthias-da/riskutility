@@ -15,19 +15,18 @@ gower(X, Y)
 Average (per observation) Gower distance
 }
 \examples{
-# example code
-data(eusilc13puf, package = "simPop")
-X <- Y <- eusilc13puf
-sdc <- sdcMicro::createSdcObj(X,
-                    keyVars = c("db040", "hsize", "pb220a",
-                                "rb090", "pl031", "age"),
-                    numVars = c("pgrossIncome"),
-                    pramVars = "db040",
-                    weightVar = "rb050", hhId = "db030")
-sdc <- sdcMicro::pram(sdc)
-sdc <- sdcMicro::microaggregation(sdc, strata="db040")
-Y <- sdcMicro::extractManipData(sdc)
-gower(X[, c("pgrossIncome","db040")], Y[, c("pgrossIncome","db040")])
+# Simple example with mixed data types
+X <- data.frame(
+  age = c(25, 30, 35, 40),
+  income = c(30000, 45000, 50000, 60000),
+  gender = factor(c("M", "F", "M", "F"))
+)
+Y <- data.frame(
+  age = c(26, 31, 34, 42),
+  income = c(32000, 44000, 52000, 58000),
+  gender = factor(c("M", "F", "M", "F"))
+)
+gower(X, Y)
 
 }
 \author{

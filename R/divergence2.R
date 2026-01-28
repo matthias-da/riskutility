@@ -13,9 +13,7 @@
 #' }
 #'
 #' @param p A vector of probability values (must sum to 1 for entropy-based methods).
-#' @param alpha The order of Rényi entropy (must be > 0 and ≠ 1).
-#' @param joint A joint probability matrix, where rows represent values of X and columns of Y.
-#' @param x A numeric vector (for cumulative entropy).
+#' @param alpha The order of Renyi entropy (must be > 0 and not equal to 1).
 #'
 #' @return A numeric value representing the corresponding entropy or risk measure.
 #'

@@ -65,9 +65,9 @@ compare_histograms <- function(X, Y, num_var, cat_vars,
                                facet_type = "wrap", bins = 30,
                                transparency = 0.4, plot_type = "overlap") {
 
-  # Convert to data.table for efficient processing
-  X <- as.data.table(X)
-  Y <- as.data.table(Y)
+  # Convert to data.table for efficient processing (use copy to avoid side effects)
+  X <- copy(as.data.table(X))
+  Y <- copy(as.data.table(Y))
 
   # Check if the numeric variable exists in both datasets
   if (!(num_var %in% names(X) && num_var %in% names(Y))) {
@@ -146,6 +146,7 @@ compare_histograms <- function(X, Y, num_var, cat_vars,
     }
   }
 
-  # Print plot
+  # Print and return plot
   print(p)
+  invisible(p)
 }

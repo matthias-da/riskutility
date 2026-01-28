@@ -11,11 +11,12 @@
 #'
 #' @return List containing trained models, performance metrics for X and Y, and comparison results.
 #'
-#' @import caret
 #' @importFrom data.table as.data.table
 #' @export
 #'
 #' @examples
+#' \donttest{
+#' if (requireNamespace("caret", quietly = TRUE)) {
 #' library(caret)
 #' set.seed(123)
 #' X <- data.frame(income = rnorm(500, 50000, 10000),
@@ -34,22 +35,37 @@
 #'            metric = 'Accuracy')
 #'
 #' print(result$comparison)
+#' }
+#' }
 
 compare_model_performance <- function(X, Y, formula, method = 'rpart',
                                       metric = ifelse(is.factor(X[[as.character(formula[[2]])]]), "Accuracy", "RMSE"),
-                                      trControl = trainControl(method = "cv", number = 10)) {
+                                      trControl = NULL) {
 
-  library(caret)
+  if (!requireNamespace("caret", quietly = TRUE)) {
+    stop("Package 'caret' is required for compare_model_performance(). Please install it.")
+  }
+
+  # Set default trControl if not provided
+  if (is.null(trControl)) {
+    trControl <- caret::trainControl(method = "cv", number = 10)
+  }
+
+  # Determine if metric should be minimized or maximized
+
+  # Error metrics (lower is better): RMSE, MAE, logLoss, etc.
+  minimize_metrics <- c("RMSE", "MAE", "logLoss", "MAPE", "MSE")
+  use_min <- metric %in% minimize_metrics
 
   # Train and evaluate on X using cross-validation
-  model_X <- train(formula, data = X, method = method,
-                   trControl = trControl, metric = metric)
-  perf_X <- max(model_X$results[[metric]])
+  model_X <- caret::train(formula, data = X, method = method,
+                          trControl = trControl, metric = metric)
+  perf_X <- if (use_min) min(model_X$results[[metric]]) else max(model_X$results[[metric]])
 
   # Train and evaluate on Y using cross-validation
-  model_Y <- train(formula, data = Y, method = method,
-                   trControl = trControl, metric = metric)
-  perf_Y <- max(model_Y$results[[metric]])
+  model_Y <- caret::train(formula, data = Y, method = method,
+                          trControl = trControl, metric = metric)
+  perf_Y <- if (use_min) min(model_Y$results[[metric]]) else max(model_Y$results[[metric]])
 
   # Comparison
   comparison <- data.frame(

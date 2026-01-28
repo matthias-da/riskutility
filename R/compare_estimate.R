@@ -50,7 +50,8 @@ ci_overlap <- function(x, y, estimator = median, R = 1000){
   # calculate the estimator on y
   m_y <- estimator(y)
   # calculate the confidence interval
-  ci_y <- quantile(replicate(R, estimator(sample(x, size = nr, replace = TRUE))),
+  nr_y <- length(y)
+  ci_y <- quantile(replicate(R, estimator(sample(y, size = nr_y, replace = TRUE))),
                  c(0.025, 0.975))
   # is it less than the sampling error?
   lessSE <- ifelse(m_x > ci_x[1] & m_x < ci_x[2], "smaller", "larger")

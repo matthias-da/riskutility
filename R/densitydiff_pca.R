@@ -21,21 +21,20 @@
 #' @importFrom stats runif
 #' @export
 #' @examples
-#' # example code
-#'
-#' library(simPop)
-#' data("eusilc13puf")
-#' X <- eusilc13puf[, c("age", "pgrossIncome", "hgrossIncome", "hx050")]
-#' Y <- X
-#' X$age <- as.numeric(as.character(X$age))
-#' Y$age <- as.numeric(as.character(Y$age))
-#' X[is.na(X$pgrossIncome), "pgrossIncome"] <- 0
-#' Y[is.na(Y$pgrossIncome), "pgrossIncome"] <- 0
-#'
-#' Y$age <- sample(Y$age)
-#' Y$pgrossIncome <- Y$pgrossIncome * runif(nrow(Y), 0.8, 1.2)
-#' Y$hgrossIncome <- Y$hgrossIncome * runif(nrow(Y), 0.8, 1.2)
-#' Y$hx050 <- Y$hx050 * runif(nrow(Y), 0.8, 1.2)
+#' # Simple example with multivariate numeric data
+#' set.seed(123)
+#' X <- data.frame(
+#'   var1 = rnorm(100, 50, 10),
+#'   var2 = rnorm(100, 1000, 200),
+#'   var3 = rnorm(100, 30, 5),
+#'   var4 = rnorm(100, 500, 100)
+#' )
+#' Y <- data.frame(
+#'   var1 = rnorm(100, 52, 11),
+#'   var2 = rnorm(100, 980, 220),
+#'   var3 = rnorm(100, 31, 6),
+#'   var4 = rnorm(100, 510, 110)
+#' )
 #' d1 <- densitydiff_pca(X, Y, bayesspace = FALSE)
 #' d1
 densitydiff_pca <- function(X,
@@ -97,15 +96,15 @@ densitydiff_pca <- function(X,
 
   # Check if strata_x is a factor or NULL
   if (!is.null(strata_x)) {
-    if (!is.factor(strata_x) || length(strata_x) != length(x)) {
-      stop("Error: 'strata_x' must be a factor with the same length as 'x'.")
+    if (!is.factor(strata_x) || length(strata_x) != nrow(X)) {
+      stop("Error: 'strata_x' must be a factor with the same length as 'X'.")
     }
   }
 
   # Check if strata_y is a factor or NULL
   if (!is.null(strata_y)) {
-    if (!is.factor(strata_y) || length(strata_y) != length(y)) {
-      stop("Error: 'strata_y' must be a factor with the same length as 'y'.")
+    if (!is.factor(strata_y) || length(strata_y) != nrow(Y)) {
+      stop("Error: 'strata_y' must be a factor with the same length as 'Y'.")
     }
 
     if (!is.null(strata_x) && !all(levels(strata_y) %in% levels(strata_x))) {
@@ -166,6 +165,8 @@ densitydiff_pca <- function(X,
         kl[i] <- KLDiv(density_X, density_Y)
         jsd[i] <- JSDiv(density_X, density_Y)
       } else{
+        # Geometric mean (inline to avoid robCompositions dependency)
+        gm <- function(x) exp(mean(log(x[x > 0]), na.rm = TRUE))
         density_X <- log(density_X / gm(density_X))
         density_Y <- log(density_Y / gm(density_Y))
         distance <- sqrt(sum((density_X - density_Y)^2, na.rm=TRUE))

@@ -59,8 +59,10 @@ JSDiv_bayes <- function(A, B) {
 }
 
 #' @rdname Entropy
+#' @export
 CrossEntropy <- function(A, B) {
-  A <- A[A > 0]
-  B <- B[A > 0]
+  idx <- A > 0
+  A <- A[idx]
+  B <- B[idx]
   -sum(A * log(B))
 }

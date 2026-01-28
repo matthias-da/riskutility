@@ -37,7 +37,6 @@
 #' with relative frequencies calculated accordingly.
 #'
 #' @importFrom data.table as.data.table rbindlist
-#' @importFrom Hmisc wtd.quantile
 #' @importFrom MASS huber
 #' @export
 #'
@@ -72,11 +71,6 @@
 compare_means_frequencies <- function(X, Y, cont_vars, cat_vars, group_vars = NULL,
                                       weight_X = NULL, weight_Y = NULL,
                                       stats = c("mean", "median", "sd", "IQR", "mad", "huber", "skewness", "kurtosis")) {
-
-  library(data.table)
-  library(Hmisc)
-  library(MASS)
-
   # Convert to data.table
   X <- as.data.table(X)
   Y <- as.data.table(Y)
@@ -106,7 +100,10 @@ compare_means_frequencies <- function(X, Y, cont_vars, cat_vars, group_vars = NU
     }
     # Median
     if ("median" %in% stats) {
-      result$median <- as.numeric(wtd.quantile(x, weights = w, probs = 0.5, na.rm = TRUE))
+      if (!requireNamespace("Hmisc", quietly = TRUE)) {
+        stop("Package 'Hmisc' is required for weighted median. Please install it.")
+      }
+      result$median <- as.numeric(Hmisc::wtd.quantile(x, weights = w, probs = 0.5, na.rm = TRUE))
     }
     # Huber mean (unweighted only)
     if ("huber" %in% stats) {

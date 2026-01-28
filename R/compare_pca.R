@@ -29,7 +29,6 @@
 #' @importFrom data.table as.data.table rbindlist
 #' @importFrom stats prcomp
 #' @importFrom ggplot2 ggplot aes geom_point geom_segment geom_text labs theme_minimal scale_color_manual
-#' @importFrom gridExtra grid.arrange
 #' @export
 #'
 #' @examples
@@ -44,7 +43,7 @@
 #'   income = rnorm(1000, mean = 48000, sd = 12000),
 #'   age = rnorm(1000, mean = 42, sd = 11)
 #' )
-#' Y$expenses <- Y$income * 0.5 + rnorm(n = 500, mean = 1000, sd = 500)
+#' Y$expenses <- Y$income * 0.5 + rnorm(n = 1000, mean = 1000, sd = 500)
 #' # Combined PCA biplot with separate loadings for X (blue) and Y (red)
 #' res_combined <- compare_pca(X, Y, vars = c("income", "age", "expenses"), biplot = TRUE, side_by_side = FALSE)
 #' print(res_combined$pca)
@@ -55,10 +54,6 @@
 #' print(res_separate$pca)
 #' print(res_separate$plot)
 compare_pca <- function(X, Y, vars, center = TRUE, scale = TRUE, biplot = TRUE, side_by_side = FALSE) {
-  library(data.table)
-  library(ggplot2)
-  library(gridExtra)
-
   create_biplot_arrows <- function(pca_result, scores_df) {
     arrow_multiplier <- min(
       (max(scores_df$PC1) - min(scores_df$PC1)) / (max(pca_result$rotation[, 1]) - min(pca_result$rotation[, 1])),
@@ -143,7 +138,10 @@ compare_pca <- function(X, Y, vars, center = TRUE, scale = TRUE, biplot = TRUE, 
         geom_text(data = loadings_Y, aes(x = PC1, y = PC2, label = var), color = "red", vjust = -0.5, size = 3)
     }
 
-    combined_plot <- grid.arrange(pX, pY, ncol = 2)
+    if (!requireNamespace("gridExtra", quietly = TRUE)) {
+      stop("Package 'gridExtra' is required for side_by_side plots. Please install it.")
+    }
+    combined_plot <- gridExtra::grid.arrange(pX, pY, ncol = 2)
 
     return(list(pca = list(X = pca_X, Y = pca_Y), plot = combined_plot))
   }

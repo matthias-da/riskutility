@@ -62,11 +62,9 @@
 #' print(result_by_group)
 compare_chisq_gof <- function(X, Y, cat_vars, group_vars = NULL, weight_X = NULL, weight_Y = NULL,
                               simulate_p = TRUE, B = 2000) {
-  library(data.table)
-
-  # Convert X and Y to data.table if not already
-  X <- as.data.table(X)
-  Y <- as.data.table(Y)
+  # Convert X and Y to data.table if not already (use copy to avoid side effects)
+  X <- copy(as.data.table(X))
+  Y <- copy(as.data.table(Y))
 
   # Check that all specified categorical variables exist in both datasets
   if (!all(cat_vars %in% names(X)) || !all(cat_vars %in% names(Y))) {
@@ -148,10 +146,16 @@ compare_chisq_gof <- function(X, Y, cat_vars, group_vars = NULL, weight_X = NULL
                           p = as.vector(expected_scaled) / sum(expected_scaled),
                           simulate.p.value = simulate_p, B = B)
 
+    # Compute Cramér's V effect size
+    n_total <- sum(observed_full)
+    k <- length(observed_full)  # Number of categories
+    cramers_v <- sqrt(as.numeric(chi_res$statistic) / (n_total * (k - 1)))
+
     results_list[[group_label]] <- data.table(group = group_label,
                                               chi_sq_statistic = chi_res$statistic,
                                               df = chi_res$parameter,
-                                              p_value = chi_res$p.value)
+                                              p_value = chi_res$p.value,
+                                              cramers_v = cramers_v)
   }
 
   result_dt <- rbindlist(results_list, fill = TRUE)

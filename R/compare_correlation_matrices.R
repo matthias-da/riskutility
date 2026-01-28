@@ -204,5 +204,16 @@ compare_correlation_matrices <- function(X, Y, vars, method = "pearson", mixed_m
 
   diff <- abs(corr_X - corr_Y)
 
-  return(list(corr_X = corr_X, corr_Y = corr_Y, diff = diff))
+  # Compute summary statistics (using upper triangle to avoid double-counting)
+  upper_diff <- diff[upper.tri(diff)]
+  summary_stats <- list(
+    mean_abs_diff = mean(upper_diff, na.rm = TRUE),
+    max_abs_diff = max(upper_diff, na.rm = TRUE),
+    median_abs_diff = median(upper_diff, na.rm = TRUE),
+    frobenius_norm = sqrt(sum(diff^2, na.rm = TRUE)),
+    n_vars = length(vars),
+    n_pairs = sum(!is.na(upper_diff))
+  )
+
+  return(list(corr_X = corr_X, corr_Y = corr_Y, diff = diff, summary = summary_stats))
 }

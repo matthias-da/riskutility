@@ -62,7 +62,7 @@ Y <- data.frame(
   income = rnorm(1000, mean = 48000, sd = 12000),
   age = rnorm(1000, mean = 42, sd = 11)
 )
-Y$expenses <- Y$income * 0.5 + rnorm(n = 500, mean = 1000, sd = 500)
+Y$expenses <- Y$income * 0.5 + rnorm(n = 1000, mean = 1000, sd = 500)
 # Combined PCA biplot with separate loadings for X (blue) and Y (red)
 res_combined <- compare_pca(X, Y, vars = c("income", "age", "expenses"), biplot = TRUE, side_by_side = FALSE)
 print(res_combined$pca)

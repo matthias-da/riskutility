@@ -1,2 +1,12 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^\.claude$
+^README\.Rmd$
+^LICENSE\.md$
+^LICENCE\.rtf$
+^Rplots\.pdf$
+^test$
+^\.github$
+^data$
+^doc$
+^Meta$

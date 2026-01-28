@@ -32,7 +32,6 @@
 #'
 #' @importFrom data.table as.data.table rbindlist
 #' @importFrom MASS ginv
-#' @importFrom Hmisc wtd.quantile
 #' @export
 #'
 #' @examples
@@ -69,9 +68,6 @@
 compare_multivariate_distribution <- function(X, Y, vars, method = "mahalanobis",
                                               weight_X = NULL, weight_Y = NULL,
                                               n_bins = 10) {
-  library(data.table)
-  library(MASS)
-
   # Convert to data.table if necessary
   X <- as.data.table(X)
   Y <- as.data.table(Y)
@@ -116,7 +112,8 @@ compare_multivariate_distribution <- function(X, Y, vars, method = "mahalanobis"
 
     # Function to compute weighted covariance matrix for a matrix
     weighted_cov <- function(mat, w) {
-      wm <- colMeans(mat, na.rm = TRUE)
+      # Compute weighted mean for centering
+      wm <- sapply(as.data.frame(mat), weighted.mean, w = w, na.rm = TRUE)
       centered <- sweep(mat, 2, wm)
       cov_mat <- crossprod(centered, centered * w) / (sum(w) - 1)
       return(cov_mat)

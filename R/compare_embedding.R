@@ -11,6 +11,8 @@
 #' @param perplexity Numeric: t-SNE perplexity (default: 30).
 #' @param n_neighbors Numeric: UMAP neighbors (default: 15).
 #' @param side_by_side Logical: if TRUE, plots embeddings for X and Y side by side.
+#' @param seed Integer: random seed for reproducibility of stochastic methods (t-SNE, UMAP).
+#'   Default NULL uses current random state.
 #'
 #' @return A list containing the embeddings and a ggplot2 visualization.
 #' @importFrom MASS sammon
@@ -19,47 +21,38 @@
 #' @export
 #'
 #' @examples
-#' library(data.table)
+#' # MDS (Sammon) embedding - doesn't require optional packages
 #' set.seed(123)
+#' X <- data.frame(
+#'   var1 = rnorm(100, 50, 10),
+#'   var2 = rnorm(100, 40, 8),
+#'   var3 = rnorm(100, 30, 5)
+#' )
+#' Y <- data.frame(
+#'   var1 = rnorm(100, 48, 12),
+#'   var2 = rnorm(100, 42, 9),
+#'   var3 = rnorm(100, 28, 6)
+#' )
+#' res_mds <- compare_embedding(X, Y, vars = c("var1", "var2", "var3"),
+#'                              method = 'mds')
 #'
-#' vars <- c("income", "age", "expenses", "savings", "debt")
+#' \donttest{
+#' # t-SNE (requires Rtsne package)
+#' if (requireNamespace("Rtsne", quietly = TRUE)) {
+#'   res_tsne <- compare_embedding(X, Y, vars = c("var1", "var2", "var3"),
+#'                                 method = 'tsne')
+#' }
 #'
-#' mu_X <- c(50000, 40, 30000, 20000, 10000)
-#' mu_Y <- c(48000, 42, 28000, 22000, 12000)
-#'
-#' Sigma <- matrix(c(
-#'   1.0, 0.6, 0.4, -0.3, 0.2,
-#'   0.6, 1.0, 0.5, -0.2, 0.3,
-#'   0.4, 0.5, 1.0, -0.4, 0.3,
-#'  -0.3, -0.2, -0.4, 1.0, -0.6,
-#'   0.2, 0.3, 0.3, -0.6, 1.0
-#' ), byrow = TRUE, ncol = 5) * 10000
-#'
-#' cluster_X1 <- MASS::mvrnorm(250, mu_X, Sigma)
-#' cluster_X2 <- MASS::mvrnorm(250, mu_X + 10000, Sigma)
-#' cluster_Y1 <- MASS::mvrnorm(250, mu_Y, Sigma)
-#' cluster_Y2 <- MASS::mvrnorm(250, mu_Y - 10000, Sigma)
-#'
-#' X <- as.data.table(rbind(cluster_X1, cluster_X2))
-#' setnames(X, vars)
-#'
-#' Y <- as.data.table(rbind(cluster_Y1, cluster_Y2))
-#' setnames(Y, vars)
-#'
-#' # t-SNE
-#' res_tsne <- compare_embedding(X, Y, vars, method = 'tsne', side_by_side = TRUE)
-#' print(res_tsne$plot)
-#' res_tsne <- compare_embedding(X, Y, vars, method = 'tsne', side_by_side = FALSE)
-#' print(res_tsne$plot)
-#'
-#' # UMAP
-#' res_umap <- compare_embedding(X, Y, vars, method = 'umap', side_by_side = FALSE)
-#' print(res_umap$plot)
-#'
-#' # MDS (Sammon)
-#' res_mds <- compare_embedding(X, Y, vars, method = 'mds', side_by_side = FALSE)
-#' print(res_mds$plot)
-compare_embedding <- function(X, Y, vars, method = 'tsne', perplexity = 30, n_neighbors = 15, side_by_side = FALSE) {
+#' # UMAP (requires uwot package)
+#' if (requireNamespace("uwot", quietly = TRUE)) {
+#'   res_umap <- compare_embedding(X, Y, vars = c("var1", "var2", "var3"),
+#'                                 method = 'umap')
+#' }
+#' }
+compare_embedding <- function(X, Y, vars, method = 'tsne', perplexity = 30, n_neighbors = 15, side_by_side = FALSE, seed = NULL) {
+  # Set seed for reproducibility of stochastic methods
+  if (!is.null(seed)) set.seed(seed)
+
   X <- as.data.table(X)[, ..vars]
   Y <- as.data.table(Y)[, ..vars]
 

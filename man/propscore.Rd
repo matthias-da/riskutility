@@ -2,24 +2,33 @@
 % Please edit documentation in R/propscore.R
 \name{propscore}
 \alias{propscore}
+\alias{propscore.synth_pair}
+\alias{propscore.default}
 \title{Propensity score utility measure}
 \usage{
-propscore(
+propscore(X, ...)
+
+\method{propscore}{synth_pair}(X, form = NULL, ...)
+
+\method{propscore}{default}(
   X,
   Y,
   form = NULL,
   method = "rf",
   adjust_size = TRUE,
   cluster = NULL,
-  na = "impute"
+  na = "impute",
+  ...
 )
 }
 \arguments{
 \item{X}{data frame}
 
-\item{Y}{data frame with the same structure as X}
+\item{...}{additional arguments passed to methods (currently unused)}
 
 \item{form}{formula. If NULL all variables are used as predictors}
+
+\item{Y}{data frame with the same structure as X}
 
 \item{method}{method for propensity score estimation. Default is rf
 (random forest)}
@@ -43,29 +52,39 @@ Propensity score measures
 How well can you predict if an observation is from which data set?
 }
 \examples{
-# example code
+# Simple example with synthetic data
+set.seed(123)
+X <- data.frame(
+  age = sample(20:60, 100, replace = TRUE),
+  gender = sample(c("M", "F"), 100, replace = TRUE),
+  income = rnorm(100, 50000, 10000)
+)
+Y <- data.frame(
+  age = sample(20:60, 100, replace = TRUE),
+  gender = sample(c("M", "F"), 100, replace = TRUE),
+  income = rnorm(100, 48000, 12000)
+)
+propscore(X, Y, form = ~ age + gender + income)
 
-data(eusilc13puf, package = "simPop")
-eusilc13puf$age <- as.numeric(as.character(eusilc13puf$age))
-keyvars <- c("age", "rb090", "db040", "pl031", "pb220a")
-sdc <- sdcMicro::createSdcObj(eusilc13puf,
-                              keyVars = keyvars,
-                              numVars = "pgrossIncome",
-                              w = "rb050",
-                              hhId = "db030")
-sdc <- sdcMicro::globalRecode(sdc,
-                              column = "age",
-                              breaks = c(1,9,19,29,39,49,59,69,100),
-                              labels = 1:8)
-sdc <- sdcMicro::localSuppression(sdc)
-sdc <- sdcMicro::microaggregation(sdc)
-eusilc13puf_anon <- sdcMicro::extractManipData(sdc)
-
-propscore(eusilc13puf, eusilc13puf_anon, na = "remove",
-   form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"))
-propscore(eusilc13puf, eusilc13puf_anon, na = "remove",
-   form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"),
-   adjust_size = FALSE)
+\donttest{
+# Extended example using simPop and sdcMicro (requires these packages)
+if (requireNamespace("simPop", quietly = TRUE) &&
+    requireNamespace("sdcMicro", quietly = TRUE)) {
+  data(eusilc13puf, package = "simPop")
+  eusilc13puf$age <- as.numeric(as.character(eusilc13puf$age))
+  keyvars <- c("age", "rb090", "db040", "pl031", "pb220a")
+  sdc <- sdcMicro::createSdcObj(eusilc13puf,
+                                keyVars = keyvars,
+                                numVars = "pgrossIncome",
+                                w = "rb050",
+                                hhId = "db030")
+  sdc <- sdcMicro::localSuppression(sdc)
+  sdc <- sdcMicro::microaggregation(sdc)
+  eusilc13puf_anon <- sdcMicro::extractManipData(sdc)
+  propscore(eusilc13puf, eusilc13puf_anon, na = "remove",
+     form = ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome)
+}
+}
 
 \dontrun{
   ## approx. 20 seconds computation time

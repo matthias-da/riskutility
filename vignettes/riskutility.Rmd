@@ -1,0 +1,580 @@
+---
+title: "riskutility: Measuring Disclosure Risk and Data Utility for Synthetic Data"
+author:
+  - name: Matthias Templ
+    affiliation: Institute of Statistics and Mathematical Methods in Economics, Vienna University of Technology
+    address: Wiedner Hauptstraße 8-10, 1040 Vienna, Austria
+    email: matthias.templ@gmail.com
+    orcid: 0000-0002-8638-5276
+abstract: >
+  The R package **riskutility** provides a comprehensive framework for measuring
+  disclosure risk and data utility in synthetic and anonymized datasets. It implements
+  attribution-based privacy metrics (DCAP, TCAP, WEAP, DiSCO), distance-based metrics
+  (DCR, NNDR, IMS), and various utility measures. This vignette demonstrates the
+  complete workflow from synthetic data generation to risk assessment, explains metric
+  interpretation, and shows integration with existing R packages for statistical
+  disclosure control.
+keywords:
+  - synthetic data
+
+  - disclosure risk
+  - data utility
+  - privacy
+  - statistical disclosure control
+  - R
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 3
+vignette: >
+  %\VignetteIndexEntry{riskutility: Measuring Disclosure Risk and Data Utility for Synthetic Data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+bibliography: references.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+# Introduction
+
+Synthetic data generation has emerged as a key technique for protecting privacy while
+preserving data utility for statistical analysis. However, evaluating the quality of
+synthetic data requires careful assessment of both **disclosure risk** (how much
+private information might be revealed) and **data utility** (how well the synthetic
+data preserves analytical properties of the original).
+The **riskutility** package provides a unified framework for these assessments,
+implementing state-of-the-art metrics from the statistical disclosure control
+literature. This vignette demonstrates:
+
+1. Core concepts of disclosure risk and data utility
+2. Attribution-based privacy metrics (CAP family)
+3. Distance-based privacy metrics (holdout method)
+4. Utility assessment methods
+5. Comprehensive reporting with `disclosure_report()`
+6. Integration with synthpop and simPop packages
+
+# Installation and Setup
+
+```{r install, eval=FALSE}
+# Install from CRAN (when available)
+install.packages("riskutility")
+
+# Or install development version from GitHub
+# devtools::install_github("mtempl/riskutility")
+```
+
+```{r load}
+library(riskutility)
+library(ggplot2)
+```
+# Example Data
+
+Throughout this vignette, we use a simulated dataset representing survey data with
+demographic and income information. We create both an "original" dataset and a
+"synthetic" version with intentionally introduced differences.
+
+```{r example-data}
+set.seed(42)
+n <- 500
+
+# Original data
+original <- data.frame(
+  age = as.integer(sample(18:80, n, replace = TRUE)),
+  gender = factor(sample(c("Male", "Female"), n, replace = TRUE)),
+  education = factor(sample(c("Primary", "Secondary", "Tertiary"), n,
+                           replace = TRUE, prob = c(0.2, 0.5, 0.3))),
+  region = factor(sample(paste0("Region_", 1:5), n, replace = TRUE)),
+  income = round(rgamma(n, shape = 2, scale = 15000), -2),
+  health_status = factor(sample(c("Good", "Fair", "Poor"), n,
+                                replace = TRUE, prob = c(0.6, 0.3, 0.1)))
+)
+
+# Synthetic data (with some noise and distributional shifts)
+synthetic <- data.frame(
+  age = as.integer(pmin(80, pmax(18, original$age + sample(-3:3, n, replace = TRUE)))),
+  gender = factor(sample(c("Male", "Female"), n, replace = TRUE)),
+  education = factor(sample(c("Primary", "Secondary", "Tertiary"), n,
+                           replace = TRUE, prob = c(0.22, 0.48, 0.30))),
+  region = factor(sample(paste0("Region_", 1:5), n, replace = TRUE)),
+  income = round(rgamma(n, shape = 2.1, scale = 14500), -2),
+  health_status = factor(sample(c("Good", "Fair", "Poor"), n,
+                                replace = TRUE, prob = c(0.58, 0.32, 0.10)))
+)
+
+head(original)
+```
+
+# Disclosure Risk Metrics
+
+## Conceptual Framework
+
+Disclosure risk in synthetic data can be understood through two main paradigms:
+
+1. **Attribution disclosure**: Can an intruder learn sensitive information about
+   an individual by matching quasi-identifiers between original and synthetic data?
+
+2. **Identity disclosure**: Can an intruder determine that a specific synthetic
+   record corresponds to a real individual (memorization)?
+
+The **riskutility** package implements metrics for both paradigms.
+
+## Attribution-Based Metrics (CAP Family)
+
+### Correct Attribution Probability (DCAP)
+
+The Differential Correct Attribution Probability (DCAP) measures how much better
+an intruder can guess a sensitive target variable when they have access to the
+synthetic data, compared to random guessing.
+
+```{r dcap}
+# Define quasi-identifiers (key variables) and sensitive attribute (target)
+key_vars <- c("age", "gender", "education", "region")
+target_var <- "health_status"
+
+# Compute DCAP
+dcap_result <- dcap(
+  X = original,
+  Y = synthetic,
+  key_vars = key_vars,
+  target_var = target_var
+)
+
+print(dcap_result)
+```
+
+```{r dcap-summary}
+summary(dcap_result)
+```
+
+**Interpretation Guidelines:**
+
+| DCAP Value | Risk Level | Interpretation |
+|------------|------------|----------------|
+| < 0.05 | Low | Minimal additional disclosure risk |
+| 0.05 - 0.15 | Moderate | Some risk; review key variable selection |
+| 0.15 - 0.30 | Elevated | Consider additional protection |
+| > 0.30 | High | Significant privacy concern |
+
+### Targeted CAP (TCAP)
+
+While DCAP provides an aggregate measure, TCAP computes per-record risk scores,
+identifying which individuals face the highest disclosure risk.
+
+```{r tcap}
+tcap_result <- tcap(
+  X = original,
+  Y = synthetic,
+  key_vars = key_vars,
+  target_var = target_var
+)
+
+print(tcap_result)
+```
+
+```{r tcap-plot, fig.cap="Distribution of per-record TCAP scores"}
+plot(tcap_result)
+```
+
+High TCAP values for specific records indicate that those individuals' sensitive
+attributes are more easily inferred from the synthetic data.
+
+### Within Equivalence Class Attribution Probability (WEAP)
+
+WEAP focuses on the risk within equivalence classes (groups of records sharing
+the same quasi-identifier values).
+
+```{r weap}
+# WEAP only uses synthetic data (Y) - it measures disclosure risk
+# within the synthetic dataset itself
+weap_result <- weap(
+  Y = synthetic,
+  key_vars = key_vars,
+  target_var = target_var
+)
+
+print(weap_result)
+summary(weap_result)
+```
+
+### DiSCO (Disclosive in Synthetic Correct Original)
+DiSCO identifies records where the synthetic data correctly reveals the original
+sensitive value with high confidence.
+
+```{r disco}
+disco_result <- disco(
+  X = original,
+  Y = synthetic,
+  key_vars = key_vars,
+  target_var = target_var
+)
+
+print(disco_result)
+```
+
+### RAPID (Risk of Attribute Prediction-Induced Disclosure)
+
+RAPID uses machine learning models to assess disclosure risk. Unlike CAP-based methods
+that use exact or fuzzy matching, RAPID trains a predictive model on synthetic data
+and evaluates how well it can predict sensitive attributes in the original data.
+
+```{r rapid, eval=requireNamespace("ranger", quietly = TRUE)}
+rapid_result <- rapid(
+  X = original,
+  Y = synthetic,
+  key_vars = key_vars,
+  target_var = target_var,
+  model_type = "rf",
+  cat_tau = 0.3,
+  cat_eval_method = "RCS_marginal"
+)
+
+print(rapid_result)
+summary(rapid_result)
+```
+
+**Interpretation**: A low RAPID score (< 0.05) indicates that the ML model cannot
+predict the sensitive attribute much better than baseline, suggesting good privacy
+protection. Higher scores indicate potential disclosure risk.
+
+## Distance-Based Metrics (Holdout Method)
+
+Distance-based metrics detect **memorization** by comparing how close synthetic
+records are to training data versus held-out data. If synthetic records are
+systematically closer to training data, this suggests the model has memorized
+training examples.
+
+### Distance to Closest Record (DCR)
+
+```{r dcr}
+# Split original data into training and holdout
+set.seed(123)
+n_orig <- nrow(original)
+train_idx <- sample(n_orig, size = floor(0.7 * n_orig))
+
+train_data <- original[train_idx, ]
+holdout_data <- original[-train_idx, ]
+
+# For this example, synthetic was generated from full original
+# In practice, synthetic should be generated only from train_data
+
+dcr_result <- dcr(
+  X = train_data,
+  Y = synthetic,
+  holdout = holdout_data,
+  progress = FALSE
+)
+
+print(dcr_result)
+```
+
+```{r dcr-plot, fig.cap="DCR distribution comparison"}
+plot(dcr_result)
+```
+
+**Interpretation**: If the median ratio of distances (synthetic-to-training vs
+synthetic-to-holdout) is close to 1, there is no evidence of memorization.
+Values significantly below 1 suggest memorization.
+
+### Nearest Neighbor Distance Ratio (NNDR)
+
+NNDR refines DCR by computing the ratio of the distance to the nearest neighbor
+versus the second-nearest neighbor.
+
+```{r nndr}
+nndr_result <- nndr(
+  X = train_data,
+  Y = synthetic,
+  holdout = holdout_data,
+  progress = FALSE
+)
+
+print(nndr_result)
+summary(nndr_result)
+```
+
+### Identical Match Share (IMS)
+
+IMS measures the proportion of synthetic records that exactly match a training record.
+
+```{r ims}
+ims_result <- ims(
+  X = train_data,
+  Y = synthetic
+)
+
+print(ims_result)
+```
+
+An IMS close to 0 indicates good privacy protection (no exact copies of training data).
+
+# Data Utility Metrics
+
+Protecting privacy is only valuable if the synthetic data remains useful for
+analysis. The **riskutility** package provides several utility metrics.
+
+## Propensity Score Analysis
+
+The propensity score method trains a classifier to distinguish original from
+synthetic records. If the classifier performs poorly (accuracy near 0.5), the
+distributions are similar.
+
+```{r propscore}
+ps_result <- propscore(
+  X = original,
+  Y = synthetic,
+  form = ~ age + income + education + gender
+)
+
+print(ps_result)
+```
+
+```{r propscore-summary}
+summary(ps_result)
+```
+
+**Interpretation**: A propensity score close to 0 indicates good utility
+preservation (the classifier cannot distinguish original from synthetic).
+The closer the score distributions for original and synthetic data, the
+better the utility.
+
+## Distribution Comparisons
+
+### Continuous Variables
+
+```{r compare-dist}
+dist_result <- compare_distributions_cont(
+  X = original,
+  Y = synthetic,
+  variables = c("age", "income")
+)
+
+print(dist_result)
+```
+
+```{r compare-dist-plot, fig.cap="Distribution comparison for continuous variables"}
+plot(dist_result)
+```
+
+### Categorical Variables
+
+```{r compare-cat}
+chisq_result <- compare_chisq_gof(
+  X = original,
+  Y = synthetic,
+  cat_vars = "gender"
+)
+
+print(chisq_result)
+```
+
+## Summary Statistics Comparison
+
+```{r summary-stats}
+stats_result <- compare_multivariate_summary_statistics(
+  X = original,
+  Y = synthetic,
+  cont_vars = c("age", "income"),
+  cat_vars = c("gender", "education")
+)
+
+print(stats_result$continuous)
+```
+
+# Comprehensive Disclosure Report
+
+The `disclosure_report()` function provides a unified assessment combining multiple
+risk and utility metrics.
+
+```{r disclosure-report}
+report <- disclosure_report(
+  X = original,
+  Y = synthetic,
+  key_vars = key_vars,
+  target_var = target_var
+)
+
+print(report)
+```
+
+```{r report-summary}
+summary(report)
+```
+
+```{r report-plot, fig.cap="Comprehensive disclosure risk visualization"}
+plot(report)
+```
+
+# Integration with synthpop
+
+The **riskutility** package integrates seamlessly with the **synthpop** package
+for synthetic data generation.
+
+```{r synthpop-integration, eval=FALSE}
+library(synthpop)
+
+# Generate synthetic data with synthpop
+synth_obj <- syn(original, seed = 123)
+
+# Extract synthetic data for riskutility
+synthetic_sp <- synth_obj$syn
+
+# Run disclosure assessment
+dcap_sp <- dcap(
+  X = original,
+  Y = synthetic_sp,
+  key_vars = key_vars,
+  target_var = target_var
+)
+
+# Or use the from_synthpop helper (if available)
+# pair <- from_synthpop(synth_obj, original)
+```
+
+# Integration with simPop
+
+For users of the **simPop** package, **riskutility** provides S4 method support.
+
+```{r simPop-integration, eval=FALSE}
+library(simPop)
+
+# Assuming you have a simPopObj object
+# synthetic_data <- simPop::pop(simPopObj)
+
+# Use with riskutility
+# dcap_result <- dcap(X = original, Y = synthetic_data, ...)
+```
+
+# Metric Comparison
+
+Different metrics capture different aspects of disclosure risk. Here we compare
+results across metrics for the same dataset.
+
+```{r metric-comparison}
+# Extract scalar values from results
+dcap_val <- dcap_result$dcap[1]
+weap_val <- weap_result$weap_mean[1]
+disco_val <- disco_result$pct_disco[1]
+ims_val <- ims_result$ims[1]
+ps_score_val <- ps_result$ps_score[1]
+
+# Include RAPID if available
+if (exists("rapid_result")) {
+  rapid_val <- rapid_result$rapid[1]
+  metrics <- c("DCAP", "Mean WEAP", "DiSCO %", "RAPID", "IMS", "PS Score")
+  values <- round(c(dcap_val, weap_val, disco_val, rapid_val, ims_val, ps_score_val), 4)
+  interp <- c(
+    ifelse(dcap_val < 0.05, "Low risk",
+           ifelse(dcap_val < 0.15, "Moderate", "Elevated")),
+    ifelse(weap_val < 0.5, "Low risk",
+           ifelse(weap_val < 0.8, "Moderate", "Elevated")),
+    ifelse(disco_val < 1, "Low risk",
+           ifelse(disco_val < 5, "Moderate", "Elevated")),
+    ifelse(rapid_val < 0.05, "Low risk",
+           ifelse(rapid_val < 0.15, "Moderate", "Elevated")),
+    ifelse(ims_val < 0.01, "No memorization", "Potential memorization"),
+    ifelse(ps_score_val < 0.1, "Good utility",
+           ifelse(ps_score_val < 0.3, "Acceptable", "Poor utility"))
+  )
+} else {
+  metrics <- c("DCAP", "Mean WEAP", "DiSCO %", "IMS", "PS Score")
+  values <- round(c(dcap_val, weap_val, disco_val, ims_val, ps_score_val), 4)
+  interp <- c(
+    ifelse(dcap_val < 0.05, "Low risk",
+           ifelse(dcap_val < 0.15, "Moderate", "Elevated")),
+    ifelse(weap_val < 0.5, "Low risk",
+           ifelse(weap_val < 0.8, "Moderate", "Elevated")),
+    ifelse(disco_val < 1, "Low risk",
+           ifelse(disco_val < 5, "Moderate", "Elevated")),
+    ifelse(ims_val < 0.01, "No memorization", "Potential memorization"),
+    ifelse(ps_score_val < 0.1, "Good utility",
+           ifelse(ps_score_val < 0.3, "Acceptable", "Poor utility"))
+  )
+}
+
+comparison <- data.frame(
+  Metric = metrics,
+  Value = values,
+  Interpretation = interp
+)
+
+knitr::kable(comparison, caption = "Summary of disclosure risk and utility metrics")
+```
+
+# Best Practices
+
+## Choosing Key Variables
+
+Key variables (quasi-identifiers) should be selected based on:
+
+1. **Availability to potential intruders**: Variables an attacker might know
+2. **Uniqueness**: Combinations that identify individuals
+3. **Linkage potential**: Variables present in external databases
+
+Common quasi-identifiers include age, gender, geographic location, and occupation.
+
+## Interpreting Results
+
+1. **No single metric is sufficient**: Use multiple metrics to get a complete picture
+2. **Context matters**: Acceptable risk levels depend on data sensitivity and use case
+3. **Compare to baselines**: DCAP values should be compared to the baseline (random guessing)
+4. **Consider record-level risk**: Aggregate metrics may hide high-risk individuals (use TCAP)
+
+## Iterative Refinement
+
+If disclosure risk is too high:
+
+1. Add more noise to the synthesis process
+2. Reduce the granularity of quasi-identifiers (e.g., age groups instead of exact age)
+3. Apply additional anonymization techniques (suppression, generalization)
+4. Re-evaluate with **riskutility** metrics
+
+# Computational Considerations
+
+For large datasets, some functions support parallel processing and progress reporting:
+
+```{r computational, eval=FALSE}
+# Enable progress bars for long computations
+dcr_result <- dcr(
+  X = train_data,
+  Y = synthetic,
+  holdout = holdout_data,
+  progress = TRUE  # Show progress bar
+)
+```
+
+The DCAP and TCAP functions have been optimized using **data.table** for efficient
+computation on datasets with hundreds of thousands of records.
+
+# Conclusion
+
+The **riskutility** package provides a comprehensive toolkit for evaluating synthetic
+data quality. By combining attribution-based metrics (DCAP, TCAP, WEAP, DiSCO, RAPID)
+with distance-based metrics (DCR, NNDR, IMS) and utility measures, practitioners can
+make informed decisions about the privacy-utility trade-off in their synthetic data
+products.
+
+Key takeaways:
+
+- Use **DCAP/TCAP** to assess attribute disclosure risk via matching
+- Use **RAPID** for ML-based attribute inference risk (captures complex relationships)
+- Use **DCR/NNDR/IMS** to detect memorization
+- Use **propensity scores** and **distribution comparisons** for utility assessment
+- Use **disclosure_report()** for comprehensive assessment
+- Always evaluate multiple metrics and consider the specific use case
+
+# Session Info
+
+```{r session-info}
+sessionInfo()
+```
+
+# References

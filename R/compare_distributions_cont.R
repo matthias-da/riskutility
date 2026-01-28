@@ -242,78 +242,6 @@ compare_distributions_cont <- function(X, Y, variables = NULL, kind = NULL, cond
   dt <- as.data.table(values)
 
   ## Compute Bayes densities
-  # Function to compute the geometric mean
-  gm <- function(x) {
-    exp(mean(log(x[x > 0]), na.rm = TRUE))  # Avoid log(0) issues
-  }
-
-  # Compute density for each combination of .name and .var using .y
-  # density_data <- dt[, {
-  #   d <- density(.y, na.rm = TRUE)  # Compute density using ECDF values
-  #   gm_density <- gm(d$y)  # Compute geometric mean of densities
-  #
-  #   # Apply Bayes space transformation
-  #   density_y_bayes <- log(d$y / gm_density)
-  #
-  #   list(.x = d$x, .y = d$y, .y_bayes = density_y_bayes)
-  # }, by = .(.name, .var)]
-
-  # # Compute density from ECDF
-  # density_data <- dt[, {
-  #   # Compute finite differences (derivative approximation)
-  #   dx <- diff(.x)   # Differences in x
-  #   dy <- diff(.y)   # Differences in ECDF values
-  #
-  #   # Compute density estimates as derivative dy/dx
-  #   density_y <- dy / dx
-  #
-  #   # Align x values (midpoints between jumps for smoother estimation)
-  #   x_mid <- head(.x, -1) + dx / 2
-  #
-  #   # Ensure proper scaling
-  #   density_y <- density_y / sum(density_y * dx)  # Normalize to integrate to 1
-  #
-  #   # Compute Bayes space transformation
-  #   gm_density <- gm(density_y)
-  #   density_y_bayes <- log(density_y / gm_density)
-  #
-  #   list(.x = x_mid, .y = density_y, .y_bayes = density_y_bayes)
-  # }, by = .(.name, .var)]
-
-  # # Function to compute the geometric mean safely
-  # gm <- function(x) {
-  #   exp(mean(log(x[x > 0]), na.rm = TRUE))  # Avoid log(0) issues
-  # }
-  #
-  # # Compute density from ECDF safely
-  # density_data <- dt[, {
-  #   dx <- diff(.x)   # Compute differences in x values (support)
-  #   dy <- diff(.y)   # Compute differences in ECDF values
-  #
-  #   # Ensure dx is non-zero to avoid division by zero
-  #   dx[dx == 0] <- 1e-10  # Smallest possible nonzero value
-  #
-  #   # Compute density as the derivative of ECDF
-  #   density_y <- dy / dx
-  #
-  #   # Handle small or zero density values to avoid NaNs
-  #   density_y[density_y <= 0] <- 1e-10  # Replace zero densities with small epsilon
-  #
-  #   # Compute midpoints for better density representation
-  #   x_mid <- head(.x, -1) + dx / 2
-  #
-  #   # Normalize the density to integrate to 1
-  #   density_y <- density_y / sum(density_y * dx, na.rm = TRUE)
-  #
-  #   # Compute Bayes-space transformation
-  #   gm_density <- gm(density_y)  # Compute geometric mean of densities
-  #   density_y_bayes <- log(density_y / gm_density)  # Apply Bayes transformation
-  #
-  #   # Return results
-  #   list(.x = x_mid, .y = density_y, .y_bayes = density_y_bayes)
-  # }, by = .(.name, .var)]
-
-
   den_1d_num_workhorse <- function(x, y,
                                    weights_x = NULL, weights_y = NULL,
                                    bayesspace = TRUE,
@@ -388,14 +316,14 @@ compare_distributions_cont <- function(X, Y, variables = NULL, kind = NULL, cond
   }
 
   # Convert the list into a structured data.table
-  extract_densities <- function(res) {
+  extract_densities <- function(res, var_names) {
     # Create a data.table by iterating over the list elements
     dt_list <- lapply(seq_along(res), function(i) {
       data.table(
         .x = res[[i]]$points,          # Extracting points
         .y = c(res[[i]]$denX, res[[i]]$denY),  # Stacking denX and denY
         .name = rep(c("Sample 1", "Sample 2"), each = length(res[[i]]$points)),  # Label samples
-        .var = factor(i, levels = seq_along(res), labels = c("age", "income"))  # Assign variable names
+        .var = factor(i, levels = seq_along(res), labels = var_names)  # Assign variable names
       )
     })
 
@@ -403,14 +331,14 @@ compare_distributions_cont <- function(X, Y, variables = NULL, kind = NULL, cond
     rbindlist(dt_list)
   }
   # Convert the list into a structured data.table
-  extract_density_ratios <- function(res) {
+  extract_density_ratios <- function(res, var_names) {
     # Create a data.table by iterating over the list elements
     dt_list <- lapply(seq_along(res), function(i) {
       data.table(
         .x = res[[i]]$points,          # Extracting points
         .y = c(res[[i]]$density_ratio, res[[i]]$density_ratio),
         .name = rep(c("Sample 1", "Sample 2"), each = length(res[[i]]$points)),  # Label samples
-        .var = factor(i, levels = seq_along(res), labels = c("age", "income"))  # Assign variable names
+        .var = factor(i, levels = seq_along(res), labels = var_names)  # Assign variable names
       )
     })
 
@@ -419,8 +347,8 @@ compare_distributions_cont <- function(X, Y, variables = NULL, kind = NULL, cond
   }
 
   # Apply function to res
-  densities <- extract_densities(res)
-  density_ratios <- extract_density_ratios(res)
+  densities <- extract_densities(res, variables)
+  density_ratios <- extract_density_ratios(res, variables)
 
 
   ## for the Bayes space:
@@ -435,72 +363,8 @@ compare_distributions_cont <- function(X, Y, variables = NULL, kind = NULL, cond
 
 
   # Apply function to res
-  densities_bayes <- extract_densities(res_bayes)
-  density_ratios_bayes <- extract_density_ratios(res_bayes)
-
-
-  # # Convert values to data.table
-  # dt <- as.data.table(values)
-
-
-  # # Define function to compute density ratios
-  # compute_density_ratios <- function(sub_dt, n_support) {
-  #
-  #   # Extract y values for both samples
-  #   nam <- names(table(sub_dt$.name))
-  #   if(nam[1] == "Population") {
-  #     sub_dt$.name <- factor(sub_dt$.name, levels = c("Sample", "Population"))
-  #   } else {
-  #     sub_dt$.name <- factor(sub_dt$.name, levels = c("Sample 1", "Sample 2"))
-  #   }
-  #   y_sample1 <- sub_dt[.name == levels(sub_dt$.name)[1], .y]
-  #   y_sample2 <- sub_dt[.name == levels(sub_dt$.name)[2], .y]
-  #
-  #   # Check that both samples exist and have enough data
-  #   if (length(y_sample1) > 5 & length(y_sample2) > 5) {  # Ensure there are enough points for density estimation
-  #
-  #     # Compute density estimates
-  #     kde_x <- density(y_sample1, na.rm = TRUE)
-  #     kde_y <- density(y_sample2, na.rm = TRUE)
-  #
-  #     # Define common evaluation points
-  #     points <- seq(min(kde_x$x, kde_y$x), max(kde_x$x, kde_y$x), length.out = n_support)
-  #
-  #     # Interpolate densities at the common points, avoiding NA values
-  #     density_X <- approx(kde_x$x, kde_x$y, xout = points, rule = 2)$y
-  #     density_Y <- approx(kde_y$x, kde_y$y, xout = points, rule = 2)$y
-  #
-  #     # Handle zeros by replacing with a small epsilon to avoid log(0) or division by zero
-  #     epsilon <- 1e-10
-  #     density_X[density_X <= 0] <- epsilon
-  #     density_Y[density_Y <= 0] <- epsilon
-  #
-  #     # Compute Bayes-space transformation
-  #     gm <- function(x) exp(mean(log(x[x > 0]), na.rm = TRUE))
-  #     density_X_bayes <- log(density_X / gm(density_X))
-  #     density_Y_bayes <- log(density_Y / gm(density_Y))
-  #
-  #     # Compute the density ratio in log space
-  #     density_ratio <- density_X_bayes - density_Y_bayes
-  #
-  #     # Return as a data.table
-  #     return(data.table(
-  #       .var = unique(sub_dt$.var),
-  #       .x = points,
-  #       .density_ratio = density_ratio,
-  #       .denX = density_X_bayes,
-  #       .denY = density_Y_bayes
-  #     ))
-  #   } else {
-  #     return(NULL)  # Skip if not enough data
-  #   }
-  # }
-
-  # # Apply the function for each combination of .var
-  # density_ratios <- dt[, compute_density_ratios(.SD, n_support), by = .var]
-
-  # # View structure
-  # str(density_ratios)
+  densities_bayes <- extract_densities(res_bayes, variables)
+  density_ratios_bayes <- extract_density_ratios(res_bayes, variables)
 
   results <- list("formula" = form,
                "ecdf" = values,
@@ -526,7 +390,6 @@ NULL
 #' produce interactive plots.
 #'
 #' @param x An object of class \code{"compare_distributions_cont"}.
-#' @param y Not used.
 #' @param ... Additional arguments passed to the plotting function.
 #' @param which A character string specifying the type of plot to generate.
 #' Options include \code{"ecdf"}, \code{"density"}, \code{"density_bayes"},
@@ -549,9 +412,6 @@ NULL
 #' The function supports both static and interactive plots.
 #' If \code{interactive = TRUE}, the function will use \code{plotly} to
 #' create an interactive version of the plot.
-#'
-#' @importFrom plotly ggplotly
-#' @importFrom ggh4x facet_grid2
 #'
 #' @examples
 #' S <- data.frame(
@@ -642,99 +502,13 @@ NULL
 #' }
 #'
 #' @export
-plot.compare_distributions_cont <- function(x, y, ..., which = "ecdf", interactive = FALSE){
-
-  if(x$kind == "numeric" && (which == 1 || which == "ecdf")){
-    # Function to convert formula to ggplot2 syntax with color and appropriate
-    # faceting
-    convert_formula_to_ggplot <- function(formula, data) {
-      # Parse the formula
-      formula_parts <- strsplit(as.character(formula), " \\| ")[[1]]
-      yx_part <- formula_parts[1]
-
-      # Extract x and y
-      yx_split <- strsplit(yx_part, "~")[[1]]
-      y_var <- trimws(yx_split[1])
-      x_var <- trimws(yx_split[2])
-
-      # Check if there are facets
-      if (length(formula_parts) > 1) {
-        facet_part <- formula_parts[2]
-        facets <- strsplit(facet_part, "\\+")[[1]]
-        facets <- trimws(facets)
-
-        # Determine the appropriate faceting
-        if (length(facets) == 1) {
-          # Use facet_wrap with conditional scales = 'free_x'
-          if (".var" %in% names(data) && length(unique(data$.var)) > 1) {
-            facet_cmd <- paste0("facet_wrap(~ ", facets[1], ", scales = 'free_x')")
-          } else {
-            facet_cmd <- paste0("facet_wrap(~ ", facets[1], ")")
-          }
-        } else {
-          # Use facet_grid with conditional scales = 'free_x'
-          if (".var" %in% names(data) && length(unique(data$.var)) > 1) {
-            facet_cmd <- paste0("ggh4x::facet_grid2(", facets[1], " ~ ", facets[2], ", scales = 'free_x', independent = 'x')")
-          } else {
-            facet_cmd <- paste0("ggh4x::facet_grid2(", facets[1], " ~ ", facets[2], ")")
-          }
-        }
-      } else {
-        # No faceting
-        facet_cmd <- ""
-      }
-
-      # Create ggplot2 command with color
-      ggplot_cmd <- paste0(
-        "ggplot(data, aes(x = ", x_var, ", y = ", y_var, ",
-        colour = .name)) + ",
-        "geom_line() + theme_bw() + theme(legend.title=element_blank()) +
-        xlab('x') + ylab('F(x)')",
-        if (facet_cmd != "") paste0(" + ", facet_cmd) else ""
-      )
-
-      # Evaluate and return the ggplot2 command
-      plot <- eval(parse(text = ggplot_cmd))
-      plot <- plot
-      return(list("ggplot_object" = plot, "cmd" = ggplot_cmd))
-    }
-
-    # Convert and plot using ggplot2
-    ecdfplot <- convert_formula_to_ggplot(x$formula, x$ecdf)
-    if(interactive){
-      p <- plotly::ggplotly(ecdfplot$ggplot_object)
-      print(p)
-    } else{
-      print(ecdfplot$ggplot_object)
-    }
-    cmd <- ecdfplot$cmd
-  }
-  ###
-  if(x$kind == "numeric" && (which == 1 || which == "density")){
-    stop("not implemented yet")
-  }
-  if(x$kind == "numeric" && (which == 1 || which == "density_bayes")){
-    stop("not implemented yet")
-  }
-  if(x$kind == "numeric" && (which == 1 || which == "density_ratio")){
-    stop("not implemented yet")
-  }
-  if(x$kind == "numeric" && (which == 1 || which == "density_ratio_bayes")){
-    stop("not implemented yet")
-  }
-  ###
-
-  invisible(ecdfplot)
-}
-
-
-plot.compare_distributions_cont <- function(x, which = "ecdf", interactive = FALSE){
+plot.compare_distributions_cont <- function(x, ..., which = "ecdf", interactive = FALSE){
 
   if (!which %in% c("ecdf", "density", "density_bayes", "density_ratios","density_ratios_bayes","density_ratio","density_ratio_bayes")) {
     stop("Invalid choice for 'which'. Choose from 'ecdf', 'density', or 'density_bayes'.")
   }
-  if(which == "density_ratio") which <- density_ratios
-  if(which == "density_ratio_bayes") which <- density_ratios_bayes
+  if(which == "density_ratio") which <- "density_ratios"
+  if(which == "density_ratio_bayes") which <- "density_ratios_bayes"
 
   # Function to convert formula to ggplot2 syntax with color and appropriate faceting
   convert_formula_to_ggplot <- function(data, x_var, y_var, y_label) {
@@ -790,7 +564,12 @@ plot.compare_distributions_cont <- function(x, which = "ecdf", interactive = FAL
   }
   # Display the plot interactively or statically
   if (interactive) {
-    print(plotly::ggplotly(density_plot))
+    if (!requireNamespace("plotly", quietly = TRUE)) {
+      warning("Package 'plotly' is required for interactive plots. Falling back to static plot.")
+      print(density_plot)
+    } else {
+      print(plotly::ggplotly(density_plot))
+    }
   } else {
     print(density_plot)
   }

@@ -34,34 +34,17 @@ for each level.}
 Computes the density ratio between two vectors and provides entropy measures and more.
 }
 \examples{
-# example code
-
-data(eusilc13puf, package = "simPop")
-x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
-y <- x + runif(nrow(eusilc13puf), min = 0, max = 2)
+# Simple example
+set.seed(123)
+x <- rnorm(200, mean = 40, sd = 10)
+y <- rnorm(200, mean = 42, sd = 11)
 d <- densitydiff_1d_num(x, y)
 plot(d)
-strata_x <- factor(sample(c("one", "two","three"), length(x), replace = TRUE))
-strata_y <- factor(sample(c("one", "two","three"), length(y), replace = TRUE))
-d1 <- densitydiff_1d_num(x, y, bayesspace = TRUE)
-d1e <- densitydiff_1d_num(x, y, bayesspace = FALSE)
-summary(d1$density_ratio)
-summary(d1e$density_ratio)
+
+# With stratification
+strata_x <- factor(sample(c("A", "B"), length(x), replace = TRUE))
+strata_y <- factor(sample(c("A", "B"), length(y), replace = TRUE))
 d2 <- densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
-data("eusilc13puf")
-x <- as.numeric(as.character(eusilc13puf$age)) + 1.01
-y <- x + runif(nrow(eusilc13puf), min = 0, max = 2)
-strata_x <- factor(sample(c("one", "two","three"), length(x), replace = TRUE))
-strata_y <- factor(sample(c("one", "two","three"), length(y), replace = TRUE))
-d1 <- densitydiff_1d_num(x, y, bayesspace = TRUE)
-d1e <- densitydiff_1d_num(x, y, bayesspace = FALSE)
-summary(d1$density_ratio)
-summary(d1e$density_ratio)
-d2 <- densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
-plot(d2, which = 1:2)
-plot(d1)
-plot(d1, which = 1:2)
-plot(d1e, which = 1:2)
 }
 \author{
 Matthias Templ

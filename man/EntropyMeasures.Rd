@@ -15,11 +15,7 @@ RenyiEntropy(p, alpha = 2)
 \arguments{
 \item{p}{A vector of probability values (must sum to 1 for entropy-based methods).}
 
-\item{alpha}{The order of Rényi entropy (must be > 0 and ≠ 1).}
-
-\item{joint}{A joint probability matrix, where rows represent values of X and columns of Y.}
-
-\item{x}{A numeric vector (for cumulative entropy).}
+\item{alpha}{The order of Renyi entropy (must be > 0 and not equal to 1).}
 }
 \value{
 A numeric value representing the corresponding entropy or risk measure.

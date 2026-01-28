@@ -37,21 +37,20 @@ Computes the density ratio between the selected principal components
 and provides entropy measures and more.
 }
 \examples{
-# example code
-
-library(simPop)
-data("eusilc13puf")
-X <- eusilc13puf[, c("age", "pgrossIncome", "hgrossIncome", "hx050")]
-Y <- X
-X$age <- as.numeric(as.character(X$age))
-Y$age <- as.numeric(as.character(Y$age))
-X[is.na(X$pgrossIncome), "pgrossIncome"] <- 0
-Y[is.na(Y$pgrossIncome), "pgrossIncome"] <- 0
-
-Y$age <- sample(Y$age)
-Y$pgrossIncome <- Y$pgrossIncome * runif(nrow(Y), 0.8, 1.2)
-Y$hgrossIncome <- Y$hgrossIncome * runif(nrow(Y), 0.8, 1.2)
-Y$hx050 <- Y$hx050 * runif(nrow(Y), 0.8, 1.2)
+# Simple example with multivariate numeric data
+set.seed(123)
+X <- data.frame(
+  var1 = rnorm(100, 50, 10),
+  var2 = rnorm(100, 1000, 200),
+  var3 = rnorm(100, 30, 5),
+  var4 = rnorm(100, 500, 100)
+)
+Y <- data.frame(
+  var1 = rnorm(100, 52, 11),
+  var2 = rnorm(100, 980, 220),
+  var3 = rnorm(100, 31, 6),
+  var4 = rnorm(100, 510, 110)
+)
 d1 <- densitydiff_pca(X, Y, bayesspace = FALSE)
 d1
 }
