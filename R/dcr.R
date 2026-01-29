@@ -60,7 +60,7 @@
 #' }
 #'
 #' @section Important limitations (The DCR Delusion):
-#' Houssiau et al. (2025) demonstrate that DCR and related distance-based metrics
+#' Yao et al. (2025) demonstrate that DCR and related distance-based metrics
 #' can fail to detect privacy leakage. Key findings:
 #' \itemize{
 #'   \item \strong{False sense of security}: Datasets deemed "private" by DCR can
@@ -97,9 +97,9 @@
 #'   \code{\link{ims}} for exact match detection
 #'
 #' @references
-#' Houssiau, F., Jordon, J., Cohen, S. N., Daniel, O., Elliott, A., Geddes, J.,
-#' Sheridan, A., & Sheridan, C. (2025). The DCR Delusion: Why Distance Metrics
-#' Fail to Measure Synthetic Data Privacy. \emph{arXiv preprint arXiv:2505.01524}.
+#' Zexi Yao, Nataša Krčo, Georgi Ganev, & Yves-Alexandre de Montjoye (2025).
+#' The DCR Delusion: Measuring the Privacy Risk of Synthetic Data.
+#' \url{https://arxiv.org/abs/2505.01524}.
 #'
 #' MOSTLY AI (2024). Evaluate generator quality.
 #' \url{https://docs.mostly.ai/generators/evaluate-quality}
