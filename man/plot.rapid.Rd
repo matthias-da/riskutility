@@ -12,7 +12,11 @@
   xlim = "full",
   annotate = TRUE,
   facet_by = NULL,
-  bins = 30
+  bins = 30,
+  tau_range = seq(0, 1, by = 0.05),
+  epsilon_range = seq(0, 1, by = 0.05),
+  formula = NULL,
+  top_n = 15
 )
 }
 \arguments{
@@ -22,9 +26,18 @@
 
 \item{...}{additional arguments passed to plotting functions}
 
-\item{which}{which plot to show: 1 = risk distribution, 2 = prediction scatter (numeric only)}
+\item{which}{integer indicating which plot to show:
+\itemize{
+\item \code{1}: Risk score distribution histogram (default)
+\item \code{2}: Prediction scatter plot (numeric targets only)
+\item \code{3}: Threshold sensitivity curve (RAPID vs threshold range)
+\item \code{4}: QI variable importance lollipop chart (requires \code{store_model = TRUE})
+\item \code{5}: QI attribution main effects (sum-to-zero logistic regression)
+\item \code{6}: QI interaction effects (pairwise interactions, requires >= 2 key variables)
+}}
 
-\item{xlim}{character or numeric vector controlling x-axis limits for risk distribution:
+\item{xlim}{character or numeric vector controlling x-axis limits for risk distribution
+(plots 1 and 2 only):
 \itemize{
 \item \code{"full"} (default): show full data range
 \item \code{"zero_to_one"}: fixed range from 0 to 1
@@ -38,6 +51,19 @@
 Must be columns present in the records data frame. Uses ggplot2 for faceted plots.}
 
 \item{bins}{integer, number of histogram bins (default: 30)}
+
+\item{tau_range}{numeric vector of tau thresholds for the sensitivity curve
+(plot 3, categorical targets). Default \code{seq(0, 1, by = 0.05)}.}
+
+\item{epsilon_range}{numeric vector of epsilon thresholds for the sensitivity curve
+(plot 3, numeric targets). Default \code{seq(0, 1, by = 0.05)};
+automatically adjusted to \code{seq(0, 100, by = 5)} for percentage-based metrics.}
+
+\item{formula}{optional formula for QI attribution plot (plot 5), e.g.,
+\code{at_risk ~ age * gender}. If NULL, uses main effects of all key variables.}
+
+\item{top_n}{integer, maximum number of variables/terms to show in importance (plot 4),
+attribution (plot 5), and interaction (plot 6) plots. Default 15.}
 }
 \value{
 For faceted plots, returns a ggplot2 object (invisibly). For base plots,
@@ -45,42 +71,82 @@ returns NULL invisibly.
 }
 \description{
 Creates visualizations for RAPID disclosure risk assessment results.
+Six plot types are available via the \code{which} parameter.
 }
 \details{
-For categorical sensitive variables with RCS_marginal method, the plot shows the
-distribution of normalized gain values. The normalized gain measures how much better
-the model predicts compared to the marginal baseline:
-\itemize{
-\item Values > 0: model predicts better than baseline (potential disclosure risk)
-\item Values = 0: model predicts at baseline rate (no additional risk)
-\item Values < 0: model predicts worse than baseline (no risk)
-}
+\strong{Plot 1 -- Risk Distribution:}
+Histogram of risk scores colored by at-risk status. The red dashed line indicates
+the threshold. For categorical targets, higher scores indicate higher risk. For
+numeric targets, lower prediction errors indicate higher risk (accurate predictions
+imply disclosure).
 
-The red dashed line indicates the threshold; records to the right are "at risk".
+\strong{Plot 2 -- Prediction Scatter (numeric only):}
+Scatter plot of predicted vs actual values, colored by at-risk status.
+
+\strong{Plot 3 -- Threshold Sensitivity Curve:}
+Shows how RAPID (proportion at risk) changes across a range of threshold values.
+The current threshold is marked with a red point. Useful for understanding how
+sensitive the risk assessment is to threshold choice.
+
+\strong{Plot 4 -- QI Variable Importance:}
+Lollipop chart of relative variable importance from the attacker model.
+Requires the model to be stored via \code{rapid(..., store_model = TRUE)}.
+Supports random forest, CART, XGBoost, and linear/logistic models.
+
+\strong{Plot 5 -- QI Attribution (Main Effects):}
+Sum-to-zero contrast logistic regression on at-risk status. Shows which
+quasi-identifier values contribute most to disclosure risk. Numeric variables
+are discretized into quartile bins. All factor levels are shown including the
+implied reference level. Positive coefficients (firebrick) increase risk;
+negative coefficients (steelblue) decrease risk. Whiskers show 95\\% CI.
+
+\strong{Plot 6 -- QI Interaction Effects:}
+Same logistic regression framework as plot 5, but fits all pairwise interactions
+and displays only the interaction coefficients. Requires at least 2 key variables.
 }
 \examples{
 \donttest{
-set.seed(123)
-n <- 200
+set.seed(42)
+n <- 500
 original <- data.frame(
   age = sample(20:60, n, replace = TRUE),
   gender = factor(sample(c("M", "F"), n, replace = TRUE)),
-  health = factor(sample(c("Good", "Fair", "Poor"), n, replace = TRUE))
+  education = factor(sample(c("High", "Medium", "Low"), n, replace = TRUE))
 )
+original$health <- factor(ifelse(
+  original$age > 40 & original$gender == "M",
+  sample(c("Poor", "Fair", "Good"), n, replace = TRUE, prob = c(0.6, 0.3, 0.1)),
+  sample(c("Poor", "Fair", "Good"), n, replace = TRUE, prob = c(0.1, 0.3, 0.6))
+))
 synthetic <- original
-synthetic$health <- factor(sample(c("Good", "Fair", "Poor"), n, replace = TRUE))
+synthetic$health <- original$health
+idx <- sample(n, n * 0.3)
+synthetic$health[idx] <- factor(
+  sample(c("Good", "Fair", "Poor"), length(idx), replace = TRUE)
+)
 
 result <- rapid(original, synthetic,
-                key_vars = c("age", "gender"),
+                key_vars = c("age", "gender", "education"),
                 target_var = "health",
                 model_type = "rf",
-                return_all_records = TRUE)
+                cat_tau = 1,
+                return_all_records = TRUE,
+                store_model = TRUE)
 
-# Basic plot
+# Risk distribution histogram (default)
 plot(result)
 
-# Fixed x-axis from 0 to 1
-plot(result, xlim = "zero_to_one")
+# Threshold sensitivity curve
+plot(result, which = 3)
+
+# QI variable importance
+plot(result, which = 4)
+
+# QI attribution (main effects)
+plot(result, which = 5)
+
+# QI interaction effects
+plot(result, which = 6)
 
 # Facet by gender
 plot(result, facet_by = "gender")

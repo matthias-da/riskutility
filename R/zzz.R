@@ -22,7 +22,9 @@ utils::globalVariables(c(
   # density ratio variables
   "density_ratios", "density_ratios_bayes",
   # dcap/tcap data.table variables
-  "key_sig", "target", "n_total", "orig_idx", "n_correct", "unique_syn", "unique_orig"
+  "key_sig", "target", "n_total", "orig_idx", "n_correct", "unique_syn", "unique_orig",
+  # rapid plot variables
+  "at_risk"
 ))
 
 #' @importFrom grDevices rgb

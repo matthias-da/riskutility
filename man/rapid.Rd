@@ -15,16 +15,17 @@ rapid(X, ...)
   Y,
   key_vars,
   target_var,
-  model_type = c("rf", "lm", "cart", "gbm", "logit"),
+  model_type = c("lm", "rf", "cart", "gbm", "logit"),
   num_epsilon = 10,
   num_epsilon_type = c("percentage", "absolute"),
   num_error_metric = c("symmetric", "stabilised_relative", "absolute"),
   num_delta = 0.01,
-  cat_tau = 0.3,
-  cat_eval_method = c("RCS_marginal", "RCS_conditional", "NCE"),
+  cat_tau = 1,
+  cat_eval_method = c("RCS_conditional", "RCS_marginal", "NCE"),
   na_strategy = c("constant", "drop", "median"),
   na_constant_value = 0,
   return_all_records = TRUE,
+  store_model = FALSE,
   seed = NULL,
   verbose = FALSE,
   ...
@@ -41,8 +42,8 @@ rapid(X, ...)
 
 \item{target_var}{character, name of the sensitive target variable}
 
-\item{model_type}{character, model type for inference: "rf" (random forest, default),
-"lm" (linear model), "cart" (decision tree), "gbm" (gradient boosting), or
+\item{model_type}{character, model type for inference: "lm" (linear model, default),
+"rf" (random forest), "cart" (decision tree), "gbm" (gradient boosting), or
 "logit" (logistic regression, binary only)}
 
 \item{num_epsilon}{numeric threshold for continuous attributes. For percentage-based
@@ -58,13 +59,13 @@ specify in units of the sensitive attribute.}
 
 \item{cat_tau}{numeric threshold for categorical risk. Interpretation depends on method:
 \itemize{
-\item For RCS_conditional: ratio threshold (typically 1.25)
+\item For RCS_conditional: ratio threshold (default 1, typically 1--1.25)
 \item For RCS_marginal: normalized gain threshold (typically 0.3)
-\item For NCE: risk score threshold (typically 0.5-0.7)
+\item For NCE: risk score threshold (typically 0.5--0.7)
 }}
 
 \item{cat_eval_method}{character, method for categorical evaluation:
-"RCS_marginal" (default, recommended), "RCS_conditional", or "NCE"}
+"RCS_conditional" (default), "RCS_marginal", or "NCE"}
 
 \item{na_strategy}{character, strategy for NA values in sensitive attribute:
 "constant" (default), "drop", or "median"}
@@ -73,6 +74,9 @@ specify in units of the sensitive attribute.}
 
 \item{return_all_records}{logical, if TRUE (default) return all records with risk status;
 if FALSE return only at-risk records}
+
+\item{store_model}{logical, if TRUE store the fitted model object in the result
+(needed for \code{plot(result, which = 4)} variable importance plot). Default FALSE.}
 
 \item{seed}{integer, random seed for reproducibility (default: NULL)}
 
@@ -88,6 +92,8 @@ An object of class "rapid" containing:
 \item threshold: threshold used (cat_tau or num_epsilon)
 \item model_type: model type used
 \item model_metrics: model performance (accuracy for categorical, MAE/RMSE for numeric)
+\item model: the fitted model object (only if store_model=TRUE, otherwise NULL)
+\item formula: the model formula used
 \item records: data frame of at-risk records (or all records if return_all_records=TRUE)
 \item key_vars, target_var: input parameters
 \item call: the function call
@@ -112,10 +118,10 @@ quasi-identifiers and sensitive attributes.
 \strong{For categorical sensitive variables:}
 Three evaluation methods are available:
 \itemize{
-\item \code{RCS_marginal} (recommended): Measures if the attribute can be inferred
+\item \code{RCS_conditional} (default): Measures if an observation is an outlier
+within its class using class-conditional baseline.
+\item \code{RCS_marginal}: Measures if the attribute can be inferred
 better than the marginal baseline rate. Uses normalized gain.
-\item \code{RCS_conditional}: Measures if an observation is an outlier within its
-class using class-conditional baseline.
 \item \code{NCE}: Normalized Cross-Entropy, measures information leakage.
 }
 
@@ -133,8 +139,8 @@ and true values equally.
 
 \strong{Categorical sensitive variables:}
 \itemize{
-\item RCS_marginal: \code{cat_tau = 0.3} (recommended)
-\item RCS_conditional: \code{cat_tau = 1.25}
+\item RCS_conditional: \code{cat_tau = 1} (default)
+\item RCS_marginal: \code{cat_tau = 0.3}
 \item NCE: \code{cat_tau = 0.5-0.7}
 }
 \strong{Continuous sensitive variables:}
@@ -201,8 +207,8 @@ result_cat <- rapid(
   key_vars = c("age", "gender", "region"),
   target_var = "health",
   model_type = "rf",
-  cat_tau = 0.3,
-  cat_eval_method = "RCS_marginal"
+  cat_tau = 1,
+  cat_eval_method = "RCS_conditional"
 )
 print(result_cat)
 }
@@ -262,8 +268,8 @@ if (requireNamespace("synthpop", quietly = TRUE) &&
     key_vars = c("sex", "age", "edu", "marital", "income"),
     target_var = "smoke",
     model_type = "rf",
-    cat_tau = 0.3,              # 30\% normalized gain threshold
-    cat_eval_method = "RCS_marginal",
+    cat_tau = 1,                # ratio threshold for RCS_conditional
+    cat_eval_method = "RCS_conditional",
     verbose = TRUE
   )
 

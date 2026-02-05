@@ -9,8 +9,8 @@
 #' @param Y data frame of synthetic data (not needed if X is a synth_pair)
 #' @param key_vars character vector of quasi-identifier variable names
 #' @param target_var character, name of the sensitive target variable
-#' @param model_type character, model type for inference: "rf" (random forest, default),
-#'   "lm" (linear model), "cart" (decision tree), "gbm" (gradient boosting), or
+#' @param model_type character, model type for inference: "lm" (linear model, default),
+#'   "rf" (random forest), "cart" (decision tree), "gbm" (gradient boosting), or
 #'   "logit" (logistic regression, binary only)
 #' @param num_epsilon numeric threshold for continuous attributes. For percentage-based
 #'   metrics (default), specify as percentage (e.g., 5 for 5\%). For absolute error,
@@ -21,17 +21,19 @@
 #' @param num_delta numeric, smoothing constant for percentage-based metrics (default: 0.01)
 #' @param cat_tau numeric threshold for categorical risk. Interpretation depends on method:
 #'   \itemize{
-#'     \item For RCS_conditional: ratio threshold (typically 1.25)
+#'     \item For RCS_conditional: ratio threshold (default 1, typically 1--1.25)
 #'     \item For RCS_marginal: normalized gain threshold (typically 0.3)
-#'     \item For NCE: risk score threshold (typically 0.5-0.7)
+#'     \item For NCE: risk score threshold (typically 0.5--0.7)
 #'   }
 #' @param cat_eval_method character, method for categorical evaluation:
-#'   "RCS_marginal" (default, recommended), "RCS_conditional", or "NCE"
+#'   "RCS_conditional" (default), "RCS_marginal", or "NCE"
 #' @param na_strategy character, strategy for NA values in sensitive attribute:
 #'   "constant" (default), "drop", or "median"
 #' @param na_constant_value numeric, value for constant NA imputation (default: 0)
 #' @param return_all_records logical, if TRUE (default) return all records with risk status;
 #'   if FALSE return only at-risk records
+#' @param store_model logical, if TRUE store the fitted model object in the result
+#'   (needed for \code{plot(result, which = 4)} variable importance plot). Default FALSE.
 #' @param seed integer, random seed for reproducibility (default: NULL)
 #' @param verbose logical, print diagnostic messages (default: FALSE)
 #' @param ... additional arguments passed to model fitting functions
@@ -45,6 +47,8 @@
 #'   \item threshold: threshold used (cat_tau or num_epsilon)
 #'   \item model_type: model type used
 #'   \item model_metrics: model performance (accuracy for categorical, MAE/RMSE for numeric)
+#'   \item model: the fitted model object (only if store_model=TRUE, otherwise NULL)
+#'   \item formula: the model formula used
 #'   \item records: data frame of at-risk records (or all records if return_all_records=TRUE)
 #'   \item key_vars, target_var: input parameters
 #'   \item call: the function call
@@ -63,10 +67,10 @@
 #' \strong{For categorical sensitive variables:}
 #' Three evaluation methods are available:
 #' \itemize{
-#'   \item \code{RCS_marginal} (recommended): Measures if the attribute can be inferred
+#'   \item \code{RCS_conditional} (default): Measures if an observation is an outlier
+#'     within its class using class-conditional baseline.
+#'   \item \code{RCS_marginal}: Measures if the attribute can be inferred
 #'     better than the marginal baseline rate. Uses normalized gain.
-#'   \item \code{RCS_conditional}: Measures if an observation is an outlier within its
-#'     class using class-conditional baseline.
 #'   \item \code{NCE}: Normalized Cross-Entropy, measures information leakage.
 #' }
 #'
@@ -83,8 +87,8 @@
 #' @section Threshold Selection Guidelines:
 #' \strong{Categorical sensitive variables:}
 #' \itemize{
-#'   \item RCS_marginal: \code{cat_tau = 0.3} (recommended)
-#'   \item RCS_conditional: \code{cat_tau = 1.25}
+#'   \item RCS_conditional: \code{cat_tau = 1} (default)
+#'   \item RCS_marginal: \code{cat_tau = 0.3}
 #'   \item NCE: \code{cat_tau = 0.5-0.7}
 #' }
 #' \strong{Continuous sensitive variables:}
@@ -158,8 +162,8 @@
 #'   key_vars = c("age", "gender", "region"),
 #'   target_var = "health",
 #'   model_type = "rf",
-#'   cat_tau = 0.3,
-#'   cat_eval_method = "RCS_marginal"
+#'   cat_tau = 1,
+#'   cat_eval_method = "RCS_conditional"
 #' )
 #' print(result_cat)
 #' }
@@ -219,8 +223,8 @@
 #'     key_vars = c("sex", "age", "edu", "marital", "income"),
 #'     target_var = "smoke",
 #'     model_type = "rf",
-#'     cat_tau = 0.3,              # 30% normalized gain threshold
-#'     cat_eval_method = "RCS_marginal",
+#'     cat_tau = 1,                # ratio threshold for RCS_conditional
+#'     cat_eval_method = "RCS_conditional",
 #'     verbose = TRUE
 #'   )
 #'
@@ -268,20 +272,21 @@ rapid.synth_pair <- function(X, ...) {
 rapid.default <- function(X, Y,
                           key_vars,
                           target_var,
-                          model_type = c("rf", "lm", "cart", "gbm", "logit"),
+                          model_type = c("lm", "rf", "cart", "gbm", "logit"),
                           # Numeric-specific
                           num_epsilon = 10,
                           num_epsilon_type = c("percentage", "absolute"),
                           num_error_metric = c("symmetric", "stabilised_relative", "absolute"),
                           num_delta = 0.01,
                           # Categorical-specific
-                          cat_tau = 0.3,
-                          cat_eval_method = c("RCS_marginal", "RCS_conditional", "NCE"),
+                          cat_tau = 1,
+                          cat_eval_method = c("RCS_conditional", "RCS_marginal", "NCE"),
                           # NA handling
                           na_strategy = c("constant", "drop", "median"),
                           na_constant_value = 0,
                           # Output options
                           return_all_records = TRUE,
+                          store_model = FALSE,
                           seed = NULL,
                           verbose = FALSE,
                           ...) {
@@ -401,6 +406,8 @@ rapid.default <- function(X, Y,
     threshold = threshold_used,
     model_type = model_type,
     model_metrics = model_metrics,
+    model = if (store_model) fit else NULL,
+    formula = formula,
     records = eval_result$rows_risk_df,
     key_vars = key_vars,
     target_var = target_var,
@@ -409,7 +416,7 @@ rapid.default <- function(X, Y,
     call = call
   )
 
-  class(result) <- "rapid"
+  class(result) <- c("rapid", class(result))
   return(result)
 }
 
@@ -543,29 +550,36 @@ rapid.default <- function(X, Y,
     synthetic[[target_var]] <- factor(synthetic[[target_var]])
   }
 
+  user_args <- list(...)
+
   switch(model_type,
     lm = {
-      stats::lm(formula, data = synthetic, ...)
+      args <- c(list(formula = formula, data = synthetic), user_args)
+      do.call(stats::lm, args)
     },
 
     rf = {
       use_prob <- is.factor(synthetic[[target_var]])
-      ranger::ranger(
+      default_args <- list(
         formula = formula,
         data = synthetic,
         probability = use_prob,
-        ...
+        importance = "impurity"
       )
+      # User args override defaults (e.g., importance = "permutation")
+      args <- modifyList(default_args, user_args)
+      do.call(ranger::ranger, args)
     },
 
     cart = {
       method_type <- if (is.factor(synthetic[[target_var]])) "class" else "anova"
-      rpart::rpart(
+      default_args <- list(
         formula = formula,
         data = synthetic,
-        method = method_type,
-        ...
+        method = method_type
       )
+      args <- c(default_args, user_args)
+      do.call(rpart::rpart, args)
     },
 
     gbm = {
@@ -575,10 +589,13 @@ rapid.default <- function(X, Y,
       if (!is.factor(y_raw)) {
         # Regression
         dtrain <- xgboost::xgb.DMatrix(data = X, label = y_raw)
-        params <- list(
-          objective = "reg:squarederror",
-          eval_metric = "rmse",
-          verbosity = 0
+        params <- c(
+          list(
+            objective = "reg:squarederror",
+            eval_metric = "rmse",
+            verbosity = 0
+          ),
+          user_args
         )
         model <- xgboost::xgb.train(
           params = params,
@@ -594,17 +611,23 @@ rapid.default <- function(X, Y,
         dtrain <- xgboost::xgb.DMatrix(data = X, label = y_encoded)
 
         if (K == 2) {
-          params <- list(
-            objective = "binary:logistic",
-            eval_metric = "logloss",
-            verbosity = 0
+          params <- c(
+            list(
+              objective = "binary:logistic",
+              eval_metric = "logloss",
+              verbosity = 0
+            ),
+            user_args
           )
         } else {
-          params <- list(
-            objective = "multi:softprob",
-            num_class = K,
-            eval_metric = "mlogloss",
-            verbosity = 0
+          params <- c(
+            list(
+              objective = "multi:softprob",
+              num_class = K,
+              eval_metric = "mlogloss",
+              verbosity = 0
+            ),
+            user_args
           )
         }
         model <- xgboost::xgb.train(
@@ -984,15 +1007,539 @@ print.summary.rapid <- function(x, ...) {
   invisible(x)
 }
 
+# =============================================================================
+# Internal plot helpers
+# =============================================================================
+
+#' Extract Variable Importance from RAPID Model
+#'
+#' @param model Fitted model object from rapid()
+#' @param model_type Character string: "rf", "cart", "gbm", "lm", or "logit"
+#' @return Named numeric vector of variable importances, or NULL
+#' @noRd
+.extract_variable_importance <- function(model, model_type) {
+  switch(model_type,
+    rf = {
+      if (inherits(model, "ranger")) {
+        imp <- tryCatch(ranger::importance(model), error = function(e) NULL)
+        if (is.null(imp)) {
+          message("Variable importance not available. ",
+                  "Ensure the ranger model was fitted with importance enabled.")
+          return(NULL)
+        }
+        imp
+      } else {
+        NULL
+      }
+    },
+    cart = {
+      if (inherits(model, "rpart")) {
+        model$variable.importance
+      } else {
+        NULL
+      }
+    },
+    gbm = {
+      if (inherits(model, "xgb.Booster")) {
+        imp_matrix <- xgboost::xgb.importance(model = model)
+        imp <- imp_matrix$Gain
+        names(imp) <- imp_matrix$Feature
+        imp
+      } else {
+        NULL
+      }
+    },
+    lm = {
+      coefs <- stats::coef(model)[-1]
+      abs(coefs) / sum(abs(coefs))
+    },
+    logit = {
+      coefs <- stats::coef(model)[-1]
+      abs(coefs) / sum(abs(coefs))
+    },
+    NULL
+  )
+}
+
+#' Plot QI Variable Importance Barplot
+#'
+#' @param x A rapid object (must have model stored via store_model=TRUE)
+#' @param top_n Maximum number of variables to display
+#' @return Invisible NULL
+#' @noRd
+.plot_qi_importance <- function(x, top_n = 15) {
+  if (is.null(x$model)) {
+    stop("Model not stored. Re-run rapid() with store_model = TRUE to use this plot.",
+         call. = FALSE)
+  }
+
+  imp <- .extract_variable_importance(x$model, x$model_type)
+
+  if (is.null(imp) || length(imp) == 0) {
+    message("Variable importance not available for model type: ", x$model_type)
+    return(invisible(NULL))
+  }
+
+  # Sort and limit
+  imp <- sort(imp, decreasing = TRUE)
+  if (length(imp) > top_n) {
+    imp <- imp[1:top_n]
+  }
+
+  # Normalize to 0-1 scale
+  imp <- imp / max(imp)
+
+  # Reverse for bottom-to-top display (largest at top)
+  imp <- rev(imp)
+  n <- length(imp)
+  y_pos <- seq_len(n)
+
+  # Adjust margins for long labels
+  max_label_len <- max(nchar(names(imp)))
+  left_margin <- min(max(8, max_label_len * 0.6), 20)
+
+  old_par <- par(mar = c(5, left_margin, 4, 2))
+  on.exit(par(old_par))
+
+  # Lollipop chart: segments from 0 + points
+  plot(imp, y_pos, type = "n",
+       xlim = c(0, 1.05),
+       ylim = c(0.5, n + 0.5),
+       yaxt = "n",
+       xlab = "Relative Importance",
+       ylab = "",
+       main = paste0("QI Variable Importance (", x$model_type, ")"))
+  segments(0, y_pos, imp, y_pos, col = "gray60", lwd = 1.5)
+  points(imp, y_pos, pch = 19, col = "steelblue", cex = 1.3)
+  axis(2, at = y_pos, labels = names(imp), las = 1, cex.axis = 0.85)
+
+  invisible(NULL)
+}
+
+#' Discretize QI data for attribution GLM
+#'
+#' Converts numeric and high-cardinality factor variables to quantile bins
+#' to prevent quasi-complete separation in logistic regression.
+#' @param qi_data data frame of QI columns
+#' @param max_levels integer, factors with more levels are rebinned (default 10)
+#' @param n_bins integer, number of quantile bins for numeric variables (default 4)
+#' @return list with qi_data (discretized), level_map, contrast_list
+#' @noRd
+.prepare_attribution_data <- function(qi_data, at_risk = NULL, max_levels = 10,
+                                      n_bins = 4) {
+  # Adaptive binning: reduce bins when at-risk count is low to prevent separation
+  # Aim for >= 5 expected at-risk records per bin
+  if (!is.null(at_risk)) {
+    n_at_risk <- sum(at_risk)
+    n_minority <- min(n_at_risk, length(at_risk) - n_at_risk)
+    n_bins <- max(2L, min(n_bins, as.integer(floor(n_minority / 5))))
+  }
+
+  level_map <- list()
+  contrast_list <- list()
+
+  for (qi in names(qi_data)) {
+    col <- qi_data[[qi]]
+
+    if (is.numeric(col)) {
+      # Discretize numeric into quantile bins
+      breaks <- unique(stats::quantile(col, probs = seq(0, 1, length.out = n_bins + 1),
+                                       na.rm = TRUE))
+      if (length(breaks) <= 2) {
+        qi_data[[qi]] <- as.factor(col)
+      } else {
+        qi_data[[qi]] <- cut(col, breaks = breaks, include.lowest = TRUE,
+                             dig.lab = 3)
+      }
+    } else {
+      qi_data[[qi]] <- as.factor(qi_data[[qi]])
+    }
+
+    # Rebin factors with too many levels
+    if (is.factor(qi_data[[qi]]) && nlevels(qi_data[[qi]]) > max_levels) {
+      col_num <- as.numeric(qi_data[[qi]])
+      reb <- max(2L, min(n_bins, nlevels(qi_data[[qi]])))
+      breaks <- unique(stats::quantile(col_num,
+                                       probs = seq(0, 1, length.out = reb + 1),
+                                       na.rm = TRUE))
+      qi_data[[qi]] <- cut(col_num, breaks = breaks, include.lowest = TRUE,
+                           labels = paste0("G", seq_len(length(breaks) - 1)))
+    }
+
+    # Set up sum-to-zero contrasts and label mapping
+    lvls <- levels(qi_data[[qi]])
+    n_levels <- length(lvls)
+    if (n_levels > 1) {
+      contrast_list[[qi]] <- stats::contr.sum(n_levels)
+      for (i in seq_len(n_levels - 1)) {
+        coef_name <- paste0(qi, i)
+        level_map[[coef_name]] <- paste0(qi, ": ", lvls[i])
+      }
+      level_map[[paste0(qi, "_ref")]] <- paste0(qi, ": ", lvls[n_levels])
+    }
+  }
+
+  list(qi_data = qi_data, level_map = level_map, contrast_list = contrast_list)
+}
+
+#' Fit attribution GLM and extract coefficients with reference levels
+#' @noRd
+.fit_attribution_glm <- function(formula, qi_data, at_risk, contrast_list, level_map) {
+  model_data <- cbind(at_risk = as.numeric(at_risk), qi_data)
+
+  fit <- tryCatch({
+    suppressWarnings(
+      stats::glm(formula, data = model_data, family = stats::binomial(),
+                 contrasts = contrast_list)
+    )
+  }, error = function(e) {
+    warning("Could not fit attribution model: ", e$message, call. = FALSE)
+    return(NULL)
+  })
+
+  if (is.null(fit)) return(NULL)
+
+  coefs <- summary(fit)$coefficients
+  V <- stats::vcov(fit)
+  coef_df <- data.frame(
+    term = rownames(coefs),
+    estimate = coefs[, "Estimate"],
+    se = coefs[, "Std. Error"],
+    stringsAsFactors = FALSE
+  )
+
+  # Remove intercept
+  coef_df <- coef_df[coef_df$term != "(Intercept)", , drop = FALSE]
+  if (nrow(coef_df) == 0) return(NULL)
+
+  # Add implied reference-level coefficients (sum-to-zero: beta_ref = -sum(others))
+  for (qi in names(contrast_list)) {
+    lvls <- levels(qi_data[[qi]])
+    n_levels <- length(lvls)
+    if (n_levels < 2) next
+
+    est_terms <- paste0(qi, seq_len(n_levels - 1))
+    est_terms <- est_terms[est_terms %in% coef_df$term]
+    if (length(est_terms) == 0) next
+
+    ref_est <- -sum(coef_df$estimate[coef_df$term %in% est_terms])
+
+    V_sub <- V[est_terms, est_terms, drop = FALSE]
+    ref_var <- sum(V_sub)
+    ref_se <- if (ref_var > 0) sqrt(ref_var) else NA_real_
+
+    ref_label <- level_map[[paste0(qi, "_ref")]]
+    if (is.null(ref_label)) ref_label <- paste0(qi, ": ", lvls[n_levels])
+
+    coef_df <- rbind(coef_df, data.frame(
+      term = paste0(qi, "_ref"),
+      estimate = ref_est,
+      se = ref_se,
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  # Improve term labels
+  coef_df$label <- vapply(coef_df$term, function(t) {
+    if (t %in% names(level_map)) return(level_map[[t]])
+    t_clean <- t
+    for (qi in names(qi_data)) {
+      if (is.factor(qi_data[[qi]])) {
+        lvls <- levels(qi_data[[qi]])
+        for (i in seq_along(lvls)) {
+          t_clean <- gsub(paste0("\\b", qi, i, "\\b"), lvls[i], t_clean)
+        }
+      }
+    }
+    gsub(":", " x ", t_clean)
+  }, character(1))
+
+  coef_df
+}
+
+#' Draw forest-plot style dot chart from coefficient data frame
+#' @noRd
+.draw_forest_plot <- function(coef_df, main = "QI Attribution (Effect Coding)",
+                              xlab = "Log-odds contribution to at-risk") {
+  n <- nrow(coef_df)
+  y_pos <- seq_len(n)
+
+  colors <- ifelse(coef_df$estimate > 0, "firebrick", "steelblue")
+
+  valid_se <- is.finite(coef_df$se)
+  ci_lo <- coef_df$estimate - 1.96 * coef_df$se
+  ci_hi <- coef_df$estimate + 1.96 * coef_df$se
+
+  # Base x-axis range on point estimates; include CIs only if they are reasonable
+  # (SE < 10 is a practical threshold; larger indicates quasi-separation)
+  reasonable <- valid_se & coef_df$se < 10
+  pts_range <- range(coef_df$estimate, na.rm = TRUE)
+  if (any(reasonable)) {
+    x_range <- range(c(pts_range, ci_lo[reasonable], ci_hi[reasonable]))
+  } else {
+    x_range <- pts_range
+  }
+  x_pad <- max(diff(x_range) * 0.15, 0.05)
+  x_lim <- c(x_range[1] - x_pad, x_range[2] + x_pad)
+
+  max_label_len <- max(nchar(coef_df$label))
+  left_margin <- min(max(8, max_label_len * 0.5), 20)
+
+  old_par <- par(mar = c(5, left_margin, 4, 2))
+  on.exit(par(old_par))
+
+  plot(coef_df$estimate, y_pos, type = "n",
+       xlim = x_lim, ylim = c(0.5, n + 0.5),
+       yaxt = "n", xlab = xlab, ylab = "", main = main)
+  abline(v = 0, lty = 2, col = "gray40")
+
+  # Draw CIs: only for reasonable SEs, truncated to plot limits
+  if (any(reasonable)) {
+    ci_lo_draw <- pmax(ci_lo[reasonable], x_lim[1])
+    ci_hi_draw <- pmin(ci_hi[reasonable], x_lim[2])
+    ci_width <- abs(ci_hi_draw - ci_lo_draw)
+    draw <- ci_width > .Machine$double.eps * 100
+    if (any(draw)) {
+      suppressWarnings(
+        arrows(ci_lo_draw[draw], y_pos[reasonable][draw],
+               ci_hi_draw[draw], y_pos[reasonable][draw],
+               angle = 90, code = 3, length = 0.03, col = "gray50")
+      )
+    }
+  }
+
+  points(coef_df$estimate, y_pos, pch = 19, col = colors, cex = 1.2)
+  axis(2, at = y_pos, labels = coef_df$label, las = 1, cex.axis = 0.8)
+}
+
+#' Plot QI Attribution Analysis using Effect Coding
+#'
+#' @param x A rapid object
+#' @param formula Optional formula for the attribution model
+#' @param top_n Maximum number of terms to display
+#' @return Invisible NULL
+#' @noRd
+.plot_qi_attribution <- function(x, formula = NULL, top_n = 20) {
+  records <- x$records
+
+  if (is.null(records) || !("at_risk" %in% names(records))) {
+    stop("Records with at_risk column required. ",
+         "Run rapid() with return_all_records = TRUE.", call. = FALSE)
+  }
+
+  if (all(records$at_risk) || !any(records$at_risk)) {
+    message("Cannot fit attribution model: all records have the same at_risk status.")
+    return(invisible(NULL))
+  }
+
+  key_vars <- x$key_vars
+
+  # Discretize numeric / high-cardinality variables
+  prep <- .prepare_attribution_data(records[, key_vars, drop = FALSE],
+                                     at_risk = records$at_risk)
+
+  # Build formula: main effects only
+  if (is.null(formula)) {
+    formula <- stats::as.formula(paste("at_risk ~", paste(key_vars, collapse = " + ")))
+  }
+
+  coef_df <- .fit_attribution_glm(formula, prep$qi_data, records$at_risk,
+                                  prep$contrast_list, prep$level_map)
+  if (is.null(coef_df) || nrow(coef_df) == 0) {
+    message("No coefficients to display.")
+    return(invisible(NULL))
+  }
+
+  # Limit and sort
+  if (nrow(coef_df) > top_n) {
+    coef_df <- coef_df[order(abs(coef_df$estimate), decreasing = TRUE), ]
+    coef_df <- coef_df[1:top_n, ]
+  }
+  coef_df <- coef_df[order(coef_df$estimate), ]
+
+  .draw_forest_plot(coef_df, main = "QI Attribution (Effect Coding)")
+
+  invisible(NULL)
+}
+
+#' Plot QI Interaction Effects
+#'
+#' Fits a logistic regression with all pairwise interactions between QI variables
+#' and shows only the interaction coefficients.
+#' @param x A rapid object
+#' @param top_n Maximum number of interaction terms to display
+#' @return Invisible NULL
+#' @noRd
+.plot_qi_interactions <- function(x, top_n = 20) {
+  records <- x$records
+
+  if (is.null(records) || !("at_risk" %in% names(records))) {
+    stop("Records with at_risk column required. ",
+         "Run rapid() with return_all_records = TRUE.", call. = FALSE)
+  }
+
+  if (all(records$at_risk) || !any(records$at_risk)) {
+    message("Cannot fit interaction model: all records have the same at_risk status.")
+    return(invisible(NULL))
+  }
+
+  key_vars <- x$key_vars
+  if (length(key_vars) < 2) {
+    message("Interaction plot requires at least 2 key variables.")
+    return(invisible(NULL))
+  }
+
+  # Discretize
+  prep <- .prepare_attribution_data(records[, key_vars, drop = FALSE],
+                                     at_risk = records$at_risk)
+
+  # Formula with all pairwise interactions
+  pairs <- utils::combn(key_vars, 2, simplify = FALSE)
+  interaction_terms <- vapply(pairs, function(p) paste(p, collapse = ":"), character(1))
+  formula <- stats::as.formula(
+    paste("at_risk ~", paste(c(key_vars, interaction_terms), collapse = " + "))
+  )
+
+  coef_df <- .fit_attribution_glm(formula, prep$qi_data, records$at_risk,
+                                  prep$contrast_list, prep$level_map)
+  if (is.null(coef_df) || nrow(coef_df) == 0) {
+    message("No coefficients to display.")
+    return(invisible(NULL))
+  }
+
+  # Keep only interaction terms (those containing " x " in the label, or ":" in the term)
+  is_interaction <- grepl(":", coef_df$term)
+  coef_df <- coef_df[is_interaction, , drop = FALSE]
+
+  if (nrow(coef_df) == 0) {
+    message("No interaction coefficients to display.")
+    return(invisible(NULL))
+  }
+
+  if (nrow(coef_df) > top_n) {
+    coef_df <- coef_df[order(abs(coef_df$estimate), decreasing = TRUE), ]
+    coef_df <- coef_df[1:top_n, ]
+  }
+  coef_df <- coef_df[order(coef_df$estimate), ]
+
+  .draw_forest_plot(coef_df, main = "QI Interaction Effects (Effect Coding)")
+
+  invisible(NULL)
+}
+
+#' Plot Threshold Sensitivity Curve
+#'
+#' @param x A rapid object
+#' @param tau_range Range of tau values for categorical targets
+#' @param epsilon_range Range of epsilon values for numeric targets
+#' @return Invisible NULL
+#' @noRd
+.plot_threshold_sensitivity <- function(x, tau_range = seq(0, 1, by = 0.05),
+                                        epsilon_range = seq(0, 1, by = 0.05)) {
+  records <- x$records
+
+  if (nrow(records) == 0) {
+    message("No records available for threshold sensitivity plot.")
+    return(invisible(NULL))
+  }
+
+  if (x$is_categorical) {
+    # Determine score column
+    if ("normalized_gain" %in% names(records)) {
+      scores <- records$normalized_gain
+    } else if ("relative_score" %in% names(records)) {
+      scores <- records$relative_score
+    } else if ("risk_score" %in% names(records)) {
+      scores <- records$risk_score
+    } else {
+      scores <- records$true_prob
+    }
+
+    rapid_values <- vapply(tau_range, function(tau) {
+      sum(scores > tau) / length(scores)
+    }, numeric(1))
+
+    plot(tau_range, rapid_values,
+         type = "l", lwd = 2, col = "blue",
+         xlab = "Threshold (tau)",
+         ylab = "RAPID (Proportion at Risk)",
+         main = "Threshold Sensitivity Curve",
+         ylim = c(0, 1))
+
+    current_tau <- x$threshold
+    current_rapid <- x$rapid
+    points(current_tau, current_rapid, pch = 19, col = "red", cex = 1.5)
+    text(current_tau, current_rapid,
+         paste0("tau = ", current_tau, "\nRAPID = ", round(current_rapid, 3)),
+         pos = 4, col = "red")
+    grid()
+
+  } else {
+    # Numeric: determine error column and scale
+    if ("symmetric_error_pct" %in% names(records)) {
+      errors <- records$symmetric_error_pct
+      is_pct <- TRUE
+    } else if ("stabilised_relative_error_pct" %in% names(records)) {
+      errors <- records$stabilised_relative_error_pct
+      is_pct <- TRUE
+    } else {
+      errors <- records$absolute_error
+      is_pct <- FALSE
+    }
+
+    if (is_pct) {
+      # Default range for percentage: 0 to 100
+      if (identical(epsilon_range, seq(0, 1, by = 0.05))) {
+        epsilon_range <- seq(0, 100, by = 5)
+      }
+      xlab_text <- "Error Threshold (epsilon, %)"
+    } else {
+      xlab_text <- "Error Threshold (epsilon)"
+    }
+
+    rapid_values <- vapply(epsilon_range, function(eps) {
+      sum(errors < eps) / length(errors)
+    }, numeric(1))
+
+    plot(epsilon_range, rapid_values,
+         type = "l", lwd = 2, col = "blue",
+         xlab = xlab_text,
+         ylab = "RAPID (Proportion at Risk)",
+         main = "Threshold Sensitivity Curve",
+         ylim = c(0, 1))
+
+    current_eps <- x$threshold
+    current_rapid <- x$rapid
+    points(current_eps, current_rapid, pch = 19, col = "red", cex = 1.5)
+    text(current_eps, current_rapid,
+         paste0("epsilon = ", round(current_eps, 3),
+                "\nRAPID = ", round(current_rapid, 3)),
+         pos = 4, col = "red")
+    grid()
+  }
+
+  invisible(NULL)
+}
+
 #' Plot method for rapid objects
 #'
 #' Creates visualizations for RAPID disclosure risk assessment results.
+#' Six plot types are available via the \code{which} parameter.
 #'
 #' @param x an object of class "rapid"
 #' @param y not used
 #' @param ... additional arguments passed to plotting functions
-#' @param which which plot to show: 1 = risk distribution, 2 = prediction scatter (numeric only)
-#' @param xlim character or numeric vector controlling x-axis limits for risk distribution:
+#' @param which integer indicating which plot to show:
+#'   \itemize{
+#'     \item \code{1}: Risk score distribution histogram (default)
+#'     \item \code{2}: Prediction scatter plot (numeric targets only)
+#'     \item \code{3}: Threshold sensitivity curve (RAPID vs threshold range)
+#'     \item \code{4}: QI variable importance lollipop chart (requires \code{store_model = TRUE})
+#'     \item \code{5}: QI attribution main effects (sum-to-zero logistic regression)
+#'     \item \code{6}: QI interaction effects (pairwise interactions, requires >= 2 key variables)
+#'   }
+#' @param xlim character or numeric vector controlling x-axis limits for risk distribution
+#'   (plots 1 and 2 only):
 #'   \itemize{
 #'     \item \code{"full"} (default): show full data range
 #'     \item \code{"zero_to_one"}: fixed range from 0 to 1
@@ -1003,52 +1550,102 @@ print.summary.rapid <- function(x, ...) {
 #' @param facet_by character vector of variable names to facet by (creates subgroup panels).
 #'   Must be columns present in the records data frame. Uses ggplot2 for faceted plots.
 #' @param bins integer, number of histogram bins (default: 30)
+#' @param tau_range numeric vector of tau thresholds for the sensitivity curve
+#'   (plot 3, categorical targets). Default \code{seq(0, 1, by = 0.05)}.
+#' @param epsilon_range numeric vector of epsilon thresholds for the sensitivity curve
+#'   (plot 3, numeric targets). Default \code{seq(0, 1, by = 0.05)};
+#'   automatically adjusted to \code{seq(0, 100, by = 5)} for percentage-based metrics.
+#' @param formula optional formula for QI attribution plot (plot 5), e.g.,
+#'   \code{at_risk ~ age * gender}. If NULL, uses main effects of all key variables.
+#' @param top_n integer, maximum number of variables/terms to show in importance (plot 4),
+#'   attribution (plot 5), and interaction (plot 6) plots. Default 15.
 #'
 #' @details
-#' For categorical sensitive variables with RCS_marginal method, the plot shows the
-#' distribution of normalized gain values. The normalized gain measures how much better
-#' the model predicts compared to the marginal baseline:
-#' \itemize{
-#'   \item Values > 0: model predicts better than baseline (potential disclosure risk)
-#'   \item Values = 0: model predicts at baseline rate (no additional risk)
-#'   \item Values < 0: model predicts worse than baseline (no risk)
-#' }
+#' \strong{Plot 1 -- Risk Distribution:}
+#' Histogram of risk scores colored by at-risk status. The red dashed line indicates
+#' the threshold. For categorical targets, higher scores indicate higher risk. For
+#' numeric targets, lower prediction errors indicate higher risk (accurate predictions
+#' imply disclosure).
 #'
-#' The red dashed line indicates the threshold; records to the right are "at risk".
+#' \strong{Plot 2 -- Prediction Scatter (numeric only):}
+#' Scatter plot of predicted vs actual values, colored by at-risk status.
+#'
+#' \strong{Plot 3 -- Threshold Sensitivity Curve:}
+#' Shows how RAPID (proportion at risk) changes across a range of threshold values.
+#' The current threshold is marked with a red point. Useful for understanding how
+#' sensitive the risk assessment is to threshold choice.
+#'
+#' \strong{Plot 4 -- QI Variable Importance:}
+#' Lollipop chart of relative variable importance from the attacker model.
+#' Requires the model to be stored via \code{rapid(..., store_model = TRUE)}.
+#' Supports random forest, CART, XGBoost, and linear/logistic models.
+#'
+#' \strong{Plot 5 -- QI Attribution (Main Effects):}
+#' Sum-to-zero contrast logistic regression on at-risk status. Shows which
+#' quasi-identifier values contribute most to disclosure risk. Numeric variables
+#' are discretized into quartile bins. All factor levels are shown including the
+#' implied reference level. Positive coefficients (firebrick) increase risk;
+#' negative coefficients (steelblue) decrease risk. Whiskers show 95\% CI.
+#'
+#' \strong{Plot 6 -- QI Interaction Effects:}
+#' Same logistic regression framework as plot 5, but fits all pairwise interactions
+#' and displays only the interaction coefficients. Requires at least 2 key variables.
 #'
 #' @return For faceted plots, returns a ggplot2 object (invisibly). For base plots,
 #'   returns NULL invisibly.
 #'
 #' @examples
 #' \donttest{
-#' set.seed(123)
-#' n <- 200
+#' set.seed(42)
+#' n <- 500
 #' original <- data.frame(
 #'   age = sample(20:60, n, replace = TRUE),
 #'   gender = factor(sample(c("M", "F"), n, replace = TRUE)),
-#'   health = factor(sample(c("Good", "Fair", "Poor"), n, replace = TRUE))
+#'   education = factor(sample(c("High", "Medium", "Low"), n, replace = TRUE))
 #' )
+#' original$health <- factor(ifelse(
+#'   original$age > 40 & original$gender == "M",
+#'   sample(c("Poor", "Fair", "Good"), n, replace = TRUE, prob = c(0.6, 0.3, 0.1)),
+#'   sample(c("Poor", "Fair", "Good"), n, replace = TRUE, prob = c(0.1, 0.3, 0.6))
+#' ))
 #' synthetic <- original
-#' synthetic$health <- factor(sample(c("Good", "Fair", "Poor"), n, replace = TRUE))
+#' synthetic$health <- original$health
+#' idx <- sample(n, n * 0.3)
+#' synthetic$health[idx] <- factor(
+#'   sample(c("Good", "Fair", "Poor"), length(idx), replace = TRUE)
+#' )
 #'
 #' result <- rapid(original, synthetic,
-#'                 key_vars = c("age", "gender"),
+#'                 key_vars = c("age", "gender", "education"),
 #'                 target_var = "health",
 #'                 model_type = "rf",
-#'                 return_all_records = TRUE)
+#'                 cat_tau = 1,
+#'                 return_all_records = TRUE,
+#'                 store_model = TRUE)
 #'
-#' # Basic plot
+#' # Risk distribution histogram (default)
 #' plot(result)
 #'
-#' # Fixed x-axis from 0 to 1
-#' plot(result, xlim = "zero_to_one")
+#' # Threshold sensitivity curve
+#' plot(result, which = 3)
+#'
+#' # QI variable importance
+#' plot(result, which = 4)
+#'
+#' # QI attribution (main effects)
+#' plot(result, which = 5)
+#'
+#' # QI interaction effects
+#' plot(result, which = 6)
 #'
 #' # Facet by gender
 #' plot(result, facet_by = "gender")
 #' }
 #'
 #' @export
-#' @importFrom graphics hist abline par legend points text mtext
+#' @importFrom graphics hist abline par legend points text mtext arrows grid segments axis
+#' @importFrom stats glm binomial contr.sum as.formula coef vcov quantile
+#' @importFrom utils combn modifyList
 #' @importFrom ggplot2 ggplot aes geom_histogram geom_vline annotate facet_wrap
 #'   labs theme_minimal theme element_text scale_fill_manual after_stat
 plot.rapid <- function(x, y = NULL, ...,
@@ -1056,7 +1653,26 @@ plot.rapid <- function(x, y = NULL, ...,
                        xlim = "full",
                        annotate = TRUE,
                        facet_by = NULL,
-                       bins = 30) {
+                       bins = 30,
+                       tau_range = seq(0, 1, by = 0.05),
+                       epsilon_range = seq(0, 1, by = 0.05),
+                       formula = NULL,
+                       top_n = 15) {
+
+  # Dispatch to specialized plot helpers for which = 3, 4, 5, 6
+  if (3 %in% which) {
+    return(.plot_threshold_sensitivity(x, tau_range = tau_range,
+                                       epsilon_range = epsilon_range))
+  }
+  if (4 %in% which) {
+    return(.plot_qi_importance(x, top_n = top_n))
+  }
+  if (5 %in% which) {
+    return(.plot_qi_attribution(x, formula = formula, top_n = top_n))
+  }
+  if (6 %in% which) {
+    return(.plot_qi_interactions(x, top_n = top_n))
+  }
 
   show <- rep(FALSE, 2)
   show[which] <- TRUE
