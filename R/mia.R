@@ -55,13 +55,13 @@
 # -----------------------------------------------------------------------------
 # Random forest back-end (ranger)
 # -----------------------------------------------------------------------------
-#' @description Train a probability random forest and return P(class=1) on test.
-#' @param X_train data.frame of training features (factors + numerics ok).
-#' @param y_train factor with levels c("0","1").
-#' @param X_test  data.frame of test features (same columns as X_train).
-#' @param num_threads integer, number of threads for ranger.
-#' @param num_trees integer, number of trees in the forest.
-#' @return numeric vector of length nrow(X_test) with P(class = 1).
+#' Train a probability random forest and return P(class=1) on test.
+#' X_train data.frame of training features (factors + numerics ok).
+#' y_train factor with levels c("0","1").
+#' X_test  data.frame of test features (same columns as X_train).
+#' num_threads integer, number of threads for ranger.
+#' num_trees integer, number of trees in the forest.
+#' numeric vector of length nrow(X_test) with P(class = 1).
 .mia_backend_rf <- function(X_train, y_train, X_test,
                             num_threads = 1L, num_trees = 300L) {
   if (!requireNamespace("ranger", quietly = TRUE)) {
@@ -109,8 +109,10 @@
 #'
 #' @return Named list with MIA precision, recall, macro F1 (means and SEs).
 #'   - MIA recall is the primary privacy metric.
-#'   - Values near 0.5 indicate low risk (attack no better than guessing).
-#'   - Values >> 0.5 indicate the synthetic data leaks training membership.
+#'   - The evaluation test set is balanced (50/50).
+#'   - Values near 0.5 indicate performance close to random guessing (low risk).
+#'   - Values > 0.5 indicate the synthetic data leaks training membership.
+#'   - Values < 0.5 indicate performance worse than random guessing.
 mia_classifier <- function(real_data,
                            synt_data,
                            hout_data,
