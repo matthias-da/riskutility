@@ -53,3 +53,4 @@ po/*~
 rsconnect/
 /doc/
 /Meta/
+.DS_Store
