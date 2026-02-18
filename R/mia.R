@@ -95,6 +95,7 @@
 #' @param synt_data data.frame. Synthetic records produced by the generator.
 #' @param hout_data data.frame. Holdout records from the same population,
 #'   NOT used to train the generator.
+#' @param cols character vector of column names to use (optional). If NULL, all common
 #' @param cat_cols  character vector of categorical column names (optional).
 #'   If NULL, inferred as non-numeric columns.
 #' @param num_cols  character vector of numeric column names (optional).
@@ -116,6 +117,7 @@
 mia_classifier <- function(real_data,
                            synt_data,
                            hout_data,
+                           cols          = NULL,
                            cat_cols      = NULL,
                            num_cols      = NULL,
                            method        = "rf",
@@ -161,6 +163,15 @@ mia_classifier <- function(real_data,
   common_cols <- Reduce(intersect, list(names(real_data), names(synt_data), names(hout_data)))
   if (length(common_cols) == 0L) {
     stop("No common columns across real / synthetic / holdout data.", call. = FALSE)
+  }
+
+  # If cols is specified, restrict to those columns only
+  if (!is.null(cols)) {
+    miss <- setdiff(cols, common_cols)
+    if (length(miss)) {
+      stop("cols not found in common columns: ", paste(miss, collapse = ", "), call. = FALSE)
+    }
+    common_cols <- cols
   }
 
   real_data <- as.data.frame(real_data[, common_cols, drop = FALSE])

@@ -8,6 +8,7 @@ mia_classifier(
   real_data,
   synt_data,
   hout_data,
+  cols = NULL,
   cat_cols = NULL,
   num_cols = NULL,
   method = "rf",
@@ -24,6 +25,8 @@ mia_classifier(
 
 \item{hout_data}{data.frame. Holdout records from the same population,
 NOT used to train the generator.}
+
+\item{cols}{character vector of column names to use (optional). If NULL, all common}
 
 \item{cat_cols}{character vector of categorical column names (optional).
 If NULL, inferred as non-numeric columns.}
