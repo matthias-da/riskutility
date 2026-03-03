@@ -217,8 +217,11 @@ nndr.default <- function(X, Y,
 
   # Compute distances and NNDR
   if (method == "gower") {
-    dist_to_train <- VIM::gowerD(Y, train)
-    dist_to_holdout <- VIM::gowerD(Y, holdout)
+    # Single gowerD call for consistent range normalization
+    combined_real <- rbind(train, holdout)
+    dist_all <- VIM::gowerD(Y, combined_real)
+    dist_to_train <- dist_all[, seq_len(n_train), drop = FALSE]
+    dist_to_holdout <- dist_all[, n_train + seq_len(n_holdout), drop = FALSE]
 
     nndr_train <- compute_nndr(dist_to_train)
     nndr_holdout <- compute_nndr(dist_to_holdout)

@@ -18,9 +18,10 @@
 #' @param na.rm logical, remove records with NA values (default: TRUE)
 #' @param seed integer, random seed for holdout sampling (default: NULL)
 #' @param progress logical, show progress bar for long computations (default: FALSE)
-#' @param null_test logical, perform statistical test comparing DCR distributions
-#'   against null hypothesis (default: TRUE). Uses Wilcoxon signed-rank test.
-#' @param n_null integer, number of bootstrap samples for null distribution
+#' @param null_test logical, perform permutation test comparing observed DCR share
+#'   against a null distribution (default: TRUE). Permutes training/holdout
+#'   assignment to estimate expected share under no memorization.
+#' @param n_null integer, number of permutation samples for null distribution
 #'   estimation (default: 100). Only used when null_test = TRUE.
 #' @param ... additional arguments passed to methods (currently unused)
 #'
@@ -30,7 +31,7 @@
 #'   \item dcr_holdout: distances from synthetic to closest holdout record
 #'   \item dcr_ratio: ratio of mean distances (train/holdout), ideally ~1
 #'   \item dcr_share: proportion of synthetic closer to training than holdout
-#'   \item privacy_pass: logical, TRUE if dcr_share <= 0.5 (basic privacy check)
+#'   \item privacy_pass: logical, TRUE if dcr_share <= 0.55 and Wilcoxon p > 0.05
 #'   \item wilcox_test: Wilcoxon test result comparing train vs holdout distances
 #'   \item null_distribution: null distribution statistics (if null_test = TRUE)
 #'   \item n_synthetic, n_train, n_holdout: dataset sizes
@@ -97,12 +98,17 @@
 #'   \code{\link{ims}} for exact match detection
 #'
 #' @references
-#' Zexi Yao, Nataša Krčo, Georgi Ganev, & Yves-Alexandre de Montjoye (2025).
-#' The DCR Delusion: Measuring the Privacy Risk of Synthetic Data.
-#' \url{https://arxiv.org/abs/2505.01524}.
+#' Platzer, M. & Reutterer, T. (2021). Holdout-Based Empirical Assessment of
+#' Mixed-Type Synthetic Data. \emph{Frontiers in Big Data}, 4, 679939.
+#' \doi{10.3389/fdata.2021.679939}
 #'
-#' MOSTLY AI (2024). Evaluate generator quality.
-#' \url{https://docs.mostly.ai/generators/evaluate-quality}
+#' Park, N., et al. (2018). Data Synthesis based on Generative Adversarial
+#' Networks. \emph{Proceedings of the VLDB Endowment}, 11(10), 1071--1083.
+#' \doi{10.14778/3231751.3231757}
+#'
+#' Yao, Z., Krco, N., Ganev, G. & de Montjoye, Y.-A. (2025).
+#' The DCR Delusion: Measuring the Privacy Risk of Synthetic Data.
+#' \url{https://arxiv.org/abs/2505.01524}
 #'
 #' Zhao, Z., et al. (2021). CTAB-GAN: Effective Table Data Synthesizing.
 #' \emph{Asian Conference on Machine Learning}.
@@ -232,11 +238,24 @@ dcr.default <- function(X, Y,
   n_train <- nrow(train)
   n_holdout <- nrow(holdout)
 
+  # Min-max normalization helper (used by euclidean method and null test)
+  normalize <- function(x) {
+    rng <- range(x, na.rm = TRUE)
+    if (rng[2] - rng[1] == 0) return(rep(0, length(x)))
+    (x - rng[1]) / (rng[2] - rng[1])
+  }
+
   # Compute distances
   if (method == "gower") {
     # Gower distance (handles mixed types)
-    dist_to_train <- VIM::gowerD(Y, train)
-    dist_to_holdout <- VIM::gowerD(Y, holdout)
+    # Use single gowerD call with combined reference data so that
+    # range normalization is consistent for train and holdout distances
+    combined_real <- rbind(train, holdout)
+    dist_all <- VIM::gowerD(Y, combined_real)
+
+    # Split into train and holdout columns
+    dist_to_train <- dist_all[, seq_len(n_train), drop = FALSE]
+    dist_to_holdout <- dist_all[, n_train + seq_len(n_holdout), drop = FALSE]
 
     # Get minimum distance for each synthetic record
     dcr_train <- apply(dist_to_train, 1, min, na.rm = TRUE)
@@ -246,13 +265,6 @@ dcr.default <- function(X, Y,
     # Check all variables are numeric
     if (!all(sapply(Y, is.numeric))) {
       stop("method='euclidean' requires all variables to be numeric. Use method='gower' for mixed types.")
-    }
-
-    # Normalize for Euclidean distance
-    normalize <- function(x) {
-      rng <- range(x, na.rm = TRUE)
-      if (rng[2] - rng[1] == 0) return(rep(0, length(x)))
-      (x - rng[1]) / (rng[2] - rng[1])
     }
 
     # Combine all data for consistent normalization
@@ -302,7 +314,7 @@ dcr.default <- function(X, Y,
     list(statistic = NA, p.value = NA, method = "Wilcoxon signed-rank test (failed)")
   })
 
-  # Null distribution comparison (following Houssiau et al. 2025 recommendations)
+  # Null distribution comparison (following Yao et al. 2025 recommendations)
   null_distribution <- NULL
   null_share_pvalue <- NA
 
@@ -323,18 +335,29 @@ dcr.default <- function(X, Y,
       sample_idx <- sample(n_synthetic, sample_size)
 
       if (method == "gower") {
-        d_train <- VIM::gowerD(Y[sample_idx, , drop = FALSE], perm_train)
-        d_holdout <- VIM::gowerD(Y[sample_idx, , drop = FALSE], perm_holdout)
-        dcr_t <- apply(d_train, 1, min, na.rm = TRUE)
-        dcr_h <- apply(d_holdout, 1, min, na.rm = TRUE)
+        # Single gowerD call for consistent range normalization
+        Y_sub <- Y[sample_idx, , drop = FALSE]
+        perm_combined <- rbind(perm_train, perm_holdout)
+        d_all_perm <- VIM::gowerD(Y_sub, perm_combined)
+        d_train_perm <- d_all_perm[, seq_len(n_train), drop = FALSE]
+        d_holdout_perm <- d_all_perm[, n_train + seq_len(n_holdout), drop = FALSE]
+        dcr_t <- apply(d_train_perm, 1, min, na.rm = TRUE)
+        dcr_h <- apply(d_holdout_perm, 1, min, na.rm = TRUE)
       } else {
+        # Re-normalize using permuted data for consistent scaling
+        perm_all <- rbind(perm_train, perm_holdout, Y)
+        perm_all_norm <- as.data.frame(lapply(perm_all, normalize))
+        perm_train_norm <- perm_all_norm[seq_len(n_train), , drop = FALSE]
+        perm_holdout_norm <- perm_all_norm[n_train + seq_len(n_holdout), , drop = FALSE]
+        perm_Y_norm <- perm_all_norm[(n_train + n_holdout + 1):nrow(perm_all_norm), , drop = FALSE]
+
         dcr_t <- numeric(sample_size)
         dcr_h <- numeric(sample_size)
         for (j in seq_len(sample_size)) {
           idx <- sample_idx[j]
-          diffs_t <- sweep(as.matrix(train_norm), 2, as.numeric(Y_norm[idx, ]))
+          diffs_t <- sweep(as.matrix(perm_train_norm), 2, as.numeric(perm_Y_norm[idx, ]))
           dcr_t[j] <- min(sqrt(rowSums(diffs_t^2)))
-          diffs_h <- sweep(as.matrix(holdout_norm), 2, as.numeric(Y_norm[idx, ]))
+          diffs_h <- sweep(as.matrix(perm_holdout_norm), 2, as.numeric(perm_Y_norm[idx, ]))
           dcr_h[j] <- min(sqrt(rowSums(diffs_h^2)))
         }
       }
@@ -394,7 +417,7 @@ print.dcr <- function(x, ...) {
   cat("================================================\n")
 
   # Warning about DCR limitations
-  cat("NOTE: DCR has known limitations - see Houssiau et al. (2025)\n")
+  cat("NOTE: DCR has known limitations - see Yao et al. (2025)\n")
   cat("      'The DCR Delusion' (arXiv:2505.01524)\n\n")
 
   cat("Method:", x$method, "\n")

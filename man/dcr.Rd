@@ -51,10 +51,11 @@ or "euclidean" (numerical variables only)}
 
 \item{progress}{logical, show progress bar for long computations (default: FALSE)}
 
-\item{null_test}{logical, perform statistical test comparing DCR distributions
-against null hypothesis (default: TRUE). Uses Wilcoxon signed-rank test.}
+\item{null_test}{logical, perform permutation test comparing observed DCR share
+against a null distribution (default: TRUE). Permutes training/holdout
+assignment to estimate expected share under no memorization.}
 
-\item{n_null}{integer, number of bootstrap samples for null distribution
+\item{n_null}{integer, number of permutation samples for null distribution
 estimation (default: 100). Only used when null_test = TRUE.}
 }
 \value{
@@ -64,7 +65,7 @@ An object of class "dcr" containing:
 \item dcr_holdout: distances from synthetic to closest holdout record
 \item dcr_ratio: ratio of mean distances (train/holdout), ideally ~1
 \item dcr_share: proportion of synthetic closer to training than holdout
-\item privacy_pass: logical, TRUE if dcr_share <= 0.5 (basic privacy check)
+\item privacy_pass: logical, TRUE if dcr_share <= 0.55 and Wilcoxon p > 0.05
 \item wilcox_test: Wilcoxon test result comparing train vs holdout distances
 \item null_distribution: null distribution statistics (if null_test = TRUE)
 \item n_synthetic, n_train, n_holdout: dataset sizes
@@ -160,12 +161,17 @@ print(result)
 summary(result)
 }
 \references{
-Zexi Yao, Nataša Krčo, Georgi Ganev, & Yves-Alexandre de Montjoye (2025).
-The DCR Delusion: Measuring the Privacy Risk of Synthetic Data.
-\url{https://arxiv.org/abs/2505.01524}.
+Platzer, M. & Reutterer, T. (2021). Holdout-Based Empirical Assessment of
+Mixed-Type Synthetic Data. \emph{Frontiers in Big Data}, 4, 679939.
+\doi{10.3389/fdata.2021.679939}
 
-MOSTLY AI (2024). Evaluate generator quality.
-\url{https://docs.mostly.ai/generators/evaluate-quality}
+Park, N., et al. (2018). Data Synthesis based on Generative Adversarial
+Networks. \emph{Proceedings of the VLDB Endowment}, 11(10), 1071--1083.
+\doi{10.14778/3231751.3231757}
+
+Yao, Z., Krco, N., Ganev, G. & de Montjoye, Y.-A. (2025).
+The DCR Delusion: Measuring the Privacy Risk of Synthetic Data.
+\url{https://arxiv.org/abs/2505.01524}
 
 Zhao, Z., et al. (2021). CTAB-GAN: Effective Table Data Synthesizing.
 \emph{Asian Conference on Machine Learning}.
