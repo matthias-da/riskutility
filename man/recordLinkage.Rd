@@ -15,6 +15,7 @@ recordLinkage(X, ...)
   x_anon,
   key,
   method = c("deterministic", "probabilistic", "pram", "predictive"),
+  direction = c("forward", "reverse"),
   risk_weighting = c("uniform", "softmax", "kernel"),
   kappa = NULL,
   bandwidth = NULL,
@@ -51,6 +52,12 @@ recordLinkage(X, ...)
 \code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
 or \code{"predictive"} (propensity-score-based).}
 
+\item{direction}{character. Direction of the linkage attack:
+\code{"forward"} (default) loops over original records and searches in the
+anonymized data, answering "how safe is each original individual?";
+\code{"reverse"} loops over anonymized records and searches in the
+original data, answering "how disclosive is each released record?".}
+
 \item{risk_weighting}{character. How to weight candidates: \code{"uniform"}
 (default, 1/|set|), \code{"softmax"} (exponential distance-weighting),
 or \code{"kernel"} (kernel-weighted donor probabilities).}
@@ -66,7 +73,11 @@ distances.}
 \code{"gaussian"} (default), \code{"epanechnikov"}, or \code{"tricube"}.}
 
 \item{truth}{character. How to define the true match for scoring:
-one of \code{"row"} (default) or \code{"id"}.}
+one of \code{"row"} (default) or \code{"id"}.
+\code{"row"} requires equal row counts and assumes row \eqn{i}
+in \code{X} corresponds to row \eqn{i} in \code{x_anon}.
+When datasets have unequal sizes, use \code{truth = "id"} with
+a shared identifier column.}
 
 \item{id}{character or NULL. If \code{truth="id"}, name of an identifier column
 present in both \code{X} and \code{x_anon} that uniquely defines the true match.}
@@ -125,14 +136,19 @@ Ignored for \code{"rf"} or when \code{bandwidth} is user-supplied.}
 }
 \value{
 An object of class \code{"recordLinkageRisk"}: a list with components
-\code{per_record} (data.frame), \code{overall} (list), \code{settings} (list),
-and optionally \code{matches} (list).
+\code{per_record} (data.frame with \code{n_query} rows), \code{overall} (list),
+\code{direction} (character), \code{n_query} (integer), \code{settings} (list),
+and optionally \code{matches} (list of integer vectors with row indices into
+the search dataset: \code{x_anon} for forward, \code{X} for reverse).
+When \code{direction = "forward"}, \code{per_record} has one row per
+original record; when \code{"reverse"}, one row per anonymized record.
 }
 \description{
 Measures targeted re-identification risk by linking each original record to
 the most similar record(s) in a perturbed dataset using quasi-identifiers.
 Supports deterministic (distance-based), probabilistic (Fellegi-Sunter),
-and PRAM (transition-matrix) linkage methods.
+PRAM (transition-matrix), and predictive (propensity-score-based) linkage
+methods.
 }
 \section{Attacker scenario}{
 
@@ -258,6 +274,22 @@ bandwidth receive exactly zero weight and are effectively excluded.
 The bandwidth is auto-selected via Silverman's rule if not supplied.
 }
 
+\section{Direction}{
+
+By default (\code{direction = "forward"}) the function loops over original
+records and finds matches in the anonymized data. This quantifies how easily
+each individual in the population can be re-identified.
+
+With \code{direction = "reverse"} the loop runs over anonymized records,
+searching for matches in the original data. This gives a risk profile of
+the data to be released: each row in \code{per_record} corresponds to a
+released record and its probability of being correctly linked back to the
+original. Deterministic, probabilistic, and predictive methods are symmetric
+(distance/agreement does not depend on direction), so only the evaluation
+perspective changes. The PRAM method is asymmetric: the transition matrix
+\eqn{P(\text{output} \mid \text{input})} is looked up with swapped roles.
+}
+
 \examples{
 set.seed(1)
 n <- 100
@@ -279,6 +311,11 @@ for (r in levels(x$region)) {
 res1 <- recordLinkage(x, x_anon, key = c("age","sex","region"))
 print(res1)
 summary(res1)
+
+# Reverse direction: risk per released record
+res1r <- recordLinkage(x, x_anon, key = c("age","sex","region"),
+                       direction = "reverse")
+print(res1r)
 
 \donttest{
 # Softmax distance-weighted risk

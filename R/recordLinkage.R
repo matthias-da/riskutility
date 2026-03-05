@@ -3,7 +3,8 @@
 #' Measures targeted re-identification risk by linking each original record to
 #' the most similar record(s) in a perturbed dataset using quasi-identifiers.
 #' Supports deterministic (distance-based), probabilistic (Fellegi-Sunter),
-#' and PRAM (transition-matrix) linkage methods.
+#' PRAM (transition-matrix), and predictive (propensity-score-based) linkage
+#' methods.
 #'
 #' @section Attacker scenario:
 #' Targeted record linkage with membership knowledge and exact quasi-identifier knowledge:
@@ -115,12 +116,31 @@
 #' bandwidth receive exactly zero weight and are effectively excluded.
 #' The bandwidth is auto-selected via Silverman's rule if not supplied.
 #'
+#' @section Direction:
+#' By default (\code{direction = "forward"}) the function loops over original
+#' records and finds matches in the anonymized data. This quantifies how easily
+#' each individual in the population can be re-identified.
+#'
+#' With \code{direction = "reverse"} the loop runs over anonymized records,
+#' searching for matches in the original data. This gives a risk profile of
+#' the data to be released: each row in \code{per_record} corresponds to a
+#' released record and its probability of being correctly linked back to the
+#' original. Deterministic, probabilistic, and predictive methods are symmetric
+#' (distance/agreement does not depend on direction), so only the evaluation
+#' perspective changes. The PRAM method is asymmetric: the transition matrix
+#' \eqn{P(\text{output} \mid \text{input})} is looked up with swapped roles.
+#'
 #' @param X data.frame or \code{\link{synth_pair}} object. Original microdata.
 #' @param x_anon data.frame. Perturbed/anonymized microdata.
 #' @param key character. Names of quasi-identifier variables used for linkage.
 #' @param method character. Linkage method: \code{"deterministic"} (default),
 #'   \code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
 #'   or \code{"predictive"} (propensity-score-based).
+#' @param direction character. Direction of the linkage attack:
+#'   \code{"forward"} (default) loops over original records and searches in the
+#'   anonymized data, answering "how safe is each original individual?";
+#'   \code{"reverse"} loops over anonymized records and searches in the
+#'   original data, answering "how disclosive is each released record?".
 #' @param risk_weighting character. How to weight candidates: \code{"uniform"}
 #'   (default, 1/|set|), \code{"softmax"} (exponential distance-weighting),
 #'   or \code{"kernel"} (kernel-weighted donor probabilities).
@@ -133,6 +153,10 @@
 #'   \code{"gaussian"} (default), \code{"epanechnikov"}, or \code{"tricube"}.
 #' @param truth character. How to define the true match for scoring:
 #'   one of \code{"row"} (default) or \code{"id"}.
+#'   \code{"row"} requires equal row counts and assumes row \eqn{i}
+#'   in \code{X} corresponds to row \eqn{i} in \code{x_anon}.
+#'   When datasets have unequal sizes, use \code{truth = "id"} with
+#'   a shared identifier column.
 #' @param id character or NULL. If \code{truth="id"}, name of an identifier column
 #'   present in both \code{X} and \code{x_anon} that uniquely defines the true match.
 #' @param type named character vector or NULL. Optional per-key type override:
@@ -176,8 +200,12 @@
 #' @param ... additional arguments passed to methods.
 #'
 #' @return An object of class \code{"recordLinkageRisk"}: a list with components
-#'   \code{per_record} (data.frame), \code{overall} (list), \code{settings} (list),
-#'   and optionally \code{matches} (list).
+#'   \code{per_record} (data.frame with \code{n_query} rows), \code{overall} (list),
+#'   \code{direction} (character), \code{n_query} (integer), \code{settings} (list),
+#'   and optionally \code{matches} (list of integer vectors with row indices into
+#'   the search dataset: \code{x_anon} for forward, \code{X} for reverse).
+#'   When \code{direction = "forward"}, \code{per_record} has one row per
+#'   original record; when \code{"reverse"}, one row per anonymized record.
 #'
 #' @examples
 #' set.seed(1)
@@ -200,6 +228,11 @@
 #' res1 <- recordLinkage(x, x_anon, key = c("age","sex","region"))
 #' print(res1)
 #' summary(res1)
+#'
+#' # Reverse direction: risk per released record
+#' res1r <- recordLinkage(x, x_anon, key = c("age","sex","region"),
+#'                        direction = "reverse")
+#' print(res1r)
 #'
 #' \donttest{
 #' # Softmax distance-weighted risk
@@ -285,6 +318,7 @@ recordLinkage.default <- function(X,
                                   key,
                                   method = c("deterministic", "probabilistic",
                                              "pram", "predictive"),
+                                  direction = c("forward", "reverse"),
                                   risk_weighting = c("uniform", "softmax",
                                                      "kernel"),
                                   kappa = NULL,
@@ -312,6 +346,7 @@ recordLinkage.default <- function(X,
                                   ...) {
 
     method <- match.arg(method)
+    direction <- match.arg(direction)
     risk_weighting <- match.arg(risk_weighting)
     kernel <- match.arg(kernel)
     pred_model <- match.arg(pred_model)
@@ -338,26 +373,44 @@ recordLinkage.default <- function(X,
 
     n <- nrow(X)
 
-    # ground truth mapping (for evaluation only) ----
+    # ground truth mapping (forward, for FS estimation) ----
     if (truth == "row") {
         if (nrow(x_anon) != n)
             stop("If truth='row', x_anon must have same number of rows as X.")
-        true_idx <- seq_len(n)
+        fs_true_idx <- seq_len(n)
     } else {
         if (is.null(id) || !is.character(id) || length(id) != 1L)
             stop("If truth='id', provide a single 'id' column name.")
         if (!(id %in% names(X)) || !(id %in% names(x_anon)))
             stop("'id' must exist in both X and x_anon.")
-        pos <- match(X[[id]], x_anon[[id]])
-        if (anyNA(pos)) stop("Some ids in X do not exist in x_anon.")
-        true_idx <- pos
+        fs_true_idx <- match(X[[id]], x_anon[[id]])
+        if (anyNA(fs_true_idx)) stop("Some ids in X do not exist in x_anon.")
+    }
+
+    # direction-dependent query/search setup ----
+    if (direction == "forward") {
+        n_query <- n
+        query_data <- X
+        search_data <- x_anon
+        true_idx <- fs_true_idx
+    } else {
+        n_query <- nrow(x_anon)
+        query_data <- x_anon
+        search_data <- X
+        if (truth == "row") {
+            true_idx <- seq_len(n_query)
+        } else {
+            true_idx <- match(x_anon[[id]], X[[id]])
+            if (anyNA(true_idx))
+                stop("Some ids in x_anon do not exist in X.")
+        }
     }
 
     # infer / validate types ----
     if (is.null(type)) {
         type <- vapply(key, function(v) {
             xv <- X[[v]]
-            if (is.numeric(xv) || is.integer(xv)) "numeric"
+            if (is.numeric(xv)) "numeric"
             else "nominal"
         }, character(1))
         names(type) <- key
@@ -387,6 +440,8 @@ recordLinkage.default <- function(X,
     rng <- lapply(key, function(v) {
         if (type[[v]] %in% c("numeric", "ordinal")) {
             allv <- c(X[[v]], x_anon[[v]])
+            # ordinal factors: use integer codes for range
+            if (is.factor(allv)) allv <- as.integer(allv)
             r <- range(allv, na.rm = TRUE)
             if (!is.finite(r[1]) || !is.finite(r[2]) || r[1] == r[2])
                 r <- c(0, 1)
@@ -399,7 +454,7 @@ recordLinkage.default <- function(X,
     fs_params <- NULL
     if (method == "probabilistic") {
         if (is.null(m_probs) || is.null(u_probs)) {
-            fs_est <- .fs_em(X, x_anon, key, type, true_idx, rng)
+            fs_est <- .fs_estimate(X, x_anon, key, type, fs_true_idx, rng)
             if (is.null(m_probs)) m_probs <- fs_est$m
             if (is.null(u_probs)) u_probs <- fs_est$u
         }
@@ -415,31 +470,47 @@ recordLinkage.default <- function(X,
                                     pred_model = pred_model, ...)
     }
 
+    # precompute per-variable tolerance for probabilistic method ----
+    fs_tol <- NULL
+    if (method == "probabilistic") {
+        fs_tol <- vapply(key, function(v) {
+            if (type[[v]] %in% c("numeric", "ordinal")) {
+                r <- rng[[v]]
+                span <- r[2] - r[1]
+                if (span <= 0) span <- 1
+                tol_v <- stats::mad(X[[v]], na.rm = TRUE)
+                if (!is.finite(tol_v) || tol_v <= 0)
+                    tol_v <- 0.1 * span
+                tol_v
+            } else NA_real_
+        }, numeric(1))
+    }
+
     # blocking ----
     if (!is.null(block)) {
         if (!is.character(block) || length(block) < 1L)
             stop("'block' must be a character vector.")
         if (!all(block %in% key))
             stop("'block' must be a subset of 'key'.")
-        blk_anon <- .make_block_id(x_anon, block)
-        split_anon <- split(seq_len(nrow(x_anon)), blk_anon)
-        blk_x <- .make_block_id(X, block)
+        blk_search <- .make_block_id(search_data, block)
+        split_search <- split(seq_len(nrow(search_data)), blk_search)
+        blk_query <- .make_block_id(query_data, block)
     } else {
-        split_anon <- list(all = seq_len(nrow(x_anon)))
-        blk_x <- rep("all", n)
+        split_search <- list(all = seq_len(nrow(search_data)))
+        blk_query <- rep("all", n_query)
     }
 
     # storage ----
-    risk <- numeric(n)
-    cand_n <- integer(n)
-    true_in_set <- logical(n)
-    d_true <- rep(NA_real_, n)
-    d_min <- rep(NA_real_, n)
-    matches <- if (isTRUE(return_matches)) vector("list", n) else NULL
+    risk <- numeric(n_query)
+    cand_n <- integer(n_query)
+    true_in_set <- logical(n_query)
+    d_true <- rep(NA_real_, n_query)
+    d_min <- rep(NA_real_, n_query)
+    matches <- if (isTRUE(return_matches)) vector("list", n_query) else NULL
 
     # main loop ----
-    for (i in seq_len(n)) {
-        cand <- split_anon[[blk_x[i]]]
+    for (i in seq_len(n_query)) {
+        cand <- split_search[[blk_query[i]]]
         if (is.null(cand) || length(cand) == 0L) {
             risk[i] <- 0
             cand_n[i] <- 0L
@@ -450,15 +521,13 @@ recordLinkage.default <- function(X,
         if (method == "pram") {
             # PRAM: use transition probabilities directly
             pram_probs <- .pram_risk(
-                x_row = X[i, key, drop = FALSE],
-                anon_block = x_anon[cand, key, drop = FALSE],
-                key = key, pram_matrix = pram_matrix
+                x_row = query_data[i, key, drop = FALSE],
+                anon_block = search_data[cand, key, drop = FALSE],
+                key = key, pram_matrix = pram_matrix,
+                reverse = (direction == "reverse")
             )
 
-            d_min[i] <- NA_real_  # no distance for PRAM
             tpos <- true_idx[i]
-            j_in <- match(tpos, cand)
-            if (!is.na(j_in)) d_true[i] <- NA_real_
 
             # Candidate set: all records with nonzero probability
             nonzero <- which(pram_probs > 0)
@@ -489,8 +558,13 @@ recordLinkage.default <- function(X,
 
         if (method == "predictive") {
             # Distance in propensity-score space
-            p_i <- prop_fit$p_original[i]
-            p_cand <- prop_fit$p_synthetic[cand]
+            if (direction == "forward") {
+                p_i <- prop_fit$p_original[i]
+                p_cand <- prop_fit$p_synthetic[cand]
+            } else {
+                p_i <- prop_fit$p_synthetic[i]
+                p_cand <- prop_fit$p_original[cand]
+            }
             di <- abs(p_i - p_cand)
 
             d_min[i] <- min(di)
@@ -523,9 +597,14 @@ recordLinkage.default <- function(X,
                 # Determine bandwidth: Fisher SE if available
                 bw <- bandwidth
                 if (is.null(bw) && isTRUE(pred_se) &&
-                    pred_model == "logit" &&
-                    !is.null(prop_fit$se_original)) {
-                    bw <- prop_fit$se_original[i]
+                    pred_model == "logit") {
+                    if (direction == "forward" &&
+                        !is.null(prop_fit$se_original)) {
+                        bw <- prop_fit$se_original[i]
+                    } else if (direction == "reverse" &&
+                               !is.null(prop_fit$se_synthetic)) {
+                        bw <- prop_fit$se_synthetic[i]
+                    }
                 }
 
                 if (risk_weighting == "kernel") {
@@ -546,10 +625,11 @@ recordLinkage.default <- function(X,
         if (method == "probabilistic") {
             # Fellegi-Sunter: compute log-likelihood ratios
             lr <- .fs_log_lr(
-                x_row = X[i, key, drop = FALSE],
-                anon_block = x_anon[cand, key, drop = FALSE],
+                x_row = query_data[i, key, drop = FALSE],
+                anon_block = search_data[cand, key, drop = FALSE],
                 key = key, type = type, rng = rng,
-                m_probs = m_probs, u_probs = u_probs
+                m_probs = m_probs, u_probs = u_probs,
+                tol = fs_tol
             )
 
             d_min[i] <- NA_real_
@@ -599,8 +679,8 @@ recordLinkage.default <- function(X,
 
         # --- Deterministic method ---
         di <- .dist_to_candidates(
-            x_row = X[i, key, drop = FALSE],
-            anon_block = x_anon[cand, key, drop = FALSE],
+            x_row = query_data[i, key, drop = FALSE],
+            anon_block = search_data[cand, key, drop = FALSE],
             key = key, type = type, weights = weights, wsum = wsum,
             rng = rng, na_anon = na_anon
         )
@@ -680,6 +760,8 @@ recordLinkage.default <- function(X,
         privacy_pass = overall$mean_risk <= 0.1,
         n_original = nrow(X),
         n_synthetic = nrow(x_anon),
+        n_query = n_query,
+        direction = direction,
         key_vars = key,
         method = method,
         settings = list(
@@ -693,7 +775,7 @@ recordLinkage.default <- function(X,
             k = k,
             threshold = threshold,
             block = block,
-            method = method,
+            direction = direction,
             risk_weighting = risk_weighting,
             kappa = kappa,
             bandwidth = bandwidth,
@@ -752,43 +834,26 @@ recordLinkage.default <- function(X,
         xv <- x_row[[v]]
         av <- anon_block[[v]]
 
+        # NA default: "match" -> 0, "mismatch" -> 1, "ignore" -> 0
+        dv <- rep(if (na_anon == "mismatch") 1 else 0, m)
+        ok <- !is.na(av) & !is.na(xv)
+
         if (type[[v]] %in% c("numeric", "ordinal")) {
             r <- rng[[v]]
             span <- (r[2] - r[1])
             if (span <= 0) span <- 1
-
-            if (na_anon == "match") {
-                dv <- rep(0, m)
-                ok <- !is.na(av) & !is.na(xv)
-                dv[ok] <- abs(av[ok] - xv) / span
-            } else if (na_anon == "mismatch") {
-                dv <- rep(1, m)
-                ok <- !is.na(av) & !is.na(xv)
-                dv[ok] <- abs(av[ok] - xv) / span
-            } else { # ignore
-                dv <- rep(0, m)
-                ok <- !is.na(av) & !is.na(xv)
-                dv[ok] <- abs(av[ok] - xv) / span
-                miss <- is.na(av) | is.na(xv)
-                denom[miss] <- denom[miss] - w
-            }
-
+            # ordinal factors: use integer codes for arithmetic
+            xv_num <- if (is.factor(xv)) as.integer(xv) else xv
+            av_num <- if (is.factor(av)) as.integer(av) else av
+            dv[ok] <- abs(av_num[ok] - xv_num) / span
         } else { # nominal
-            if (na_anon == "match") {
-                dv <- rep(0, m)
-                ok <- !is.na(av) & !is.na(xv)
-                dv[ok] <- ifelse(av[ok] == xv, 0, 1)
-            } else if (na_anon == "mismatch") {
-                dv <- rep(1, m)
-                ok <- !is.na(av) & !is.na(xv)
-                dv[ok] <- ifelse(av[ok] == xv, 0, 1)
-            } else { # ignore
-                dv <- rep(0, m)
-                ok <- !is.na(av) & !is.na(xv)
-                dv[ok] <- ifelse(av[ok] == xv, 0, 1)
-                miss <- is.na(av) | is.na(xv)
-                denom[miss] <- denom[miss] - w
-            }
+            # character cast avoids "level sets of factors are different"
+            dv[ok] <- ifelse(as.character(av[ok]) == as.character(xv), 0, 1)
+        }
+
+        if (na_anon == "ignore") {
+            miss <- is.na(av) | is.na(xv)
+            denom[miss] <- denom[miss] - w
         }
 
         acc <- acc + w * dv
@@ -988,10 +1053,18 @@ recordLinkage.default <- function(X,
 }
 
 #' @keywords internal
-.fs_em <- function(X, x_anon, key, type, true_idx, rng,
+.fs_estimate <- function(X, x_anon, key, type, true_idx, rng,
                    n_sample = 500L) {
     n <- nrow(X)
     nv <- length(key)
+
+    # degenerate case: cannot estimate from a single record
+    if (n <= 1L) {
+        return(list(
+            m = setNames(rep(0.99, nv), key),
+            u = setNames(rep(0.01, nv), key)
+        ))
+    }
 
     # m-probabilities: agreement rates among true matched pairs
     m <- numeric(nv)
@@ -1071,7 +1144,7 @@ recordLinkage.default <- function(X,
 
 #' @keywords internal
 .fs_log_lr <- function(x_row, anon_block, key, type, rng,
-                       m_probs, u_probs) {
+                       m_probs, u_probs, tol = NULL) {
     m <- nrow(anon_block)
     lr <- numeric(m)
 
@@ -1083,12 +1156,16 @@ recordLinkage.default <- function(X,
         uv <- u_probs[v]
 
         if (type[[v]] %in% c("numeric", "ordinal")) {
-            r <- rng[[v]]
-            span <- r[2] - r[1]
-            if (span <= 0) span <- 1
-            tol_v <- stats::mad(c(xv, av), na.rm = TRUE)
-            if (!is.finite(tol_v) || tol_v <= 0)
-                tol_v <- 0.1 * span
+            if (!is.null(tol) && !is.na(tol[v])) {
+                tol_v <- tol[v]
+            } else {
+                r <- rng[[v]]
+                span <- r[2] - r[1]
+                if (span <= 0) span <- 1
+                tol_v <- stats::mad(c(xv, av), na.rm = TRUE)
+                if (!is.finite(tol_v) || tol_v <= 0)
+                    tol_v <- 0.1 * span
+            }
             gamma <- ifelse(!is.na(av) & !is.na(xv),
                             abs(av - xv) <= tol_v, FALSE)
         } else {
@@ -1105,7 +1182,8 @@ recordLinkage.default <- function(X,
 }
 
 #' @keywords internal
-.pram_risk <- function(x_row, anon_block, key, pram_matrix) {
+.pram_risk <- function(x_row, anon_block, key, pram_matrix,
+                       reverse = FALSE) {
     m <- nrow(anon_block)
     log_probs <- numeric(m)
 
@@ -1123,8 +1201,17 @@ recordLinkage.default <- function(X,
         }
 
         for (j in seq_len(m)) {
-            ri <- match(xv, row_names)
-            ci <- match(av[j], col_names)
+            if (reverse) {
+                # reverse: query=anon, search=original
+                # P(anon_value | original_value) = tm[original, anon]
+                ri <- match(av[j], row_names)
+                ci <- match(xv, col_names)
+            } else {
+                # forward: query=original, search=anon
+                # P(anon_value | original_value) = tm[original, anon]
+                ri <- match(xv, row_names)
+                ci <- match(av[j], col_names)
+            }
             if (is.na(ri) || is.na(ci)) {
                 log_probs[j] <- -Inf
             } else {
@@ -1153,29 +1240,36 @@ print.recordLinkageRisk <- function(x, ...) {
 
     s <- x$settings
     o <- x$overall
+    meth <- x$method
+
+    dir <- if (is.null(x$direction)) "forward" else x$direction
 
     cat("Record Linkage Risk\n")
     cat("===================\n\n")
 
-    cat("Method:      ", s$method, "\n", sep = "")
+    cat("Method:      ", meth, "\n", sep = "")
+    cat("Direction:   ", dir, "\n", sep = "")
     wt_label <- s$risk_weighting
     if (s$risk_weighting == "kernel")
         wt_label <- paste0(wt_label, " (", s$kernel, " kernel)")
     cat("Weighting:   ", wt_label, "\n", sep = "")
     cat("Keys:        ", paste(s$key, collapse = ", "), "\n", sep = "")
+    rec_label <- if (dir == "reverse") " (risk per synthetic record)" else ""
     cat("Records:     ", x$n_original, " original, ",
-        x$n_synthetic, " synthetic\n", sep = "")
+        x$n_synthetic, " synthetic", rec_label, "\n", sep = "")
     cat("Truth:       ", s$truth,
         if (!is.null(s$id)) paste0(" (id: ", s$id, ")") else "", "\n", sep = "")
 
-    if (s$method == "deterministic") {
+    if (meth %in% c("deterministic", "predictive")) {
         cat("Strategy:    ", s$strategy, "\n", sep = "")
         if (!is.null(s$block))
             cat("Blocking:    ", paste(s$block, collapse = ", "), "\n", sep = "")
         cat("NA handling: ", s$na_anon, "\n", sep = "")
+    } else if (!is.null(s$block)) {
+        cat("Blocking:    ", paste(s$block, collapse = ", "), "\n", sep = "")
     }
 
-    if (s$method == "predictive") {
+    if (meth == "predictive") {
         cat("Pred. model: ", s$pred_model, "\n", sep = "")
         cat("Fisher SE:   ", if (isTRUE(s$pred_se)) "yes" else "no", "\n", sep = "")
         if (!is.null(x$propensity_info)) {
@@ -1240,6 +1334,7 @@ summary.recordLinkageRisk <- function(object, ...) {
 
     summ <- list(
         method = object$method,
+        direction = if (is.null(object$direction)) "forward" else object$direction,
         risk_weighting = object$settings$risk_weighting,
         kernel = object$settings$kernel,
         bandwidth = object$settings$bandwidth,
@@ -1269,13 +1364,16 @@ summary.recordLinkageRisk <- function(object, ...) {
 #' @param ... ignored.
 #' @export
 print.summary.recordLinkageRisk <- function(x, ...) {
+    dir <- if (is.null(x$direction)) "forward" else x$direction
+
     cat("Summary: Record Linkage Risk\n")
     cat("============================\n\n")
 
     wt_label <- x$risk_weighting
     if (x$risk_weighting == "kernel")
         wt_label <- paste0(wt_label, " (", x$kernel, " kernel)")
-    cat("Method:", x$method, "| Weighting:", wt_label, "\n")
+    cat("Method:", x$method, "| Direction:", dir,
+        "| Weighting:", wt_label, "\n")
     cat("Key variables:", paste(x$key_vars, collapse = ", "), "\n")
     cat("Records:", x$n_original, "original,", x$n_synthetic, "synthetic\n\n")
 
@@ -1290,14 +1388,17 @@ print.summary.recordLinkageRisk <- function(x, ...) {
     bn <- c("Unique match (=1)", "Very high (>0.5)",
             "High (0.2-0.5)", "Moderate (0.1-0.2)",
             "Low (0.05-0.1)", "Very low (<0.05)")
+    n_denom <- if (dir == "reverse") x$n_synthetic else x$n_original
     for (i in seq_along(x$risk_bands)) {
-        pct <- 100 * x$risk_bands[i] / x$n_original
+        pct <- 100 * x$risk_bands[i] / n_denom
         cat(sprintf("  %-22s %5d (%5.1f%%)\n",
                     bn[i], x$risk_bands[i], pct))
     }
 
     if (!is.null(x$d_true_stats)) {
-        cat("\nDistance to True Match:\n")
+        d_label <- if (x$method == "probabilistic") "Log-LR for True Match:"
+                   else "Distance to True Match:"
+        cat("\n", d_label, "\n", sep = "")
         cat(sprintf("  Mean:    %7.4f\n", x$d_true_stats["mean"]))
         cat(sprintf("  Median:  %7.4f\n", x$d_true_stats["median"]))
         cat(sprintf("  SD:      %7.4f\n", x$d_true_stats["sd"]))
@@ -1339,11 +1440,14 @@ print.summary.recordLinkageRisk <- function(x, ...) {
 #'   2 = Distance vs risk scatterplot,
 #'   3 = Per-variable discriminative power (probabilistic method only),
 #'   4 = Propensity score distributions (predictive method only)
-#' @importFrom graphics hist abline legend par plot points text barplot lines
+#' @importFrom graphics hist abline legend par plot plot.new points text barplot lines
 #' @export
 plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1) {
     show <- rep(FALSE, 4)
     show[which] <- TRUE
+
+    dir <- if (is.null(x$direction)) "forward" else x$direction
+    dir_suffix <- if (dir == "reverse") " (reverse)" else ""
 
     n_plots <- sum(show)
     if (n_plots > 1) {
@@ -1357,7 +1461,7 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1) {
         # Risk distribution histogram
         risk <- x$per_record$risk
         hist(risk,
-             main = "Record Linkage Risk Distribution",
+             main = paste0("Record Linkage Risk Distribution", dir_suffix),
              xlab = "Re-identification Risk",
              ylab = "Number of Records",
              col = "steelblue", border = "white", ...)
@@ -1377,7 +1481,7 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1) {
         valid <- !is.na(d)
         if (sum(valid) > 0) {
             plot(d[valid], risk[valid],
-                 main = "Distance to True Match vs Risk",
+                 main = paste0("Distance to True Match vs Risk", dir_suffix),
                  xlab = "Distance to True Match",
                  ylab = "Re-identification Risk",
                  pch = 16, col = adjustcolor("steelblue", 0.5),
@@ -1406,7 +1510,7 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1) {
             colnames(mat) <- vars
 
             barplot(mat, beside = TRUE,
-                    main = "Per-Variable Log-Likelihood Ratios",
+                    main = paste0("Per-Variable Log-Likelihood Ratios", dir_suffix),
                     ylab = "log(LR)",
                     col = c("steelblue", "coral"),
                     las = 2, ...)
@@ -1430,7 +1534,7 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1) {
             d_orig <- stats::density(p_orig, from = 0, to = 1)
             d_synth <- stats::density(p_synth, from = 0, to = 1)
             ylim <- range(c(d_orig$y, d_synth$y))
-            plot(d_orig, main = "Propensity Score Distributions",
+            plot(d_orig, main = paste0("Propensity Score Distributions", dir_suffix),
                  xlab = "Propensity Score P(original | QIs)",
                  ylab = "Density", col = "steelblue", lwd = 2,
                  ylim = ylim)
