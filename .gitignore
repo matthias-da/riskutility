@@ -55,5 +55,4 @@ rsconnect/
 /doc/
 /Meta/
 .DS_Store
-R/recordLinkage.R
 .worktrees/
