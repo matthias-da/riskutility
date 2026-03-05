@@ -12,8 +12,11 @@
 #' For a ratio above 1, the synthetic data have even better prediction
 #' quality than the original data.
 #'
+#' @param ... additional arguments passed to methods
 #' @return A list with the model quality statistics ratio and the model
 #' quality statistics table.
+#' @seealso \code{\link{propscore}}, \code{\link{compare_model_performance}}
+#'
 #' @author Matthias Templ
 #' @param X data frame
 #' @param Y data frame
@@ -35,6 +38,7 @@
 #' @importFrom stats glm
 #' @importFrom stats binomial
 #' @importFrom stats predict
+#' @family utility
 #' @export
 #' @examples
 #' \dontrun{
@@ -78,9 +82,21 @@
 #'           methods = c("glm", "rpart"))
 #' m2
 #' }
-mqs <- function(X, Y, form,
+mqs <- function(X, ...) {
+  UseMethod("mqs")
+}
+
+#' @rdname mqs
+#' @export
+mqs.synth_pair <- function(X, ...) {
+  mqs.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname mqs
+#' @export
+mqs.default <- function(X, Y, form,
                 methods = c("glm", "knn", "simpls", "rpart", "ranger"),
-                na = "remove", ntop = length(methods)){
+                na = "remove", ntop = length(methods), ...){
   # suggestion of models:
   # categorical: glm, xgbTree, rpart, ranger, knn, naive_bayes, simpls, Linda
   # continuous response: glm, rpart, xgbTree, ranger, lars, knn, simpls

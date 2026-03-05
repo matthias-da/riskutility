@@ -61,7 +61,8 @@
 #' See \code{\link{dcr}} for detailed guidance.
 #'
 #' @seealso \code{\link{dcr}} for distance to closest record,
-#'   \code{\link{ims}} for exact match detection
+#'   \code{\link{ims}} for exact match detection,
+#'   \code{\link{nnaa}} for nearest-neighbor adversarial accuracy
 #'
 #' @references
 #' MOSTLY AI (2024). Evaluate generator quality.
@@ -71,6 +72,7 @@
 #' \emph{International Journal of Computer Vision}, 60(2), 91-110.
 #'
 #' @author Matthias Templ
+#' @family distance-risk
 #' @export
 #' @importFrom VIM gowerD
 #' @importFrom stats complete.cases quantile sd
@@ -156,6 +158,13 @@ nndr.default <- function(X, Y,
   }
   if (length(missing_Y) > 0) {
     stop(paste("Variables missing in Y:", paste(missing_Y, collapse = ", ")))
+  }
+
+  # Check variable types match
+  for (var in vars) {
+    if (!identical(class(X[[var]]), class(Y[[var]]))) {
+      stop(paste("Variable", var, "has different class in X and Y."))
+    }
   }
 
   # Subset to selected variables

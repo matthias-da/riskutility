@@ -38,11 +38,13 @@
 #' privacy_score(sensitivity, visibility, normalize = TRUE)
 #'
 #' # Example 3: Privacy evaluation example
-#' # Assume visibility corresponds to number of users who can see each attribute (e.g., in a social network)
+#' # Assume visibility corresponds to number of users
+#' # who can see each attribute (e.g., social network)
 #' psych_profile <- c(stress_score = 0.9, diagnosis = 1.0)
 #' visibility <- c(stress_score = 5, diagnosis = 2)
 #' privacy_score(psych_profile, visibility)
 #'
+#' @family information-theory
 #' @export
 privacy_score <- function(sensitivity, visibility, normalize = FALSE) {
   if (!all(names(sensitivity) %in% names(visibility))) {

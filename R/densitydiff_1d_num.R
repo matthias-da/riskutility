@@ -181,7 +181,34 @@ densitydiff_1d_num <- function(x,
 }
 NULL
 
-#' Plot method for denpca objects
+
+#' Print method for denratio objects
+#'
+#' @param x an object of class "denratio"
+#' @param ... additional arguments (ignored)
+#' @export
+print.denratio <- function(x, ...) {
+  cat("Density Ratio Comparison (1D numeric)\n")
+  cat("=====================================\n\n")
+  if (is.list(x) && !is.null(x$kl)) {
+    cat("  KL divergence:     ", sprintf("%.4f", x$kl), "\n")
+    cat("  JS divergence:     ", sprintf("%.4f", x$jsd), "\n")
+    cat("  Mean density ratio:", sprintf("%.4f", x$mean_ratio), "\n")
+    cat("  SD density ratio:  ", sprintf("%.4f", x$sd_ratio), "\n")
+    cat("  Bayes space:       ", x$bayesspace, "\n")
+  } else {
+    cat("  Stratified result with", length(x), "strata\n")
+    for (i in seq_along(x)) {
+      cat(sprintf("  Stratum %d: KL = %.4f, JSD = %.4f\n",
+                  i, x[[i]]$kl, x[[i]]$jsd))
+    }
+  }
+  cat("\n")
+  invisible(x)
+}
+
+
+#' Plot method for denratio objects
 #'
 #' This function plots objects of class \code{denpca}.
 #'

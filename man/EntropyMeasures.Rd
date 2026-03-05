@@ -11,11 +11,26 @@
 \title{Additional Entropy-Based Privacy Measures}
 \usage{
 RenyiEntropy(p, alpha = 2)
+
+MaxEntropy(p)
+
+MinEntropy(p)
+
+NormalizedEntropy(p)
+
+ConditionalEntropy(joint)
+
+CumulativeEntropy(x)
 }
 \arguments{
 \item{p}{A vector of probability values (must sum to 1 for entropy-based methods).}
 
 \item{alpha}{The order of Renyi entropy (must be > 0 and not equal to 1).}
+
+\item{joint}{A joint probability matrix (rows = X, columns = Y) for
+\code{ConditionalEntropy}.}
+
+\item{x}{A numeric vector for \code{CumulativeEntropy}.}
 }
 \value{
 A numeric value representing the corresponding entropy or risk measure.
@@ -34,6 +49,29 @@ All functions assume that the input vectors \code{p} or matrices are valid proba
 \item{\code{CumulativeEntropy(x)}}{Estimates cumulative entropy based on the empirical cumulative distribution function of a numeric vector \code{x}.}
 }
 }
+\examples{
+# Renyi entropy of order 2
+p <- c(0.4, 0.3, 0.2, 0.1)
+RenyiEntropy(p, alpha = 2)
+
+# Maximum (Hartley) entropy
+MaxEntropy(p)
+
+# Min-entropy
+MinEntropy(p)
+
+# Normalized Shannon entropy (0 to 1)
+NormalizedEntropy(p)
+
+# Conditional entropy H(Y|X) from a joint probability matrix
+joint <- matrix(c(0.1, 0.2, 0.3, 0.4), nrow = 2)
+ConditionalEntropy(joint)
+
+# Cumulative entropy of a numeric vector
+x <- c(1.2, 3.4, 2.1, 5.0, 4.3)
+CumulativeEntropy(x)
+
+}
 \references{
 Rényi, A. (1961). On measures of entropy and information. In Proceedings of the 4th Berkeley Symposium on Mathematical Statistics and Probability (Vol. 1, pp. 547–561).
 
@@ -43,6 +81,17 @@ Bender, S., Haas, A., & Klose, C. (2001). The IAB Employment Sample. Journal of 
 
 Ichim, D. (2009). Local neighbourhood-based record linkage and its application to the Canadian census. In Privacy in Statistical Databases (pp. 207–221). Springer.
 }
+\seealso{
+Other information-theory: 
+\code{\link{Entropy}},
+\code{\link{information_surprisal}()},
+\code{\link{max_info_leakage}()},
+\code{\link{mutualInformation}()},
+\code{\link{positive_information_disclosure}()},
+\code{\link{privacy_score}()},
+\code{\link{systemAnonymityLevel}()}
+}
+\concept{information-theory}
 \keyword{entropy}
 \keyword{privacy}
 \keyword{risk}

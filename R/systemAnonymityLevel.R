@@ -42,6 +42,7 @@
 #' A2 <- matrix(1, nrow = 3, ncol = 3) # Fully connected
 #' systemAnonymityLevel(A2) # Should return 1 (maximum uncertainty)
 #'
+#' @family information-theory
 #' @export
 systemAnonymityLevel <- function(A) {
   if (!is.matrix(A) || !is.numeric(A)) stop("A must be a numeric matrix.")

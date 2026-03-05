@@ -121,7 +121,19 @@ WIREs Computational Statistics, 8(1), 27-38.
 \code{\link{hellinger}} for categorical distributions,
 \code{\link{compare_wasserstein}} for univariate Wasserstein distance,
 \code{\link{gower}} for mixed-type data
+
+Other utility: 
+\code{\link{chisq_utility}()},
+\code{\link{ci_proximity}()},
+\code{\link{gower}()},
+\code{\link{hellinger}()},
+\code{\link{mqs}()},
+\code{\link{pMSE}()},
+\code{\link{propscore}()},
+\code{\link{rumap}()},
+\code{\link{specks}()}
 }
 \author{
 Matthias Templ
 }
+\concept{utility}

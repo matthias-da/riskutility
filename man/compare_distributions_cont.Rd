@@ -2,9 +2,15 @@
 % Please edit documentation in R/compare_distributions_cont.R
 \name{compare_distributions_cont}
 \alias{compare_distributions_cont}
+\alias{compare_distributions_cont.synth_pair}
+\alias{compare_distributions_cont.default}
 \title{Compare continuous distributions conditionally}
 \usage{
-compare_distributions_cont(
+compare_distributions_cont(X, ...)
+
+\method{compare_distributions_cont}{synth_pair}(X, ...)
+
+\method{compare_distributions_cont}{default}(
   X,
   Y,
   variables = NULL,
@@ -13,11 +19,14 @@ compare_distributions_cont(
   weights = NULL,
   approx = c(FALSE, TRUE),
   n_approx = 10000,
-  bounds = TRUE
+  bounds = TRUE,
+  ...
 )
 }
 \arguments{
 \item{X}{A data frame or data table.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{A data frame or data table to compare with \code{X}.}
 
@@ -146,3 +155,23 @@ plot(result)
 plot(result, which = "density")
 plot(result, which = "density_bayes")
 }
+\seealso{
+Other comparison: 
+\code{\link{ci_overlap}()},
+\code{\link{compare_boxplots}()},
+\code{\link{compare_chisq_gof}()},
+\code{\link{compare_correlation_matrices}()},
+\code{\link{compare_embedding}()},
+\code{\link{compare_feature_importance}()},
+\code{\link{compare_histograms}()},
+\code{\link{compare_ks_test}()},
+\code{\link{compare_means_frequencies}()},
+\code{\link{compare_missing_values}()},
+\code{\link{compare_model_performance}()},
+\code{\link{compare_multivariate_distribution}()},
+\code{\link{compare_multivariate_summary_statistics}()},
+\code{\link{compare_outliers}()},
+\code{\link{compare_pca}()},
+\code{\link{compare_wasserstein}()}
+}
+\concept{comparison}

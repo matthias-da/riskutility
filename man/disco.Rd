@@ -153,7 +153,13 @@ improving the utility of synthetic data. \emph{arXiv preprint arXiv:2109.12717}.
 \code{\link{tcap}} for targeted correct attribution probability,
 \code{\link{weap}} for within equivalence class attribution probability,
 \code{\link{dcap}} for differential correct attribution probability
+
+Other attribution-risk: 
+\code{\link{dcap}()},
+\code{\link{tcap}()},
+\code{\link{weap}()}
 }
 \author{
 Matthias Templ
 }
+\concept{attribution-risk}

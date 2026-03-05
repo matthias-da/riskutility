@@ -71,10 +71,12 @@ Many functions in this package have methods for \code{synth_pair} objects,
 allowing simplified calls like \code{dcap(pair)} instead of
 \code{dcap(X, Y, key_vars = ..., target_var = ...)}.
 
-For users of synthpop or simPop packages, convenience constructors are available:
+For users of synthpop, simPop, or sdcMicro packages, convenience constructors
+are available:
 \itemize{
 \item \code{\link{from_synthpop}}: Create from synthpop's synds objects
 \item \code{\link{from_simPop}}: Create from simPop's simPopObj objects
+\item \code{\link{from_sdcMicro}}: Create from sdcMicro's sdcMicroObj objects
 }
 }
 \examples{
@@ -110,7 +112,9 @@ print(pair)
 # hellinger(pair)
 }
 \seealso{
-\code{\link{from_synthpop}}, \code{\link{from_simPop}} for package-specific constructors,
+\code{\link{from_synthpop}}, \code{\link{from_simPop}}, \code{\link{from_sdcMicro}}
+for package-specific constructors,
 \code{\link{dcap}}, \code{\link{tcap}}, \code{\link{ims}}, \code{\link{hellinger}}
 for functions with synth_pair methods
 }
+\concept{containers}

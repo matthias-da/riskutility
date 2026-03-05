@@ -2,20 +2,29 @@
 % Please edit documentation in R/compare_multivariate_distribution.R
 \name{compare_multivariate_distribution}
 \alias{compare_multivariate_distribution}
+\alias{compare_multivariate_distribution.synth_pair}
+\alias{compare_multivariate_distribution.default}
 \title{Compare Multivariate Distributions using Mahalanobis Distance or Jensen-Shannon Divergence}
 \usage{
-compare_multivariate_distribution(
+compare_multivariate_distribution(X, ...)
+
+\method{compare_multivariate_distribution}{synth_pair}(X, ...)
+
+\method{compare_multivariate_distribution}{default}(
   X,
   Y,
   vars,
   method = "mahalanobis",
   weight_X = NULL,
   weight_Y = NULL,
-  n_bins = 10
+  n_bins = 10,
+  ...
 )
 }
 \arguments{
 \item{X}{A data.frame or data.table containing the original dataset.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{A data.frame or data.table containing the anonymized/synthetic dataset.}
 
@@ -86,3 +95,23 @@ result_js <- compare_multivariate_distribution(X_nom, Y_nom, vars = c("gender", 
                                                method = "mutual_information", n_bins = 5)
 print(result_js)
 }
+\seealso{
+Other comparison: 
+\code{\link{ci_overlap}()},
+\code{\link{compare_boxplots}()},
+\code{\link{compare_chisq_gof}()},
+\code{\link{compare_correlation_matrices}()},
+\code{\link{compare_distributions_cont}()},
+\code{\link{compare_embedding}()},
+\code{\link{compare_feature_importance}()},
+\code{\link{compare_histograms}()},
+\code{\link{compare_ks_test}()},
+\code{\link{compare_means_frequencies}()},
+\code{\link{compare_missing_values}()},
+\code{\link{compare_model_performance}()},
+\code{\link{compare_multivariate_summary_statistics}()},
+\code{\link{compare_outliers}()},
+\code{\link{compare_pca}()},
+\code{\link{compare_wasserstein}()}
+}
+\concept{comparison}

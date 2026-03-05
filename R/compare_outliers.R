@@ -18,7 +18,7 @@
 #' @param method Character. Outlier detection method: \code{"zscore"}, \code{"iqr"}, \code{"dbscan"}, or \code{"robust"}.
 #' @param threshold Numeric. For \code{"zscore"}, the absolute z-score cutoff (default = 3). For \code{"robust"},
 #' the significance level for the chi-square cutoff (default = 0.975). Ignored for \code{"iqr"} and \code{"dbscan"}.
-#' @param ... Additional arguments passed to the underlying method (e.g., \code{eps} and \code{minPts} for DBSCAN).
+#' @param ... additional arguments passed to the underlying method (e.g., \code{eps} and \code{minPts} for DBSCAN).
 #' @return A list with:
 #' \itemize{
 #'   \item \code{summary}: A data frame summarizing outlier counts and proportions in \code{X} and \code{Y}.
@@ -44,8 +44,21 @@
 #'   res_robust <- compare_outliers(X, Y, method = "robust", threshold = 0.975)
 #' }
 #'
+#' @family comparison
 #' @export
-compare_outliers <- function(X, Y, method = "zscore", threshold = NULL, ...) {
+compare_outliers <- function(X, ...) {
+  UseMethod("compare_outliers")
+}
+
+#' @rdname compare_outliers
+#' @export
+compare_outliers.synth_pair <- function(X, ...) {
+  compare_outliers.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_outliers
+#' @export
+compare_outliers.default <- function(X, Y, method = "zscore", threshold = NULL, ...) {
   # Check inputs
   if (!is.data.frame(X) && !is.matrix(X))
     stop("X must be a data frame or matrix.")

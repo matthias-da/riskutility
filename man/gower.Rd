@@ -2,14 +2,28 @@
 % Please edit documentation in R/gower.R
 \name{gower}
 \alias{gower}
+\alias{gower.synth_pair}
+\alias{gower.default}
 \title{Gower distance between two data frames}
 \usage{
-gower(X, Y)
+gower(X, ...)
+
+\method{gower}{synth_pair}(X, ...)
+
+\method{gower}{default}(X, Y, ...)
 }
 \arguments{
 \item{X}{data frame}
 
+\item{...}{additional arguments passed to methods}
+
 \item{Y}{data frame}
+}
+\value{
+A single numeric value: the average Gower distance between the
+rows of \code{X} and the corresponding rows of \code{Y}, computed as
+the sum of absolute pairwise Gower distances divided by the number of
+observations in \code{X}.
 }
 \description{
 Average (per observation) Gower distance
@@ -29,7 +43,26 @@ Y <- data.frame(
 gower(X, Y)
 
 }
+\references{
+Gower, J.C. (1971). A General Coefficient of Similarity and Some of Its
+Properties. \emph{Biometrics}, 27(4), 857--871.
+}
+\seealso{
+\code{\link{dcr}}, \code{\link{ims}}
+
+Other utility: 
+\code{\link{chisq_utility}()},
+\code{\link{ci_proximity}()},
+\code{\link{energy_distance}()},
+\code{\link{hellinger}()},
+\code{\link{mqs}()},
+\code{\link{pMSE}()},
+\code{\link{propscore}()},
+\code{\link{rumap}()},
+\code{\link{specks}()}
+}
 \author{
 Matthias Templ. Based on the gowerD function from Alexander Kowarik
 in the VIM package.
 }
+\concept{utility}

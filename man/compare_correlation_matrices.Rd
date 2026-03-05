@@ -2,18 +2,27 @@
 % Please edit documentation in R/compare_correlation_matrices.R
 \name{compare_correlation_matrices}
 \alias{compare_correlation_matrices}
+\alias{compare_correlation_matrices.synth_pair}
+\alias{compare_correlation_matrices.default}
 \title{Compare Correlation Matrices between Two Datasets}
 \usage{
-compare_correlation_matrices(
+compare_correlation_matrices(X, ...)
+
+\method{compare_correlation_matrices}{synth_pair}(X, ...)
+
+\method{compare_correlation_matrices}{default}(
   X,
   Y,
   vars,
   method = "pearson",
-  mixed_method = "point_biserial"
+  mixed_method = "point_biserial",
+  ...
 )
 }
 \arguments{
 \item{X}{A data.frame or data.table containing the original dataset.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{A data.frame or data.table containing the anonymized/synthetic dataset.}
 
@@ -79,7 +88,30 @@ print(res2$corr_X)
 print(res2$corr_Y)
 
 # Mixed example: income (continuous) vs gender (nominal); point-biserial or eta-squared is computed.
-res3 <- compare_correlation_matrices(X, Y, vars = c("income", "gender"), method = "pearson", mixed_method = "point_biserial")
+res3 <- compare_correlation_matrices(X, Y,
+  vars = c("income", "gender"),
+  method = "pearson",
+  mixed_method = "point_biserial")
 print(res3$corr_X)
 print(res3$corr_Y)
 }
+\seealso{
+Other comparison: 
+\code{\link{ci_overlap}()},
+\code{\link{compare_boxplots}()},
+\code{\link{compare_chisq_gof}()},
+\code{\link{compare_distributions_cont}()},
+\code{\link{compare_embedding}()},
+\code{\link{compare_feature_importance}()},
+\code{\link{compare_histograms}()},
+\code{\link{compare_ks_test}()},
+\code{\link{compare_means_frequencies}()},
+\code{\link{compare_missing_values}()},
+\code{\link{compare_model_performance}()},
+\code{\link{compare_multivariate_distribution}()},
+\code{\link{compare_multivariate_summary_statistics}()},
+\code{\link{compare_outliers}()},
+\code{\link{compare_pca}()},
+\code{\link{compare_wasserstein}()}
+}
+\concept{comparison}

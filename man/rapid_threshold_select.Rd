@@ -2,6 +2,8 @@
 % Please edit documentation in R/rapid_threshold_select.R
 \name{rapid_threshold_select}
 \alias{rapid_threshold_select}
+\alias{print.rapid_threshold}
+\alias{plot.rapid_threshold}
 \title{Data-Driven Threshold Selection for RAPID}
 \usage{
 rapid_threshold_select(
@@ -22,6 +24,10 @@ rapid_threshold_select(
   verbose = FALSE,
   ...
 )
+
+\method{print}{rapid_threshold}(x, ...)
+
+\method{plot}{rapid_threshold}(x, ...)
 }
 \arguments{
 \item{original_data}{A data frame of original (confidential) records.}
@@ -65,7 +71,9 @@ evaluate (used when the sensitive attribute is continuous).}
 
 \item{verbose}{Logical; print progress?}
 
-\item{...}{Additional arguments passed to the model fitting function.}
+\item{...}{additional arguments (ignored)}
+
+\item{x}{an object of class \code{"rapid_threshold"}}
 }
 \value{
 An object of class \code{"rapid_threshold"} with components:
@@ -89,18 +97,46 @@ recommended threshold \eqn{\tau^*} (or \eqn{\varepsilon^*}) is the
 maximum threshold where \code{RAPID_obs > Q_{1-alpha}(null)}.
 }
 \examples{
-\dontrun{
-sel <- rapid_threshold_select(
-  original, synthetic,
-  quasi_identifiers = c("age", "sex", "region"),
-  sensitive_attribute = "income",
-  model_type = "rf"
+# Small runnable example
+set.seed(42)
+X <- data.frame(
+  age = sample(20:60, 80, replace = TRUE),
+  sex = sample(c("M", "F"), 80, replace = TRUE),
+  income = rnorm(80, 50000, 10000)
 )
+Y <- X
+Y$income <- Y$income + rnorm(80, 0, 5000)
+sel <- rapid_threshold_select(X, Y,
+  quasi_identifiers = c("age", "sex"),
+  sensitive_attribute = "income",
+  model_type = "lm",
+  epsilon_range = seq(5, 30, by = 5),
+  n_permutations = 9)
 print(sel)
-plot(sel)
+
+\donttest{
+# With random forest and finer grid
+sel2 <- rapid_threshold_select(X, Y,
+  quasi_identifiers = c("age", "sex"),
+  sensitive_attribute = "income",
+  model_type = "rf", n_permutations = 199)
+print(sel2)
+plot(sel2)
 }
 
 }
+\references{
+Thees, O., Mueller, N., & Templ, M. (2026). Beyond the Trade-off Curve:
+Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and
+Synthetic Data. \emph{Journal of Official Statistics}.
+}
 \seealso{
 \code{\link{rapid}}, \code{\link{rapid_test}}
+
+Other rapid: 
+\code{\link{confint.rapid}()},
+\code{\link{rapid}()},
+\code{\link{rapid_synthesizer_cv}()},
+\code{\link{rapid_test}()}
 }
+\concept{rapid}

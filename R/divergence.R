@@ -27,11 +27,29 @@
 #' @aliases KLDiv KLDiv_bayes JSDiv JSDiv_bayes
 #' @rdname Entropy
 #' @name Entropy
+#' @family information-theory
 #' @export KLDiv
 #' @export KLDiv_bayes
 #' @export JSDiv
 #' @export JSDiv_bayes
 #'
+#' @examples
+#' # Kullback-Leibler divergence between two probability vectors
+#' p <- c(0.4, 0.3, 0.2, 0.1)
+#' q <- c(0.25, 0.25, 0.25, 0.25)
+#' KLDiv(p, q)
+#'
+#' # Bayesian KL divergence
+#' KLDiv_bayes(p, q)
+#'
+#' # Jensen-Shannon divergence (symmetric)
+#' JSDiv(p, q)
+#'
+#' # Bayesian Jensen-Shannon divergence
+#' JSDiv_bayes(p, q)
+#'
+#' # Cross-entropy
+#' CrossEntropy(p, q)
 NULL
 
 #' @rdname Entropy

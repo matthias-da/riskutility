@@ -34,6 +34,8 @@
 #'   returns a single numeric performance value.
 #' @param nsim Number of simulations or permutations (also used by \code{fastshap::explain}).
 #'
+#' @param ... additional arguments passed to methods
+#'
 #' @return A list containing:
 #' \item{comparison}{A data.table with columns for feature names, importance values for datasets X and Y, and the absolute difference.}
 #' \item{model_X}{The model trained on X.}
@@ -76,10 +78,23 @@
 #' }
 #'
 #' @importFrom data.table data.table
+#' @family comparison
 #' @export
-compare_feature_importance <- function(X, Y, formula, method,
+compare_feature_importance <- function(X, ...) {
+  UseMethod("compare_feature_importance")
+}
+
+#' @rdname compare_feature_importance
+#' @export
+compare_feature_importance.synth_pair <- function(X, ...) {
+  compare_feature_importance.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_feature_importance
+#' @export
+compare_feature_importance.default <- function(X, Y, formula, method,
                                        importance_type = c("model", "permutation", "shap"),
-                                       pred_wrapper = NULL, metric = "Accuracy", nsim = 5) {
+                                       pred_wrapper = NULL, metric = "Accuracy", nsim = 5, ...) {
   if (!requireNamespace("caret", quietly = TRUE)) {
     stop("Package 'caret' is required for compare_feature_importance(). Please install it.")
   }
@@ -214,14 +229,64 @@ print.compare_feature_importance <- function(x, ...) {
   invisible(x)
 }
 
+
+#' Summary method for compare_feature_importance objects
+#'
+#' @param object an object of class "compare_feature_importance"
+#' @param ... additional arguments (ignored)
+#' @return An object of class "summary.compare_feature_importance"
+#' @export
+summary.compare_feature_importance <- function(object, ...) {
+  comp <- object$comparison
+  summ <- list(
+    n_features = nrow(comp),
+    rank_correlation = object$rank_correlation,
+    pearson_correlation = object$pearson_correlation,
+    mean_abs_difference = object$mean_abs_difference,
+    max_abs_difference = max(comp$difference, na.rm = TRUE),
+    top_discrepant = comp[order(-comp$difference), , drop = FALSE],
+    comparison = comp
+  )
+  class(summ) <- "summary.compare_feature_importance"
+  summ
+}
+
+
+#' Print method for summary.compare_feature_importance objects
+#'
+#' @param x an object of class "summary.compare_feature_importance"
+#' @param ... additional arguments (ignored)
+#' @export
+print.summary.compare_feature_importance <- function(x, ...) {
+  cat("Summary: Feature Importance Comparison\n")
+  cat("=======================================\n\n")
+
+  cat("Features compared:", x$n_features, "\n\n")
+
+  cat("Correlation:\n")
+  cat("  Spearman (rank): ", sprintf("%.4f", x$rank_correlation), "\n")
+  cat("  Pearson:         ", sprintf("%.4f", x$pearson_correlation), "\n\n")
+
+  cat("Importance Differences:\n")
+  cat("  Mean absolute: ", sprintf("%.4f", x$mean_abs_difference), "\n")
+  cat("  Max absolute:  ", sprintf("%.4f", x$max_abs_difference), "\n\n")
+
+  cat("Feature-wise Comparison (sorted by discrepancy):\n")
+  print(x$top_discrepant, row.names = FALSE)
+
+  invisible(x)
+}
+
+
 #' Plot method for compare_feature_importance objects
 #'
 #' @param x an object of class "compare_feature_importance"
 #' @param y not used
+#' @param which integer, which plot to produce (default 1). Currently only 1 is available.
 #' @param ... additional arguments passed to plotting functions
 #' @importFrom graphics barplot par legend
 #' @export
-plot.compare_feature_importance <- function(x, y = NULL, ...) {
+plot.compare_feature_importance <- function(x, y = NULL, which = 1, ...) {
   comp <- x$comparison
 
   # Create side-by-side bar plot

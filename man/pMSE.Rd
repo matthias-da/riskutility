@@ -187,7 +187,19 @@ Global measures of data utility for microdata masked for disclosure limitation.
 \seealso{
 \code{\link{specks}} for a simpler SPECKS-focused function,
 \code{\link{propscore}} for an alternative implementation
+
+Other utility: 
+\code{\link{chisq_utility}()},
+\code{\link{ci_proximity}()},
+\code{\link{energy_distance}()},
+\code{\link{gower}()},
+\code{\link{hellinger}()},
+\code{\link{mqs}()},
+\code{\link{propscore}()},
+\code{\link{rumap}()},
+\code{\link{specks}()}
 }
 \author{
 Matthias Templ
 }
+\concept{utility}

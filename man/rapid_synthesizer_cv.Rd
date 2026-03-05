@@ -2,6 +2,7 @@
 % Please edit documentation in R/rapid_synthesizer_cv.R
 \name{rapid_synthesizer_cv}
 \alias{rapid_synthesizer_cv}
+\alias{print.rapid_cv}
 \title{Cross-Validation of Synthesizer Disclosure Risk}
 \usage{
 rapid_synthesizer_cv(
@@ -17,6 +18,8 @@ rapid_synthesizer_cv(
   verbose = TRUE,
   ...
 )
+
+\method{print}{rapid_cv}(x, ...)
 }
 \arguments{
 \item{original_data}{A data frame of original (confidential) records.}
@@ -46,8 +49,9 @@ from every fold?}
 
 \item{verbose}{Logical; print progress messages?}
 
-\item{...}{Additional arguments passed to \code{\link{rapid}}
-(e.g. \code{model_type}, \code{cat_tau}, \code{num_epsilon}).}
+\item{...}{additional arguments (ignored)}
+
+\item{x}{an object of class \code{"rapid_cv"}}
 }
 \value{
 An object of class \code{"rapid_cv"} with components:
@@ -90,6 +94,18 @@ print(cv)
 }
 
 }
+\references{
+Thees, O., Mueller, N., & Templ, M. (2026). Beyond the Trade-off Curve:
+Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and
+Synthetic Data. \emph{Journal of Official Statistics}.
+}
 \seealso{
 \code{\link{rapid}}, \code{\link{rapid_test}}
+
+Other rapid: 
+\code{\link{confint.rapid}()},
+\code{\link{rapid}()},
+\code{\link{rapid_test}()},
+\code{\link{rapid_threshold_select}()}
 }
+\concept{rapid}

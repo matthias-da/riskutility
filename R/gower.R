@@ -4,8 +4,21 @@
 #'
 #' @param X data frame
 #' @param Y data frame
+#' @param ... additional arguments passed to methods
+#' @return A single numeric value: the average Gower distance between the
+#'   rows of \code{X} and the corresponding rows of \code{Y}, computed as
+#'   the sum of absolute pairwise Gower distances divided by the number of
+#'   observations in \code{X}.
+#'
+#' @references
+#' Gower, J.C. (1971). A General Coefficient of Similarity and Some of Its
+#' Properties. \emph{Biometrics}, 27(4), 857--871.
+#'
+#' @seealso \code{\link{dcr}}, \code{\link{ims}}
+#'
 #' @author Matthias Templ. Based on the gowerD function from Alexander Kowarik
 #' in the VIM package.
+#' @family utility
 #' @export
 #' @importFrom VIM gowerD
 #' @examples
@@ -22,7 +35,19 @@
 #' )
 #' gower(X, Y)
 #'
-gower <- function(X, Y){
+gower <- function(X, ...) {
+  UseMethod("gower")
+}
+
+#' @rdname gower
+#' @export
+gower.synth_pair <- function(X, ...) {
+  gower.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname gower
+#' @export
+gower.default <- function(X, Y, ...){
   gd <- VIM::gowerD(X, Y)
   return(sum(abs(gd)) / nrow(X))
 }

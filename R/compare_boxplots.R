@@ -18,7 +18,9 @@
 #'   - "side" (default): Side-by-side boxplots.
 #'   - "overlap": Overlapping boxplots.
 #'   - "separate": Separate boxplots for each dataset-category combination (Original above, Anonymized below).
+#' @param ... additional arguments passed to methods
 #' @return A ggplot2 boxplot visualization comparing the distributions.
+#' @family comparison
 #' @export
 #'
 #' @examples
@@ -44,9 +46,21 @@
 #' compare_boxplots(X, Y, num_var = "income", cat_vars = c("gender"),
 #'                  weight_X = "weight", weight_Y = "weight",
 #'                  facet_type = "wrap", plot_type = "separate")
-compare_boxplots <- function(X, Y, num_var, cat_vars,
+compare_boxplots <- function(X, ...) {
+  UseMethod("compare_boxplots")
+}
+
+#' @rdname compare_boxplots
+#' @export
+compare_boxplots.synth_pair <- function(X, ...) {
+  compare_boxplots.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_boxplots
+#' @export
+compare_boxplots.default <- function(X, Y, num_var, cat_vars,
                              weight_X = NULL, weight_Y = NULL,
-                             facet_type = "wrap", plot_type = "side") {
+                             facet_type = "wrap", plot_type = "side", ...) {
 
   # Convert to data.table for efficient processing (use copy to avoid side effects)
   X <- copy(as.data.table(X))

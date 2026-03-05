@@ -44,6 +44,24 @@ with \deqn{X = \sum{X_{i,j}}} and \deqn{Y = \sum{Y_{i,j}}}
 The compositional versions of the Kullback-Leibler divergence is given
 in the reference below.
 }
+\examples{
+# Kullback-Leibler divergence between two probability vectors
+p <- c(0.4, 0.3, 0.2, 0.1)
+q <- c(0.25, 0.25, 0.25, 0.25)
+KLDiv(p, q)
+
+# Bayesian KL divergence
+KLDiv_bayes(p, q)
+
+# Jensen-Shannon divergence (symmetric)
+JSDiv(p, q)
+
+# Bayesian Jensen-Shannon divergence
+JSDiv_bayes(p, q)
+
+# Cross-entropy
+CrossEntropy(p, q)
+}
 \references{
 J.A. Martin-Fernandez, M. Bren, C. Barcelo-Vidal,
 V. Pawlowski-Glahn (1999). A measure of difference for compositional
@@ -51,3 +69,14 @@ data based on measures of divergence. In S. Lippard, A. Nass, and
 R. Sinding-Larsen (Eds.), Proceedings of IAMG'99, Volume 1,
 Trondheim (Norway), pp. 211-215.
 }
+\seealso{
+Other information-theory: 
+\code{\link{EntropyMeasures}},
+\code{\link{information_surprisal}()},
+\code{\link{max_info_leakage}()},
+\code{\link{mutualInformation}()},
+\code{\link{positive_information_disclosure}()},
+\code{\link{privacy_score}()},
+\code{\link{systemAnonymityLevel}()}
+}
+\concept{information-theory}

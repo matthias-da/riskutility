@@ -44,8 +44,14 @@
 #'   \item{threshold}{Threshold value used.}
 #' }
 #'
+#' @references
+#' Thees, O., Mueller, N., & Templ, M. (2026). Beyond the Trade-off Curve:
+#' Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and
+#' Synthetic Data. \emph{Journal of Official Statistics}.
+#'
 #' @seealso \code{\link{rapid}}, \code{\link{rapid_test}}
 #'
+#' @family rapid
 #' @examples
 #' \dontrun{
 #' cv <- rapid_synthesizer_cv(
@@ -255,6 +261,9 @@ rapid_synthesizer_cv <- function(original_data,
 }
 
 
+#' @rdname rapid_synthesizer_cv
+#' @param x an object of class \code{"rapid_cv"}
+#' @param ... additional arguments (ignored)
 #' @export
 print.rapid_cv <- function(x, ...) {
   cat("\n  RAPID Cross-Validation Results\n\n")
@@ -276,5 +285,82 @@ print.rapid_cv <- function(x, ...) {
   cat(sprintf("    95%% CI: [%.4f, %.4f]\n",
               x$cv_summary$ci_lower, x$cv_summary$ci_upper))
   cat("\n")
+  invisible(x)
+}
+
+
+#' Summary method for rapid_cv objects
+#'
+#' @param object an object of class "rapid_cv"
+#' @param ... additional arguments (ignored)
+#' @return An object of class "summary.rapid_cv"
+#' @export
+summary.rapid_cv <- function(object, ...) {
+  summ <- list(
+    eval_method = object$eval_method,
+    model_type = object$model_type,
+    threshold = object$threshold,
+    k = object$settings$k,
+    stratified = object$settings$stratified,
+    is_categorical = object$settings$is_categorical,
+    n_original = object$settings$n_original,
+    sensitive_attribute = object$settings$sensitive_attribute,
+    mean = object$cv_summary$mean,
+    sd = object$cv_summary$sd,
+    se = object$cv_summary$se,
+    median = object$cv_summary$median,
+    min = object$cv_summary$min,
+    max = object$cv_summary$max,
+    ci_lower = object$cv_summary$ci_lower,
+    ci_upper = object$cv_summary$ci_upper,
+    cv_summary = object$cv_summary,
+    has_details = !is.null(object$cv_details),
+    has_fold_data = !is.null(object$fold_data)
+  )
+  class(summ) <- "summary.rapid_cv"
+  summ
+}
+
+
+#' Print method for summary.rapid_cv objects
+#'
+#' @param x an object of class "summary.rapid_cv"
+#' @param ... additional arguments (ignored)
+#' @export
+print.summary.rapid_cv <- function(x, ...) {
+  cat("Summary: RAPID Cross-Validation\n")
+  cat("================================\n\n")
+
+  cat("Configuration:\n")
+  cat("  Evaluation method:    ", x$eval_method, "\n")
+  cat("  Model type:           ", x$model_type, "\n")
+  cat("  Sensitive attribute:  ", x$sensitive_attribute, "\n")
+  cat("  K-folds:              ", x$k, "\n")
+  cat("  Stratified:           ", x$stratified, "\n")
+  cat("  Original data size:   ", x$n_original, "\n\n")
+
+  cat("Risk Estimate:\n")
+  cat("  Mean:   ", sprintf("%.4f", x$mean), "\n")
+  cat("  Median: ", sprintf("%.4f", x$median), "\n")
+  cat("  SD:     ", sprintf("%.4f", x$sd), "\n")
+  cat("  SE:     ", sprintf("%.4f", x$se), "\n")
+  cat("  Range:  [", sprintf("%.4f", x$min), ", ",
+      sprintf("%.4f", x$max), "]\n", sep = "")
+  cat("  95% CI: [", sprintf("%.4f", x$ci_lower), ", ",
+      sprintf("%.4f", x$ci_upper), "]\n\n", sep = "")
+
+  if (x$is_categorical) {
+    if (!is.null(x$cv_summary$mean_accuracy)) {
+      cat("Model Performance:\n")
+      cat("  Mean accuracy: ", sprintf("%.4f", x$cv_summary$mean_accuracy), "\n")
+    }
+  } else {
+    if (!is.null(x$cv_summary$mean_mae)) {
+      cat("Model Performance:\n")
+      cat("  Mean MAE:  ", sprintf("%.4f", x$cv_summary$mean_mae), "\n")
+      cat("  Mean RMSE: ", sprintf("%.4f", x$cv_summary$mean_rmse), "\n")
+    }
+  }
+
   invisible(x)
 }

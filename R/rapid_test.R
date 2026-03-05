@@ -49,16 +49,38 @@
 #'   \item{method}{\code{"permutation"}.}
 #' }
 #'
+#' @references
+#' Thees, O., Mueller, N., & Templ, M. (2026). Beyond the Trade-off Curve:
+#' Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and
+#' Synthetic Data. \emph{Journal of Official Statistics}.
+#'
 #' @seealso \code{\link{rapid}}, \code{\link[=confint.rapid]{confint}},
 #'   \code{\link{rapid_threshold_select}}
 #'
+#' @family rapid
 #' @examples
-#' \dontrun{
-#' res <- rapid_test(original, synthetic,
-#'                   quasi_identifiers = c("age", "sex", "region"),
+#' # Small runnable example with few permutations
+#' set.seed(42)
+#' X <- data.frame(
+#'   age = sample(20:60, 80, replace = TRUE),
+#'   sex = sample(c("M", "F"), 80, replace = TRUE),
+#'   income = rnorm(80, 50000, 10000)
+#' )
+#' Y <- X
+#' Y$income <- Y$income + rnorm(80, 0, 5000)
+#' res <- rapid_test(X, Y,
+#'                   quasi_identifiers = c("age", "sex"),
 #'                   sensitive_attribute = "income",
-#'                   model_type = "rf", n_permutations = 199)
+#'                   model_type = "lm", n_permutations = 9)
 #' print(res)
+#'
+#' \donttest{
+#' # With more permutations and random forest
+#' res2 <- rapid_test(X, Y,
+#'                    quasi_identifiers = c("age", "sex"),
+#'                    sensitive_attribute = "income",
+#'                    model_type = "rf", n_permutations = 199)
+#' print(res2)
 #' }
 #'
 #' @export
@@ -158,6 +180,9 @@ rapid_test <- function(original_data, synthetic_data,
 }
 
 
+#' @rdname rapid_test
+#' @param x an object of class \code{"rapid_test"}
+#' @param ... additional arguments (ignored)
 #' @export
 print.rapid_test <- function(x, ...) {
   cat("\n  RAPID Permutation Test\n\n")
@@ -172,6 +197,62 @@ print.rapid_test <- function(x, ...) {
     cat("  Conclusion: RAPID is significantly above chance level.\n")
   } else {
     cat("  Conclusion: No significant disclosure risk detected.\n")
+  }
+  cat("\n")
+  invisible(x)
+}
+
+
+#' Summary method for rapid_test objects
+#'
+#' @param object an object of class "rapid_test"
+#' @param ... additional arguments (ignored)
+#' @return An object of class "summary.rapid_test"
+#' @export
+summary.rapid_test <- function(object, ...) {
+  summ <- list(
+    statistic = object$statistic,
+    p_value = object$p_value,
+    alpha = object$alpha,
+    significant = object$significant,
+    n_permutations = object$n_permutations,
+    null_mean = object$null_mean,
+    null_sd = object$null_sd,
+    null_quantiles = object$null_quantiles,
+    effect_size = (object$statistic - object$null_mean) / max(object$null_sd, 1e-10),
+    method = object$method
+  )
+  class(summ) <- "summary.rapid_test"
+  summ
+}
+
+
+#' Print method for summary.rapid_test objects
+#'
+#' @param x an object of class "summary.rapid_test"
+#' @param ... additional arguments (ignored)
+#' @export
+print.summary.rapid_test <- function(x, ...) {
+  cat("Summary: RAPID Permutation Test\n")
+  cat("===============================\n\n")
+
+  cat("Test Result:\n")
+  cat("  Observed RAPID: ", sprintf("%.4f", x$statistic), "\n")
+  cat("  p-value:        ", sprintf("%.4f", x$p_value),
+      if (x$significant) " *" else "", "\n")
+  cat("  Alpha:          ", sprintf("%.2f", x$alpha), "\n")
+  cat("  Significant:    ", x$significant, "\n\n")
+
+  cat("Null Distribution (", x$n_permutations, " permutations):\n", sep = "")
+  cat("  Mean:           ", sprintf("%.4f", x$null_mean), "\n")
+  cat("  SD:             ", sprintf("%.4f", x$null_sd), "\n")
+  cat("  Quantiles:      ", paste(sprintf("%.4f", x$null_quantiles), collapse = "  "), "\n")
+  cat("  Effect size:    ", sprintf("%.2f", x$effect_size), " (standardized)\n\n")
+
+  if (x$significant) {
+    cat("Conclusion: RAPID is significantly above chance level.\n")
+  } else {
+    cat("Conclusion: No significant disclosure risk detected.\n")
   }
   cat("\n")
   invisible(x)

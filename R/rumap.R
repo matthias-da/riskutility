@@ -26,6 +26,7 @@
 #' @param normalize Logical, whether to normalize measures to the 0-1 range. Default TRUE.
 #' @param seed Integer, random seed for reproducibility.
 #' @param na.rm Logical, whether to remove NA values. Default TRUE.
+#' @param ... additional arguments passed to methods
 #'
 #' @return An object of class "rumap" containing:
 #' \itemize{
@@ -82,6 +83,7 @@
 #' Synthetic Data. Journal of Official Statistics.
 #'
 #' @author Matthias Templ
+#' @family utility
 #' @export
 #'
 #' @examples
@@ -124,7 +126,29 @@
 #' print(result)
 #' summary(result)
 #' }
-rumap <- function(original,
+rumap <- function(original, ...) {
+  UseMethod("rumap")
+}
+
+#' @rdname rumap
+#' @export
+rumap.synth_pair <- function(original, ...) {
+  rumap.default(
+    original = original$original,
+    synthetic = original$synthetic,
+    key_vars = original$key_vars,
+    target_var = original$target_var,
+    holdout = original$holdout,
+    vars = original$vars,
+    cat_vars = original$cat_vars,
+    num_vars = original$num_vars,
+    ...
+  )
+}
+
+#' @rdname rumap
+#' @export
+rumap.default <- function(original,
                   synthetic,
                   risk_measures = c("dcap", "tcap", "disco", "ims", "repu"),
                   utility_measures = c("pmse", "wasserstein", "hellinger", "energy", "ci_proximity"),
@@ -137,7 +161,7 @@ rumap <- function(original,
                   num_vars = NULL,
                   normalize = TRUE,
                   seed = NULL,
-                  na.rm = TRUE) {
+                  na.rm = TRUE, ...) {
 
   # Set seed for reproducibility
   if (!is.null(seed)) set.seed(seed)

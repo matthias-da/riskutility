@@ -43,6 +43,7 @@
 #' re-identification and may need additional protection.
 #'
 #' @seealso \code{\link{ldiversity}} for l-diversity assessment,
+#'   \code{\link{tcloseness}} for t-closeness assessment,
 #'   \code{\link{suda}} for special uniques detection,
 #'   \code{\link{individual_risk}} for probabilistic risk assessment
 #'
@@ -52,6 +53,7 @@
 #' 10(5), 557-570.
 #'
 #' @author Matthias Templ
+#' @family privacy-models
 #' @export
 #' @examples
 #' # Create example data

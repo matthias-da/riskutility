@@ -101,6 +101,7 @@
 #' \emph{Journal of Privacy and Confidentiality}, 1(1), 111-124.
 #'
 #' @author Matthias Templ
+#' @family utility
 #' @export
 #' @importFrom stats glm binomial predict complete.cases as.formula ks.test median coef terms.formula quantile sd
 #' @examples

@@ -21,8 +21,10 @@
 #'   - `"stack"`: Stacked histograms.
 #'   - `"separate"`: Separate histograms for each dataset-category combination.
 #'
+#' @param ... additional arguments passed to methods
 #' @importFrom data.table rbindlist
 #' @return A ggplot2 histogram visualization comparing the distributions.
+#' @family comparison
 #' @export
 #'
 #' @examples
@@ -60,10 +62,22 @@
 #'                    weight_X = "weight", weight_Y = "weight",
 #'                    facet_type = "wrap", plot_type = "separate")
 
-compare_histograms <- function(X, Y, num_var, cat_vars,
+compare_histograms <- function(X, ...) {
+  UseMethod("compare_histograms")
+}
+
+#' @rdname compare_histograms
+#' @export
+compare_histograms.synth_pair <- function(X, ...) {
+  compare_histograms.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_histograms
+#' @export
+compare_histograms.default <- function(X, Y, num_var, cat_vars,
                                weight_X = NULL, weight_Y = NULL,
                                facet_type = "wrap", bins = 30,
-                               transparency = 0.4, plot_type = "overlap") {
+                               transparency = 0.4, plot_type = "overlap", ...) {
 
   # Convert to data.table for efficient processing (use copy to avoid side effects)
   X <- copy(as.data.table(X))

@@ -92,7 +92,13 @@ Attribution Probability for Synthetic Data: An Exploration.
 \code{\link{tcap}} for targeted correct attribution probability,
 \code{\link{dcap}} for differential correct attribution probability,
 \code{\link{disco}} for identifying disclosive records
+
+Other attribution-risk: 
+\code{\link{dcap}()},
+\code{\link{disco}()},
+\code{\link{tcap}()}
 }
 \author{
 Matthias Templ
 }
+\concept{attribution-risk}

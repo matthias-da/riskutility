@@ -70,6 +70,7 @@
 #' \emph{Journal of the Royal Statistical Society: Series A}, 181(3), 663-688.
 #'
 #' @author Matthias Templ
+#' @family utility
 #' @export
 #' @importFrom stats ks.test glm binomial predict complete.cases as.formula
 #' @examples
@@ -161,6 +162,13 @@ specks.default <- function(X, Y,
   }
   if (length(missing_Y) > 0) {
     stop(paste("Variables missing in Y:", paste(missing_Y, collapse = ", ")))
+  }
+
+  # Check variable types match
+  for (var in vars) {
+    if (!identical(class(X[[var]]), class(Y[[var]]))) {
+      stop(paste("Variable", var, "has different class in X and Y."))
+    }
   }
 
   # Subset to selected variables

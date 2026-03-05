@@ -97,8 +97,25 @@ l-Diversity: Privacy Beyond k-Anonymity.
 }
 \seealso{
 \code{\link{kanonymity}} for k-anonymity assessment,
+\code{\link{tcloseness}} for t-closeness assessment,
 \code{\link{tcap}} for targeted correct attribution probability
+
+Other privacy-models: 
+\code{\link{attacker_risk}()},
+\code{\link{delta_presence}()},
+\code{\link{domias}()},
+\code{\link{drisk}()},
+\code{\link{epsilon_identifiability}()},
+\code{\link{individual_risk}()},
+\code{\link{kanonymity}()},
+\code{\link{linkability}()},
+\code{\link{population_uniqueness}()},
+\code{\link{recordLinkage}()},
+\code{\link{singling_out}()},
+\code{\link{suda}()},
+\code{\link{tcloseness}()}
 }
 \author{
 Matthias Templ
 }
+\concept{privacy-models}

@@ -2,22 +2,25 @@
 % Please edit documentation in R/mia.R
 \name{.mia_backend_rf}
 \alias{.mia_backend_rf}
-\title{Train a probability random forest and return P(class=1) on test.
-X_train data.frame of training features (factors + numerics ok).
-y_train factor with levels c("0","1").
-X_test  data.frame of test features (same columns as X_train).
-num_threads integer, number of threads for ranger.
-num_trees integer, number of trees in the forest.
-numeric vector of length nrow(X_test) with P(class = 1).}
+\title{Train a probability random forest and return P(class=1) on test}
 \usage{
 .mia_backend_rf(X_train, y_train, X_test, num_threads = 1L, num_trees = 300L)
 }
-\description{
-Train a probability random forest and return P(class=1) on test.
-X_train data.frame of training features (factors + numerics ok).
-y_train factor with levels c("0","1").
-X_test  data.frame of test features (same columns as X_train).
-num_threads integer, number of threads for ranger.
-num_trees integer, number of trees in the forest.
-numeric vector of length nrow(X_test) with P(class = 1).
+\arguments{
+\item{X_train}{data.frame of training features (factors and numerics).}
+
+\item{y_train}{factor with levels \code{c("0","1")}.}
+
+\item{X_test}{data.frame of test features (same columns as X_train).}
+
+\item{num_threads}{integer, number of threads for ranger.}
+
+\item{num_trees}{integer, number of trees in the forest.}
 }
+\value{
+Numeric vector of length \code{nrow(X_test)} with P(class = 1).
+}
+\description{
+Internal helper for \code{\link{mia_classifier}}.
+}
+\keyword{internal}

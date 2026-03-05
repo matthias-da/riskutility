@@ -36,6 +36,7 @@
 #' Wagner, I., & Eckhoff, D. (2018). Technical Privacy Metrics: A Systematic Survey.
 #' ACM Computing Surveys, 51(3), Article 57. \doi{10.1145/3168389}
 #'
+#' @family information-theory
 #' @export
 information_surprisal <- function(p, logbase = 2) {
   if (any(p <= 0)) {

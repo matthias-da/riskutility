@@ -14,6 +14,9 @@
 #'
 #' @param p A vector of probability values (must sum to 1 for entropy-based methods).
 #' @param alpha The order of Renyi entropy (must be > 0 and not equal to 1).
+#' @param joint A joint probability matrix (rows = X, columns = Y) for
+#'   \code{ConditionalEntropy}.
+#' @param x A numeric vector for \code{CumulativeEntropy}.
 #'
 #' @return A numeric value representing the corresponding entropy or risk measure.
 #'
@@ -28,7 +31,30 @@
 #'
 #' @keywords entropy privacy risk
 #' @name EntropyMeasures
-#' @aliases RenyiEntropy MaxEntropy MinEntropy NormalizedEntropy ConditionalEntropy CumulativeEntropy
+#' @examples
+#' # Renyi entropy of order 2
+#' p <- c(0.4, 0.3, 0.2, 0.1)
+#' RenyiEntropy(p, alpha = 2)
+#'
+#' # Maximum (Hartley) entropy
+#' MaxEntropy(p)
+#'
+#' # Min-entropy
+#' MinEntropy(p)
+#'
+#' # Normalized Shannon entropy (0 to 1)
+#' NormalizedEntropy(p)
+#'
+#' # Conditional entropy H(Y|X) from a joint probability matrix
+#' joint <- matrix(c(0.1, 0.2, 0.3, 0.4), nrow = 2)
+#' ConditionalEntropy(joint)
+#'
+#' # Cumulative entropy of a numeric vector
+#' x <- c(1.2, 3.4, 2.1, 5.0, 4.3)
+#' CumulativeEntropy(x)
+#'
+#' @family information-theory
+#' @rdname EntropyMeasures
 #' @export
 RenyiEntropy <- function(p, alpha = 2) {
   stopifnot(alpha > 0, alpha != 1)
@@ -36,16 +62,19 @@ RenyiEntropy <- function(p, alpha = 2) {
   (1 / (1 - alpha)) * log(sum(p^alpha))
 }
 
+#' @rdname EntropyMeasures
 #' @export
 MaxEntropy <- function(p) {
   log(length(p[p > 0]))
 }
 
+#' @rdname EntropyMeasures
 #' @export
 MinEntropy <- function(p) {
   -log(max(p))
 }
 
+#' @rdname EntropyMeasures
 #' @export
 NormalizedEntropy <- function(p) {
   p <- p[p > 0]
@@ -54,6 +83,7 @@ NormalizedEntropy <- function(p) {
   H / H_max
 }
 
+#' @rdname EntropyMeasures
 #' @export
 ConditionalEntropy <- function(joint) {
   p_x <- rowSums(joint)
@@ -66,6 +96,7 @@ ConditionalEntropy <- function(joint) {
   H_cond
 }
 
+#' @rdname EntropyMeasures
 #' @export
 CumulativeEntropy <- function(x) {
   x <- sort(x)

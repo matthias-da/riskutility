@@ -2,9 +2,15 @@
 % Please edit documentation in R/compare_chisq_gof.R
 \name{compare_chisq_gof}
 \alias{compare_chisq_gof}
+\alias{compare_chisq_gof.synth_pair}
+\alias{compare_chisq_gof.default}
 \title{Compare Frequencies using Chi-square Goodness-of-Fit Test with Optional Grouping, Weights, and Simulated p-values}
 \usage{
-compare_chisq_gof(
+compare_chisq_gof(X, ...)
+
+\method{compare_chisq_gof}{synth_pair}(X, ...)
+
+\method{compare_chisq_gof}{default}(
   X,
   Y,
   cat_vars,
@@ -12,11 +18,14 @@ compare_chisq_gof(
   weight_X = NULL,
   weight_Y = NULL,
   simulate_p = TRUE,
-  B = 2000
+  B = 2000,
+  ...
 )
 }
 \arguments{
 \item{X}{A data.frame or data.table containing the original dataset.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{A data.frame or data.table containing the anonymized/synthetic dataset.}
 
@@ -78,8 +87,30 @@ result_overall <- compare_chisq_gof(X, Y, cat_vars = c("gender", "region"),
 print(result_overall)
 
 # Test conditionally by grouping variables (e.g., "region" and "gender")
-result_by_group <- compare_chisq_gof(X, Y, cat_vars = c("gender"), group_vars = c("region", "occupation"),
-                                     weight_X = "weight", weight_Y = "weight",
-                                     simulate_p = TRUE, B = 2000)
+result_by_group <- compare_chisq_gof(X, Y,
+  cat_vars = c("gender"),
+  group_vars = c("region", "occupation"),
+  weight_X = "weight", weight_Y = "weight",
+  simulate_p = TRUE, B = 2000)
 print(result_by_group)
 }
+\seealso{
+Other comparison: 
+\code{\link{ci_overlap}()},
+\code{\link{compare_boxplots}()},
+\code{\link{compare_correlation_matrices}()},
+\code{\link{compare_distributions_cont}()},
+\code{\link{compare_embedding}()},
+\code{\link{compare_feature_importance}()},
+\code{\link{compare_histograms}()},
+\code{\link{compare_ks_test}()},
+\code{\link{compare_means_frequencies}()},
+\code{\link{compare_missing_values}()},
+\code{\link{compare_model_performance}()},
+\code{\link{compare_multivariate_distribution}()},
+\code{\link{compare_multivariate_summary_statistics}()},
+\code{\link{compare_outliers}()},
+\code{\link{compare_pca}()},
+\code{\link{compare_wasserstein}()}
+}
+\concept{comparison}

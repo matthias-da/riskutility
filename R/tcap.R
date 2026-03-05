@@ -83,6 +83,7 @@
 #' \emph{Privacy in Statistical Databases}, 122-137.
 #'
 #' @author Matthias Templ
+#' @family attribution-risk
 #' @export
 #' @importFrom VIM gowerD
 #' @importFrom data.table data.table merge.data.table setorder .N

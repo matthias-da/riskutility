@@ -55,13 +55,17 @@
 # -----------------------------------------------------------------------------
 # Random forest back-end (ranger)
 # -----------------------------------------------------------------------------
-#' Train a probability random forest and return P(class=1) on test.
-#' X_train data.frame of training features (factors + numerics ok).
-#' y_train factor with levels c("0","1").
-#' X_test  data.frame of test features (same columns as X_train).
-#' num_threads integer, number of threads for ranger.
-#' num_trees integer, number of trees in the forest.
-#' numeric vector of length nrow(X_test) with P(class = 1).
+#' Train a probability random forest and return P(class=1) on test
+#'
+#' Internal helper for \code{\link{mia_classifier}}.
+#'
+#' @param X_train data.frame of training features (factors and numerics).
+#' @param y_train factor with levels \code{c("0","1")}.
+#' @param X_test data.frame of test features (same columns as X_train).
+#' @param num_threads integer, number of threads for ranger.
+#' @param num_trees integer, number of trees in the forest.
+#' @return Numeric vector of length \code{nrow(X_test)} with P(class = 1).
+#' @keywords internal
 .mia_backend_rf <- function(X_train, y_train, X_test,
                             num_threads = 1L, num_trees = 300L) {
   if (!requireNamespace("ranger", quietly = TRUE)) {
@@ -107,14 +111,53 @@
 #' @param seed integer or NULL. Random seed for reproducibility.
 #' @param num_trees integer. Number of trees (only used for method = "rf").
 #' @param num_threads integer. Threads for parallelism. Default 1.
+#' @param ... additional arguments passed to methods
 #'
-#' @return Named list with MIA precision, recall, macro F1 (means and SEs).
-#'   - MIA recall is the primary privacy metric.
-#'   - The evaluation test set is balanced (50/50).
-#'   - Values near 0.5 indicate performance close to random guessing (low risk).
-#'   - Values > 0.5 indicate the synthetic data leaks training membership.
-#'   - Values < 0.5 indicate performance worse than random guessing.
-mia_classifier <- function(real_data,
+#' @return An object of class \code{"mia"} with components:
+#' \describe{
+#'   \item{MIA precision}{Mean precision across iterations.}
+#'   \item{MIA precision se}{Standard error of precision.}
+#'   \item{MIA recall}{Mean recall (primary privacy metric).}
+#'   \item{MIA recall se}{Standard error of recall.}
+#'   \item{MIA macro F1}{Mean macro F1 score.}
+#'   \item{MIA macro F1 se}{Standard error of macro F1.}
+#'   \item{num_eval_iter}{Number of evaluation iterations.}
+#'   \item{method}{Classification method used.}
+#' }
+#' Values near 0.5 indicate performance close to random guessing (low risk).
+#' Values > 0.5 indicate the synthetic data leaks training membership.
+#' Values < 0.5 indicate performance worse than random guessing.
+#' @export
+mia_classifier <- function(real_data, ...) {
+  UseMethod("mia_classifier")
+}
+
+#' @rdname mia_classifier
+#' @export
+mia_classifier.synth_pair <- function(real_data, ...) {
+  if (!is.null(real_data$source) && real_data$source == "sdcMicro") {
+    stop("mia_classifier is designed for synthetic data evaluation (membership ",
+         "inference against a generative model) and is not applicable to ",
+         "traditionally anonymized data (sdcMicro objects).",
+         call. = FALSE)
+  }
+  if (is.null(real_data$holdout)) {
+    stop("mia_classifier requires holdout data. Provide a synth_pair with holdout, ",
+         "or use mia_classifier.default() directly with real_data, synt_data, hout_data.",
+         call. = FALSE)
+  }
+  mia_classifier.default(
+    real_data = real_data$original,
+    synt_data = real_data$synthetic,
+    hout_data = real_data$holdout,
+    cols = real_data$vars,
+    ...
+  )
+}
+
+#' @rdname mia_classifier
+#' @export
+mia_classifier.default <- function(real_data,
                            synt_data,
                            hout_data,
                            cols          = NULL,
@@ -124,7 +167,8 @@ mia_classifier <- function(real_data,
                            num_eval_iter = 5L,
                            seed          = NULL,
                            num_trees     = 300L,
-                           num_threads   = 1L) {
+                           num_threads   = 1L,
+                           ...) {
 
   # --- Registry of available classifier back-ends ----------------------------
   # To add a new method, implement a function with the same signature as
@@ -363,12 +407,103 @@ mia_classifier <- function(real_data,
   r <- mean_se(recs)
   f <- mean_se(f1s)
 
-  list(
+  result <- list(
     "MIA precision"    = p$mean,
     "MIA precision se" = p$se,
     "MIA recall"       = r$mean,
     "MIA recall se"    = r$se,
     "MIA macro F1"     = f$mean,
-    "MIA macro F1 se"  = f$se
+    "MIA macro F1 se"  = f$se,
+    "num_eval_iter"    = num_eval_iter,
+    "method"           = method
   )
+  class(result) <- "mia"
+  result
+}
+
+
+#' Print method for mia objects
+#'
+#' @param x an object of class "mia"
+#' @param ... additional arguments (ignored)
+#' @export
+print.mia <- function(x, ...) {
+  cat("Membership Inference Attack (MIA) Results\n")
+  cat("==========================================\n\n")
+  cat("  Method:     ", x$method, "\n")
+  cat("  Iterations: ", x[["num_eval_iter"]], "\n\n")
+  cat("  Precision:  ", sprintf("%.4f", x[["MIA precision"]]),
+      sprintf("(SE: %.4f)", x[["MIA precision se"]]), "\n")
+  cat("  Recall:     ", sprintf("%.4f", x[["MIA recall"]]),
+      sprintf("(SE: %.4f)", x[["MIA recall se"]]), "\n")
+  cat("  Macro F1:   ", sprintf("%.4f", x[["MIA macro F1"]]),
+      sprintf("(SE: %.4f)", x[["MIA macro F1 se"]]), "\n\n")
+  recall <- x[["MIA recall"]]
+  if (!is.na(recall)) {
+    if (recall > 0.6) {
+      cat("  Risk level: HIGH (recall substantially above 0.5 baseline)\n")
+    } else if (recall > 0.55) {
+      cat("  Risk level: MODERATE (recall moderately above 0.5 baseline)\n")
+    } else {
+      cat("  Risk level: LOW (recall near or below 0.5 baseline)\n")
+    }
+  }
+  invisible(x)
+}
+
+
+#' Summary method for mia objects
+#'
+#' @param object an object of class "mia"
+#' @param ... additional arguments (ignored)
+#' @return An object of class "summary.mia"
+#' @export
+summary.mia <- function(object, ...) {
+  summ <- list(
+    precision = object[["MIA precision"]],
+    precision_se = object[["MIA precision se"]],
+    recall = object[["MIA recall"]],
+    recall_se = object[["MIA recall se"]],
+    macro_f1 = object[["MIA macro F1"]],
+    macro_f1_se = object[["MIA macro F1 se"]],
+    num_eval_iter = object[["num_eval_iter"]],
+    method = object[["method"]],
+    recall_excess = object[["MIA recall"]] - 0.5
+  )
+  class(summ) <- "summary.mia"
+  summ
+}
+
+
+#' Print method for summary.mia objects
+#'
+#' @param x an object of class "summary.mia"
+#' @param ... additional arguments (ignored)
+#' @export
+print.summary.mia <- function(x, ...) {
+  cat("Summary: Membership Inference Attack (MIA)\n")
+  cat("============================================\n\n")
+
+  cat("Method:", x$method, "\n")
+  cat("Evaluation iterations:", x$num_eval_iter, "\n\n")
+
+  cat("Metrics (mean +/- SE):\n")
+  cat("  Precision: ", sprintf("%.4f +/- %.4f", x$precision, x$precision_se), "\n")
+  cat("  Recall:    ", sprintf("%.4f +/- %.4f", x$recall, x$recall_se), "\n")
+  cat("  Macro F1:  ", sprintf("%.4f +/- %.4f", x$macro_f1, x$macro_f1_se), "\n\n")
+
+  cat("Recall excess over baseline (0.5):", sprintf("%.4f", x$recall_excess), "\n")
+  if (!is.na(x$recall_excess)) {
+    if (x$recall_excess > 0.1) {
+      cat("Interpretation: Substantial memorisation detected.\n")
+    } else if (x$recall_excess > 0.05) {
+      cat("Interpretation: Moderate memorisation signal.\n")
+    } else if (x$recall_excess > 0) {
+      cat("Interpretation: Weak memorisation signal.\n")
+    } else {
+      cat("Interpretation: No memorisation detected (near or below baseline).\n")
+    }
+  }
+
+  invisible(x)
 }

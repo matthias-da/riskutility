@@ -49,3 +49,14 @@ information_surprisal(0.0001)
 Wagner, I., & Eckhoff, D. (2018). Technical Privacy Metrics: A Systematic Survey.
 ACM Computing Surveys, 51(3), Article 57. \doi{10.1145/3168389}
 }
+\seealso{
+Other information-theory: 
+\code{\link{Entropy}},
+\code{\link{EntropyMeasures}},
+\code{\link{max_info_leakage}()},
+\code{\link{mutualInformation}()},
+\code{\link{positive_information_disclosure}()},
+\code{\link{privacy_score}()},
+\code{\link{systemAnonymityLevel}()}
+}
+\concept{information-theory}

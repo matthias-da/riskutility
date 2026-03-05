@@ -58,3 +58,21 @@ jointXY <- matrix(c(0.1, 0.05, 0.05,
 mutualInformation(X, Y, jointXY, normalized = TRUE)
 
 }
+\references{
+Shannon, C.E. (1948). A Mathematical Theory of Communication.
+\emph{Bell System Technical Journal}, 27(3), 379--423.
+
+Cover, T.M. & Thomas, J.A. (2006). \emph{Elements of Information Theory}.
+2nd edition. Wiley-Interscience.
+}
+\seealso{
+Other information-theory: 
+\code{\link{Entropy}},
+\code{\link{EntropyMeasures}},
+\code{\link{information_surprisal}()},
+\code{\link{max_info_leakage}()},
+\code{\link{positive_information_disclosure}()},
+\code{\link{privacy_score}()},
+\code{\link{systemAnonymityLevel}()}
+}
+\concept{information-theory}

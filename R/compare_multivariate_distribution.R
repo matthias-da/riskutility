@@ -14,6 +14,8 @@
 #' @param weight_Y Optional. A character string specifying the sampling weight variable in Y (used only for method "mahalanobis").
 #' @param n_bins Numeric. The number of bins to use when discretizing variables for the mutual_information method. Default is 10.
 #'
+#' @param ... additional arguments passed to methods
+#'
 #' @return A list containing:
 #' \describe{
 #'   \item{distance}{The computed distance measure (Mahalanobis distance or Jensen-Shannon divergence).}
@@ -32,6 +34,7 @@
 #'
 #' @importFrom data.table as.data.table rbindlist
 #' @importFrom MASS ginv
+#' @family comparison
 #' @export
 #'
 #' @examples
@@ -65,9 +68,21 @@
 #' result_js <- compare_multivariate_distribution(X_nom, Y_nom, vars = c("gender", "region"),
 #'                                                method = "mutual_information", n_bins = 5)
 #' print(result_js)
-compare_multivariate_distribution <- function(X, Y, vars, method = "mahalanobis",
+compare_multivariate_distribution <- function(X, ...) {
+  UseMethod("compare_multivariate_distribution")
+}
+
+#' @rdname compare_multivariate_distribution
+#' @export
+compare_multivariate_distribution.synth_pair <- function(X, ...) {
+  compare_multivariate_distribution.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_multivariate_distribution
+#' @export
+compare_multivariate_distribution.default <- function(X, Y, vars, method = "mahalanobis",
                                               weight_X = NULL, weight_Y = NULL,
-                                              n_bins = 10) {
+                                              n_bins = 10, ...) {
   # Convert to data.table if necessary
   X <- as.data.table(X)
   Y <- as.data.table(Y)

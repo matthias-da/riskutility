@@ -75,6 +75,7 @@
 #'
 #' @author Matthias Templ
 #' @importFrom stats pchisq xtabs
+#' @family utility
 #' @export
 #' @examples
 #' # Create example data
@@ -120,8 +121,8 @@ chisq_utility.synth_pair <- function(X, vars = NULL, max_cells = 10000, ...) {
     Y = X$synthetic,
     vars = vars,
     max_cells = max_cells,
-    weight_X = X$weight_var,
-    weight_Y = X$weight_var,
+    weight_X = X$weight_original,
+    weight_Y = X$weight_synthetic,
     ...
   )
 }

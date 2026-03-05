@@ -47,6 +47,7 @@
 #' Mathematik, 136, 210-271.
 #'
 #' @author Matthias Templ
+#' @family utility
 #' @export
 #' @importFrom data.table as.data.table
 #' @importFrom stats xtabs complete.cases

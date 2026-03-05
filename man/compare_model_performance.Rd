@@ -2,19 +2,28 @@
 % Please edit documentation in R/compare_model_performance.R
 \name{compare_model_performance}
 \alias{compare_model_performance}
+\alias{compare_model_performance.synth_pair}
+\alias{compare_model_performance.default}
 \title{Compare Predictive Model Performance between Two Datasets}
 \usage{
-compare_model_performance(
+compare_model_performance(X, ...)
+
+\method{compare_model_performance}{synth_pair}(X, ...)
+
+\method{compare_model_performance}{default}(
   X,
   Y,
   formula,
   method = "rpart",
   metric = ifelse(is.factor(X[[as.character(formula[[2]])]]), "Accuracy", "RMSE"),
-  trControl = NULL
+  trControl = NULL,
+  ...
 )
 }
 \arguments{
 \item{X}{Original data.frame or data.table.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{Synthetic or anonymized data.frame or data.table.}
 
@@ -56,3 +65,23 @@ print(result$comparison)
 }
 }
 }
+\seealso{
+Other comparison: 
+\code{\link{ci_overlap}()},
+\code{\link{compare_boxplots}()},
+\code{\link{compare_chisq_gof}()},
+\code{\link{compare_correlation_matrices}()},
+\code{\link{compare_distributions_cont}()},
+\code{\link{compare_embedding}()},
+\code{\link{compare_feature_importance}()},
+\code{\link{compare_histograms}()},
+\code{\link{compare_ks_test}()},
+\code{\link{compare_means_frequencies}()},
+\code{\link{compare_missing_values}()},
+\code{\link{compare_multivariate_distribution}()},
+\code{\link{compare_multivariate_summary_statistics}()},
+\code{\link{compare_outliers}()},
+\code{\link{compare_pca}()},
+\code{\link{compare_wasserstein}()}
+}
+\concept{comparison}

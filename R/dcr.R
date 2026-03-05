@@ -95,7 +95,8 @@
 #' (e.g., 0.2-0.3) to maintain sufficient training data for comparison.
 #'
 #' @seealso \code{\link{nndr}} for nearest neighbor distance ratio,
-#'   \code{\link{ims}} for exact match detection
+#'   \code{\link{ims}} for exact match detection,
+#'   \code{\link{nnaa}} for nearest-neighbor adversarial accuracy
 #'
 #' @references
 #' Platzer, M. & Reutterer, T. (2021). Holdout-Based Empirical Assessment of
@@ -114,6 +115,7 @@
 #' \emph{Asian Conference on Machine Learning}.
 #'
 #' @author Matthias Templ
+#' @family distance-risk
 #' @export
 #' @importFrom VIM gowerD
 #' @importFrom stats complete.cases dist quantile sd wilcox.test median
@@ -200,6 +202,13 @@ dcr.default <- function(X, Y,
   }
   if (length(missing_Y) > 0) {
     stop(paste("Variables missing in Y:", paste(missing_Y, collapse = ", ")))
+  }
+
+  # Check variable types match
+  for (var in vars) {
+    if (!identical(class(X[[var]]), class(Y[[var]]))) {
+      stop(paste("Variable", var, "has different class in X and Y."))
+    }
   }
 
   # Subset to selected variables

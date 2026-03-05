@@ -46,7 +46,30 @@ if no cluster structure is present in the data.}
 (using a kNN from R package VIM).}
 }
 \value{
-Propensity score measures
+An S3 object of class \code{"propscore"} containing:
+\describe{
+\item{predictions}{Data frame of predicted propensity scores for all records.}
+\item{ps_ratio}{Propensity score ratio (mean propensity of synthetic / original).}
+\item{ps_score}{Propensity score statistic.}
+\item{cr}{Classification rate.}
+\item{mean_ps_x}{Mean propensity score for original records.}
+\item{mean_ps_y}{Mean propensity score for synthetic records.}
+\item{density_ratio}{Density ratio of propensity score distributions.}
+\item{density_ratio_bayes}{Bayesian density ratio.}
+\item{kl}{Kullback-Leibler divergence between propensity distributions.}
+\item{kl_bayes}{Bayesian KL divergence.}
+\item{mean_ratio}{Mean ratio of propensity densities.}
+\item{sd_ratio}{Standard deviation of density ratio.}
+\item{mean_ratio_bayes}{Mean Bayesian density ratio.}
+\item{sd_ratio_bayes}{Standard deviation of Bayesian density ratio.}
+\item{points}{Grid points used for density estimation.}
+\item{denX}{Density estimates for original data propensity scores.}
+\item{denY}{Density estimates for synthetic data propensity scores.}
+\item{bayesspace}{Logical, whether Bayesian space was used.}
+\item{n_x}{Number of original records.}
+\item{n_y}{Number of synthetic records.}
+\item{method}{Method used for propensity score estimation.}
+}
 }
 \description{
 How well can you predict if an observation is from which data set?
@@ -113,6 +136,19 @@ propscore(eusilc13puf, eusilc13puf_synth, na = "remove", cluster = "db030",
 Templ, M. Statistical Disclosure Control for Microdata: Methods and Applications in R.
 \emph{Springer International Publishing}, 287 pages, 2017. ISBN 978-3-319-50272-4. \doi{10.1007/978-3-319-50272-4}
 }
+\seealso{
+Other utility: 
+\code{\link{chisq_utility}()},
+\code{\link{ci_proximity}()},
+\code{\link{energy_distance}()},
+\code{\link{gower}()},
+\code{\link{hellinger}()},
+\code{\link{mqs}()},
+\code{\link{pMSE}()},
+\code{\link{rumap}()},
+\code{\link{specks}()}
+}
 \author{
 Matthias Templ
 }
+\concept{utility}

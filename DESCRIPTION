@@ -20,7 +20,7 @@ Description: Provides comprehensive methods to measure disclosure risk and data
     tests. Methods are based on Taub et al. (2018) <doi:10.1007/978-3-319-99771-1_9>
     and related literature. Designed for integration with 'simPop' S4 classes.
 Depends:
-    R (>= 3.5.0)
+    R (>= 4.1.0)
 Imports:
     ggplot2,
     data.table,
@@ -28,11 +28,11 @@ Imports:
     VIM,
     randomForest,
     reshape2,
-    simPop,
     stats,
     graphics,
     utils
 Suggests:
+    simPop,
     synthpop,
     caretEnsemble,
     fastshap,

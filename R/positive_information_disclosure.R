@@ -35,6 +35,7 @@
 #' pid <- positive_information_disclosure(prior, posterior)
 #' if (pid > 1) message("Privacy risk detected: PID > 1")
 #'
+#' @family information-theory
 #' @export
 positive_information_disclosure <- function(prior, posterior) {
   if (!is.numeric(prior) || !is.numeric(posterior)) {

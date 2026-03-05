@@ -297,7 +297,14 @@ Visualization for Synthetic Data. \emph{Journal of Official Statistics}.
 \seealso{
 \code{\link{dcap}}, \code{\link{tcap}} for attribution-based metrics,
 \code{\link{disclosure_report}} for comprehensive risk assessment
+
+Other rapid: 
+\code{\link{confint.rapid}()},
+\code{\link{rapid_synthesizer_cv}()},
+\code{\link{rapid_test}()},
+\code{\link{rapid_threshold_select}()}
 }
 \author{
 Oscar Thees, Matthias Templ
 }
+\concept{rapid}

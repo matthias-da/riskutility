@@ -9,9 +9,12 @@
 #' @param metric Metric for model tuning (default 'Accuracy' for classification, 'RMSE' for regression).
 #' @param trControl trainControl object from `caret` specifying cross-validation strategy (default 10-fold CV).
 #'
+#' @param ... additional arguments passed to methods
+#'
 #' @return List containing trained models, performance metrics for X and Y, and comparison results.
 #'
 #' @importFrom data.table as.data.table
+#' @family comparison
 #' @export
 #'
 #' @examples
@@ -38,9 +41,21 @@
 #' }
 #' }
 
-compare_model_performance <- function(X, Y, formula, method = 'rpart',
+compare_model_performance <- function(X, ...) {
+  UseMethod("compare_model_performance")
+}
+
+#' @rdname compare_model_performance
+#' @export
+compare_model_performance.synth_pair <- function(X, ...) {
+  compare_model_performance.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_model_performance
+#' @export
+compare_model_performance.default <- function(X, Y, formula, method = 'rpart',
                                       metric = ifelse(is.factor(X[[as.character(formula[[2]])]]), "Accuracy", "RMSE"),
-                                      trControl = NULL) {
+                                      trControl = NULL, ...) {
 
   if (!requireNamespace("caret", quietly = TRUE)) {
     stop("Package 'caret' is required for compare_model_performance(). Please install it.")

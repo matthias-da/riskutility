@@ -2,12 +2,20 @@
 % Please edit documentation in R/compare_ks_test.R
 \name{compare_ks_test}
 \alias{compare_ks_test}
+\alias{compare_ks_test.synth_pair}
+\alias{compare_ks_test.default}
 \title{Compare Distributions using the Kolmogorov-Smirnov Test}
 \usage{
-compare_ks_test(X, Y, num_var, cat_vars = NULL)
+compare_ks_test(X, ...)
+
+\method{compare_ks_test}{synth_pair}(X, ...)
+
+\method{compare_ks_test}{default}(X, Y, num_var, cat_vars = NULL, ...)
 }
 \arguments{
 \item{X}{A data.frame or data.table containing the original dataset.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{A data.frame or data.table containing the anonymized/synthetic dataset.}
 
@@ -49,3 +57,23 @@ compare_ks_test(X, Y, num_var = "income")
 compare_ks_test(X, Y, num_var = "income", cat_vars = c("gender"))
 compare_ks_test(X, Y, num_var = "income", cat_vars = c("gender","region"))
 }
+\seealso{
+Other comparison: 
+\code{\link{ci_overlap}()},
+\code{\link{compare_boxplots}()},
+\code{\link{compare_chisq_gof}()},
+\code{\link{compare_correlation_matrices}()},
+\code{\link{compare_distributions_cont}()},
+\code{\link{compare_embedding}()},
+\code{\link{compare_feature_importance}()},
+\code{\link{compare_histograms}()},
+\code{\link{compare_means_frequencies}()},
+\code{\link{compare_missing_values}()},
+\code{\link{compare_model_performance}()},
+\code{\link{compare_multivariate_distribution}()},
+\code{\link{compare_multivariate_summary_statistics}()},
+\code{\link{compare_outliers}()},
+\code{\link{compare_pca}()},
+\code{\link{compare_wasserstein}()}
+}
+\concept{comparison}

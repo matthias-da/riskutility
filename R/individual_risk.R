@@ -64,6 +64,7 @@
 #'
 #' @author Matthias Templ
 #' @importFrom stats poisson glm predict as.formula
+#' @family privacy-models
 #' @export
 #' @examples
 #' # Create example data
@@ -103,7 +104,7 @@ individual_risk.synth_pair <- function(X, threshold = 0.1, ...) {
   individual_risk.default(
     X = X$synthetic,
     key_vars = X$key_vars,
-    weight = X$weight_var,
+    weight = X$weight_synthetic,
     threshold = threshold,
     ...
   )

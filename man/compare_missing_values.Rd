@@ -2,12 +2,20 @@
 % Please edit documentation in R/compare_missing_values.R
 \name{compare_missing_values}
 \alias{compare_missing_values}
+\alias{compare_missing_values.synth_pair}
+\alias{compare_missing_values.default}
 \title{Compare Missing Value Patterns Between Original and Synthetic Data}
 \usage{
-compare_missing_values(X, Y, method = "percentage")
+compare_missing_values(X, ...)
+
+\method{compare_missing_values}{synth_pair}(X, ...)
+
+\method{compare_missing_values}{default}(X, Y, method = "percentage", ...)
 }
 \arguments{
 \item{X}{A data frame or matrix of original data.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{A data frame or matrix of synthetic/anonymized data with the same structure as \code{X}.}
 
@@ -56,3 +64,23 @@ Both \code{X} and \code{Y} should be numeric data frames or matrices with the sa
 }
 
 }
+\seealso{
+Other comparison: 
+\code{\link{ci_overlap}()},
+\code{\link{compare_boxplots}()},
+\code{\link{compare_chisq_gof}()},
+\code{\link{compare_correlation_matrices}()},
+\code{\link{compare_distributions_cont}()},
+\code{\link{compare_embedding}()},
+\code{\link{compare_feature_importance}()},
+\code{\link{compare_histograms}()},
+\code{\link{compare_ks_test}()},
+\code{\link{compare_means_frequencies}()},
+\code{\link{compare_model_performance}()},
+\code{\link{compare_multivariate_distribution}()},
+\code{\link{compare_multivariate_summary_statistics}()},
+\code{\link{compare_outliers}()},
+\code{\link{compare_pca}()},
+\code{\link{compare_wasserstein}()}
+}
+\concept{comparison}

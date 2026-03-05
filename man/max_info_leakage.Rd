@@ -49,3 +49,14 @@ max_info_leakage(joint_prob)
 \references{
 Wagner, I., & Eckhoff, D. (2018). Technical Privacy Metrics: A Systematic Survey. ACM Computing Surveys (CSUR), 51(3), Article 57.
 }
+\seealso{
+Other information-theory: 
+\code{\link{Entropy}},
+\code{\link{EntropyMeasures}},
+\code{\link{information_surprisal}()},
+\code{\link{mutualInformation}()},
+\code{\link{positive_information_disclosure}()},
+\code{\link{privacy_score}()},
+\code{\link{systemAnonymityLevel}()}
+}
+\concept{information-theory}

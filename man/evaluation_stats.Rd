@@ -40,6 +40,10 @@ mse(x, y)
 rmse(x, y)
 ait(x, y)
 }
+\seealso{
+\code{\link{rapid}}
+}
 \author{
 Matthias Templ
 }
+\concept{evaluation}

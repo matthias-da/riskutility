@@ -50,4 +50,12 @@ result_repu <- repu(X, Y)
 }
 \seealso{
 \code{\link{ims}} for identical match share
+
+Other distance-risk: 
+\code{\link{dcr}()},
+\code{\link{hitting_rate}()},
+\code{\link{ims}()},
+\code{\link{nnaa}()},
+\code{\link{nndr}()}
 }
+\concept{distance-risk}

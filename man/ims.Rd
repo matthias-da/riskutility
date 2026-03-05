@@ -101,7 +101,15 @@ MOSTLY AI (2024). Evaluate generator quality.
 \code{\link{dcr}} for distance to closest record,
 \code{\link{nndr}} for nearest neighbor distance ratio,
 \code{\link{disco}} for disclosive records with matching target values
+
+Other distance-risk: 
+\code{\link{dcr}()},
+\code{\link{hitting_rate}()},
+\code{\link{nnaa}()},
+\code{\link{nndr}()},
+\code{\link{repu}()}
 }
 \author{
 Matthias Templ
 }
+\concept{distance-risk}

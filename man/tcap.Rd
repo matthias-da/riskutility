@@ -194,7 +194,13 @@ Attribution Probability for Synthetic Data: An Exploration.
 \seealso{
 \code{\link{dcap}} for the differential measure comparing to baseline,
 \code{\link{weap}} for within equivalence class attribution probability
+
+Other attribution-risk: 
+\code{\link{dcap}()},
+\code{\link{disco}()},
+\code{\link{weap}()}
 }
 \author{
 Matthias Templ
 }
+\concept{attribution-risk}

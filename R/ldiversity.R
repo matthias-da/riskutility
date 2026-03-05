@@ -50,6 +50,7 @@
 #' }
 #'
 #' @seealso \code{\link{kanonymity}} for k-anonymity assessment,
+#'   \code{\link{tcloseness}} for t-closeness assessment,
 #'   \code{\link{tcap}} for targeted correct attribution probability
 #'
 #' @references
@@ -58,6 +59,7 @@
 #' \emph{ACM Transactions on Knowledge Discovery from Data}, 1(1), Article 3.
 #'
 #' @author Matthias Templ
+#' @family privacy-models
 #' @export
 #' @examples
 #' # Create example data

@@ -60,15 +60,41 @@ No model refitting is needed.}
 }
 }
 \examples{
-\dontrun{
-r <- rapid(original, synthetic, key_vars = c("age", "sex"),
-           target_var = "income", model_type = "rf")
-confint(r)                          # Wilson (default)
-confint(r, method = "wald")         # Wald
-confint(r, method = "bootstrap")    # Bootstrap percentile
+# Small runnable example
+set.seed(42)
+X <- data.frame(
+  age = sample(20:60, 80, replace = TRUE),
+  sex = sample(c("M", "F"), 80, replace = TRUE),
+  income = rnorm(80, 50000, 10000)
+)
+Y <- X
+Y$income <- Y$income + rnorm(80, 0, 5000)
+r <- rapid(X, Y, key_vars = c("age", "sex"),
+           target_var = "income", model_type = "lm")
+confint(r)
+confint(r, method = "wald")
+
+\donttest{
+# With random forest model and bootstrap CI
+r2 <- rapid(X, Y, key_vars = c("age", "sex"),
+            target_var = "income", model_type = "rf")
+confint(r2)
+confint(r2, method = "bootstrap", n_bootstrap = 500)
 }
 
 }
+\references{
+Wilson, E.B. (1927). Probable Inference, the Law of Succession, and
+Statistical Inference. \emph{Journal of the American Statistical Association},
+22(158), 209--212.
+}
 \seealso{
 \code{\link{rapid}}, \code{\link{rapid_test}}
+
+Other rapid: 
+\code{\link{rapid}()},
+\code{\link{rapid_synthesizer_cv}()},
+\code{\link{rapid_test}()},
+\code{\link{rapid_threshold_select}()}
 }
+\concept{rapid}

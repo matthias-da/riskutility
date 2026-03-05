@@ -40,6 +40,7 @@
 #' joint_prob <- prop.table(joint_table)
 #' max_info_leakage(joint_prob)
 #'
+#' @family information-theory
 #' @export
 max_info_leakage <- function(joint_dist) {
   if (!is.matrix(joint_dist)) stop("joint_dist must be a matrix")

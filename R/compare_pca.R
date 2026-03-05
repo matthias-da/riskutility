@@ -14,6 +14,8 @@
 #' @param side_by_side Logical. If TRUE, separate PCA biplots are produced for X and Y and arranged side by side.
 #'        If FALSE (default), a combined PCA biplot is produced with separate loadings for X and Y.
 #'
+#' @param ... additional arguments passed to methods
+#'
 #' @return A list with two elements:
 #' \describe{
 #'   \item{pca}{If side_by_side = FALSE, a list with three PCA objects: combined, X, and Y.
@@ -29,6 +31,7 @@
 #' @importFrom data.table as.data.table rbindlist
 #' @importFrom stats prcomp
 #' @importFrom ggplot2 ggplot aes geom_point geom_segment geom_text labs theme_minimal scale_color_manual
+#' @family comparison
 #' @export
 #'
 #' @examples
@@ -45,7 +48,9 @@
 #' )
 #' Y$expenses <- Y$income * 0.5 + rnorm(n = 1000, mean = 1000, sd = 500)
 #' # Combined PCA biplot with separate loadings for X (blue) and Y (red)
-#' res_combined <- compare_pca(X, Y, vars = c("income", "age", "expenses"), biplot = TRUE, side_by_side = FALSE)
+#' res_combined <- compare_pca(X, Y,
+#'   vars = c("income", "age", "expenses"),
+#'   biplot = TRUE, side_by_side = FALSE)
 #' print(res_combined$pca)
 #' print(res_combined$plot)
 #'
@@ -53,7 +58,19 @@
 #' res_separate <- compare_pca(X, Y, vars = c("income", "age"), biplot = TRUE, side_by_side = TRUE)
 #' print(res_separate$pca)
 #' print(res_separate$plot)
-compare_pca <- function(X, Y, vars, center = TRUE, scale = TRUE, biplot = TRUE, side_by_side = FALSE) {
+compare_pca <- function(X, ...) {
+  UseMethod("compare_pca")
+}
+
+#' @rdname compare_pca
+#' @export
+compare_pca.synth_pair <- function(X, ...) {
+  compare_pca.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_pca
+#' @export
+compare_pca.default <- function(X, Y, vars, center = TRUE, scale = TRUE, biplot = TRUE, side_by_side = FALSE, ...) {
   create_biplot_arrows <- function(pca_result, scores_df) {
     arrow_multiplier <- min(
       (max(scores_df$PC1) - min(scores_df$PC1)) / (max(pca_result$rotation[, 1]) - min(pca_result$rotation[, 1])),

@@ -99,7 +99,23 @@ A Recursive Search Algorithm for Statistical Disclosure Assessment.
 \seealso{
 \code{\link{kanonymity}} for k-anonymity assessment,
 \code{\link{individual_risk}} for probabilistic risk measures
+
+Other privacy-models: 
+\code{\link{attacker_risk}()},
+\code{\link{delta_presence}()},
+\code{\link{domias}()},
+\code{\link{drisk}()},
+\code{\link{epsilon_identifiability}()},
+\code{\link{individual_risk}()},
+\code{\link{kanonymity}()},
+\code{\link{ldiversity}()},
+\code{\link{linkability}()},
+\code{\link{population_uniqueness}()},
+\code{\link{recordLinkage}()},
+\code{\link{singling_out}()},
+\code{\link{tcloseness}()}
 }
 \author{
 Matthias Templ
 }
+\concept{privacy-models}

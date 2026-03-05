@@ -2,9 +2,15 @@
 % Please edit documentation in R/compare_wasserstein.R
 \name{compare_wasserstein}
 \alias{compare_wasserstein}
+\alias{compare_wasserstein.synth_pair}
+\alias{compare_wasserstein.default}
 \title{Compare Distributions using the Wasserstein Distance}
 \usage{
-compare_wasserstein(
+compare_wasserstein(X, ...)
+
+\method{compare_wasserstein}{synth_pair}(X, ...)
+
+\method{compare_wasserstein}{default}(
   X,
   Y,
   num_var,
@@ -12,11 +18,14 @@ compare_wasserstein(
   weight_X = NULL,
   weight_Y = NULL,
   var_type = "auto",
-  n_grid = 1000
+  n_grid = 1000,
+  ...
 )
 }
 \arguments{
 \item{X}{A data.frame or data.table containing the original dataset.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{A data.frame or data.table containing the anonymized/synthetic dataset.}
 
@@ -99,3 +108,23 @@ result_nominal <- compare_wasserstein(X_nom, Y_nom, num_var = "gender",
 print(result_nominal)
 
 }
+\seealso{
+Other comparison: 
+\code{\link{ci_overlap}()},
+\code{\link{compare_boxplots}()},
+\code{\link{compare_chisq_gof}()},
+\code{\link{compare_correlation_matrices}()},
+\code{\link{compare_distributions_cont}()},
+\code{\link{compare_embedding}()},
+\code{\link{compare_feature_importance}()},
+\code{\link{compare_histograms}()},
+\code{\link{compare_ks_test}()},
+\code{\link{compare_means_frequencies}()},
+\code{\link{compare_missing_values}()},
+\code{\link{compare_model_performance}()},
+\code{\link{compare_multivariate_distribution}()},
+\code{\link{compare_multivariate_summary_statistics}()},
+\code{\link{compare_outliers}()},
+\code{\link{compare_pca}()}
+}
+\concept{comparison}

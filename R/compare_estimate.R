@@ -9,6 +9,7 @@
 #' @param R number of bootstrap replicates
 #' @importFrom stats median
 #' @importFrom stats quantile
+#' @family comparison
 #' @export
 #' @rdname ci_overlap
 #' @return A list with the following elements:

@@ -2,6 +2,7 @@
 % Please edit documentation in R/rapid_test.R
 \name{rapid_test}
 \alias{rapid_test}
+\alias{print.rapid_test}
 \title{Permutation Test for RAPID Disclosure Risk}
 \usage{
 rapid_test(
@@ -22,6 +23,8 @@ rapid_test(
   verbose = FALSE,
   ...
 )
+
+\method{print}{rapid_test}(x, ...)
 }
 \arguments{
 \item{original_data}{A data frame of original (confidential) records.}
@@ -63,7 +66,9 @@ or \code{"absolute"}); see \code{\link{rapid}}.}
 
 \item{verbose}{Logical; print progress?}
 
-\item{...}{Additional arguments passed to the model fitting function.}
+\item{...}{additional arguments (ignored)}
+
+\item{x}{an object of class \code{"rapid_test"}}
 }
 \value{
 An object of class \code{"rapid_test"} with components:
@@ -91,16 +96,44 @@ quasi-identifiers; each permutation only re-evaluates the risk score
 against shuffled labels, making the test computationally efficient.
 }
 \examples{
-\dontrun{
-res <- rapid_test(original, synthetic,
-                  quasi_identifiers = c("age", "sex", "region"),
+# Small runnable example with few permutations
+set.seed(42)
+X <- data.frame(
+  age = sample(20:60, 80, replace = TRUE),
+  sex = sample(c("M", "F"), 80, replace = TRUE),
+  income = rnorm(80, 50000, 10000)
+)
+Y <- X
+Y$income <- Y$income + rnorm(80, 0, 5000)
+res <- rapid_test(X, Y,
+                  quasi_identifiers = c("age", "sex"),
                   sensitive_attribute = "income",
-                  model_type = "rf", n_permutations = 199)
+                  model_type = "lm", n_permutations = 9)
 print(res)
+
+\donttest{
+# With more permutations and random forest
+res2 <- rapid_test(X, Y,
+                   quasi_identifiers = c("age", "sex"),
+                   sensitive_attribute = "income",
+                   model_type = "rf", n_permutations = 199)
+print(res2)
 }
 
+}
+\references{
+Thees, O., Mueller, N., & Templ, M. (2026). Beyond the Trade-off Curve:
+Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and
+Synthetic Data. \emph{Journal of Official Statistics}.
 }
 \seealso{
 \code{\link{rapid}}, \code{\link[=confint.rapid]{confint}},
 \code{\link{rapid_threshold_select}}
+
+Other rapid: 
+\code{\link{confint.rapid}()},
+\code{\link{rapid}()},
+\code{\link{rapid_synthesizer_cv}()},
+\code{\link{rapid_threshold_select}()}
 }
+\concept{rapid}

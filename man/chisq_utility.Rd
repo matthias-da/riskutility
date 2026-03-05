@@ -125,7 +125,19 @@ and the square root. \emph{Annals of Mathematical Statistics}, 21, 607-611.
 \seealso{
 \code{\link{propscore}} for propensity score utility,
 \code{\link{specks}} for SPECKS utility measure
+
+Other utility: 
+\code{\link{ci_proximity}()},
+\code{\link{energy_distance}()},
+\code{\link{gower}()},
+\code{\link{hellinger}()},
+\code{\link{mqs}()},
+\code{\link{pMSE}()},
+\code{\link{propscore}()},
+\code{\link{rumap}()},
+\code{\link{specks}()}
 }
 \author{
 Matthias Templ
 }
+\concept{utility}

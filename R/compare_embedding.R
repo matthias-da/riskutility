@@ -14,10 +14,13 @@
 #' @param seed Integer: random seed for reproducibility of stochastic methods (t-SNE, UMAP).
 #'   Default NULL uses current random state.
 #'
+#' @param ... additional arguments passed to methods
+#'
 #' @return A list containing the embeddings and a ggplot2 visualization.
 #' @importFrom MASS sammon
 #' @import ggplot2
 #' @import data.table
+#' @family comparison
 #' @export
 #'
 #' @examples
@@ -49,7 +52,19 @@
 #'                                 method = 'umap')
 #' }
 #' }
-compare_embedding <- function(X, Y, vars, method = 'tsne', perplexity = 30, n_neighbors = 15, side_by_side = FALSE, seed = NULL) {
+compare_embedding <- function(X, ...) {
+  UseMethod("compare_embedding")
+}
+
+#' @rdname compare_embedding
+#' @export
+compare_embedding.synth_pair <- function(X, ...) {
+  compare_embedding.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_embedding
+#' @export
+compare_embedding.default <- function(X, Y, vars, method = 'tsne', perplexity = 30, n_neighbors = 15, side_by_side = FALSE, seed = NULL, ...) {
   # Set seed for reproducibility of stochastic methods
   if (!is.null(seed)) set.seed(seed)
 

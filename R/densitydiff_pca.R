@@ -216,6 +216,36 @@ utils::globalVariables(c("x", "y"))
 
 NULL
 
+
+#' Print method for denpca objects
+#'
+#' @param x an object of class "denpca"
+#' @param ... additional arguments (ignored)
+#' @export
+print.denpca <- function(x, ...) {
+  cat("Density Ratio Comparison (PCA-based)\n")
+  cat("====================================\n\n")
+  if (is.list(x) && !is.null(x$kl)) {
+    n_pc <- length(x$kl)
+    cat("  Principal components:", n_pc, "\n")
+    for (i in seq_len(n_pc)) {
+      cat(sprintf("  PC%d: KL = %.4f, JSD = %.4f, mean ratio = %.4f\n",
+                  i, x$kl[i], x$jsd[i], x$mean_ratio[i]))
+    }
+  } else {
+    cat("  Stratified result with", length(x), "strata\n")
+    for (i in seq_along(x)) {
+      cat(sprintf("  Stratum %d: KL = [%s], JSD = [%s]\n",
+                  i,
+                  paste(sprintf("%.4f", x[[i]]$kl), collapse = ", "),
+                  paste(sprintf("%.4f", x[[i]]$jsd), collapse = ", ")))
+    }
+  }
+  cat("\n")
+  invisible(x)
+}
+
+
 #' Plot method for denpca objects
 #'
 #' This function plots objects of class \code{denpca}.

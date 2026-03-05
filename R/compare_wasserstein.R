@@ -19,11 +19,14 @@
 #'        Default is "auto", which infers "continuous" if the variable is numeric, else "nominal".
 #' @param n_grid Number of grid points for quantile approximation (for continuous variables). Default is 1000.
 #'
+#' @param ... additional arguments passed to methods
+#'
 #' @return A data.table with the computed Wasserstein distance for each group (or overall if no grouping is provided).
 #'         For continuous variables, the Wasserstein distance is approximated by the mean absolute difference between the
 #'         quantile functions. For nominal variables, the result is the total variation distance.
 #'
 #' @importFrom data.table as.data.table rbindlist
+#' @family comparison
 #' @export
 #'
 #' @examples
@@ -75,9 +78,21 @@
 #'
 #' print(result_nominal)
 #'
-compare_wasserstein <- function(X, Y, num_var, cat_vars = NULL,
+compare_wasserstein <- function(X, ...) {
+  UseMethod("compare_wasserstein")
+}
+
+#' @rdname compare_wasserstein
+#' @export
+compare_wasserstein.synth_pair <- function(X, ...) {
+  compare_wasserstein.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_wasserstein
+#' @export
+compare_wasserstein.default <- function(X, Y, num_var, cat_vars = NULL,
                                 weight_X = NULL, weight_Y = NULL,
-                                var_type = "auto", n_grid = 1000) {
+                                var_type = "auto", n_grid = 1000, ...) {
   # Convert datasets to data.table (use copy to avoid side effects)
   X <- copy(as.data.table(X))
   Y <- copy(as.data.table(Y))

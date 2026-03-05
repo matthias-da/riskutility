@@ -141,7 +141,19 @@ General and specific utility measures for synthetic data.
 \seealso{
 \code{\link{propscore}} for related propensity score utility,
 \code{\link{compare_distributions_cont}} for distributional comparisons
+
+Other utility: 
+\code{\link{chisq_utility}()},
+\code{\link{ci_proximity}()},
+\code{\link{energy_distance}()},
+\code{\link{gower}()},
+\code{\link{hellinger}()},
+\code{\link{mqs}()},
+\code{\link{pMSE}()},
+\code{\link{propscore}()},
+\code{\link{rumap}()}
 }
 \author{
 Matthias Templ
 }
+\concept{utility}

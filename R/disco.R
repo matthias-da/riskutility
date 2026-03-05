@@ -81,6 +81,7 @@
 #' improving the utility of synthetic data. \emph{arXiv preprint arXiv:2109.12717}.
 #'
 #' @author Matthias Templ
+#' @family attribution-risk
 #' @export
 #' @importFrom VIM gowerD
 #' @importFrom stats complete.cases
@@ -174,6 +175,13 @@ disco.default <- function(X, Y,
   }
   if (length(missing_Y) > 0) {
     stop(paste("Variables missing in Y:", paste(missing_Y, collapse = ", ")))
+  }
+
+  # Check variable types match
+  for (var in all_vars) {
+    if (!identical(class(X[[var]]), class(Y[[var]]))) {
+      stop(paste("Variable", var, "has different class in X and Y."))
+    }
   }
 
   # Handle missing values

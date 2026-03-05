@@ -2,9 +2,15 @@
 % Please edit documentation in R/disclosure_report.R
 \name{disclosure_report}
 \alias{disclosure_report}
+\alias{disclosure_report.synth_pair}
+\alias{disclosure_report.default}
 \title{Comprehensive Disclosure Risk Report}
 \usage{
-disclosure_report(
+disclosure_report(X, ...)
+
+\method{disclosure_report}{synth_pair}(X, ...)
+
+\method{disclosure_report}{default}(
   X,
   Y,
   key_vars = NULL,
@@ -17,11 +23,14 @@ disclosure_report(
   rapid_model = "rf",
   na.rm = TRUE,
   seed = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  ...
 )
 }
 \arguments{
 \item{X}{data frame of original data}
+
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{data frame of synthetic data}
 

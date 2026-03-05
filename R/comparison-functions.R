@@ -1,8 +1,45 @@
-#' Tools for Comparing Original and Synthetic/Anonymized Datasets
+#' riskutility: Disclosure Risk and Data Utility for Anonymized and Synthetic Data
 #'
-#' Provides a comprehensive set of tools to assess similarity between an original dataset (X)
-#' and its synthetic or anonymized counterpart (Y). Includes visualization, statistical tests,
-#' dimensionality reduction, multivariate analyses, feature importance, and predictive model comparisons.
+#' Provides a comprehensive toolkit for measuring disclosure risk and data utility
+#' in anonymized and synthetic datasets. The package supports multivariate
+#' Risk-Utility (R-U) evaluation following the framework described in
+#' "Beyond the Trade-off Curve" (Thees, Mueller, Templ 2026).
+#'
+#' The package covers the following metric families:
+#'
+#' \strong{Attribution-based risk:} CAP-family measures (\code{\link{dcap}},
+#' \code{\link{tcap}}, \code{\link{weap}}, \code{\link{disco}}) that assess
+#' whether adversaries can infer sensitive attributes from quasi-identifiers.
+#'
+#' \strong{ML-based risk:} The \code{\link{rapid}} metric uses machine learning
+#' models to predict sensitive attributes, capturing complex non-linear
+#' relationships that CAP methods may miss.
+#'
+#' \strong{Distance-based risk:} Holdout-based metrics (\code{\link{dcr}},
+#' \code{\link{nndr}}, \code{\link{ims}}) detect memorization by comparing
+#' distances to training vs. holdout data.
+#'
+#' \strong{Utility measures:} Functions for assessing how well synthetic data
+#' preserves the statistical properties of the original, including
+#' \code{\link{pMSE}}, \code{\link{specks}}, \code{\link{hellinger}},
+#' \code{\link{energy_distance}}, \code{\link{ci_proximity}},
+#' \code{\link{propscore}}, \code{\link{gower}}, and \code{\link{mqs}}.
+#'
+#' \strong{Privacy models:} Classical privacy model assessments including
+#' \code{\link{kanonymity}}, \code{\link{ldiversity}},
+#' \code{\link{individual_risk}}, and \code{\link{suda}}.
+#'
+#' \strong{Information-theoretic measures:} Entropy and divergence measures
+#' (\code{\link{KLDiv}}, \code{\link{JSDiv}}, \code{\link{RenyiEntropy}},
+#' \code{\link{mutualInformation}}, \code{\link{information_surprisal}},
+#' \code{\link{max_info_leakage}}) for quantifying information leakage.
+#'
+#' \strong{Comparison functions:} Direct comparison tools for original and
+#' synthetic data including visualization, statistical tests, dimensionality
+#' reduction, and predictive model comparisons.
+#'
+#' \strong{R-U mapping:} The \code{\link{rumap}} function provides comprehensive
+#' multivariate Risk-Utility evaluation with Pareto frontier identification.
 #'
 #' @section Visualization Functions:
 #' \describe{
@@ -84,5 +121,4 @@
 #'                        vars = c("income", "age", "expenditure"),
 #'                        biplot = TRUE)
 #'
-#' @keywords internal
 "_PACKAGE"

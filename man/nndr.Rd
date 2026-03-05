@@ -130,8 +130,17 @@ Lowe, D.G. (2004). Distinctive Image Features from Scale-Invariant Keypoints.
 }
 \seealso{
 \code{\link{dcr}} for distance to closest record,
-\code{\link{ims}} for exact match detection
+\code{\link{ims}} for exact match detection,
+\code{\link{nnaa}} for nearest-neighbor adversarial accuracy
+
+Other distance-risk: 
+\code{\link{dcr}()},
+\code{\link{hitting_rate}()},
+\code{\link{ims}()},
+\code{\link{nnaa}()},
+\code{\link{repu}()}
 }
 \author{
 Matthias Templ
 }
+\concept{distance-risk}

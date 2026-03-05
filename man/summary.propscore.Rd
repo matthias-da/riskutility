@@ -11,6 +11,23 @@
 
 \item{...}{additional arguments passed to the summary method}
 }
+\value{
+An object of class \code{summary.propscore} with the following components:
+\describe{
+\item{ps_score}{The propensity score statistic (pMSE).}
+\item{ps_ratio}{Ratio of predictions below vs above the class ratio.}
+\item{cr}{Class ratio (proportion of synthetic records in the combined set).}
+\item{mean_ps_x}{Mean predicted propensity for original records.}
+\item{mean_ps_y}{Mean predicted propensity for synthetic records.}
+\item{kl}{KL divergence between propensity density estimates.}
+\item{kl_bayes}{KL divergence in Bayes (log-ratio) space.}
+\item{mean_ratio}{Mean density ratio.}
+\item{sd_ratio}{Standard deviation of density ratio.}
+\item{n_x}{Number of original records.}
+\item{n_y}{Number of synthetic records.}
+\item{method}{Method used for propensity estimation.}
+}
+}
 \description{
 Summary method for propscore objects
 }

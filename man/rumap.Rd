@@ -2,9 +2,15 @@
 % Please edit documentation in R/rumap.R
 \name{rumap}
 \alias{rumap}
+\alias{rumap.synth_pair}
+\alias{rumap.default}
 \title{Multivariate Risk-Utility Map (RU-Map)}
 \usage{
-rumap(
+rumap(original, ...)
+
+\method{rumap}{synth_pair}(original, ...)
+
+\method{rumap}{default}(
   original,
   synthetic,
   risk_measures = c("dcap", "tcap", "disco", "ims", "repu"),
@@ -18,11 +24,14 @@ rumap(
   num_vars = NULL,
   normalize = TRUE,
   seed = NULL,
-  na.rm = TRUE
+  na.rm = TRUE,
+  ...
 )
 }
 \arguments{
 \item{original}{A data.frame containing the original dataset.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{synthetic}{A data.frame or named list of data.frames containing synthetic dataset(s).
 If a named list, each element is treated as a different synthetic data generator (SDG).}
@@ -159,7 +168,19 @@ Synthetic Data. Journal of Official Statistics.
 \code{\link{plot.rumap}} for visualization options,
 \code{\link{dcap}}, \code{\link{tcap}}, \code{\link{disco}}, \code{\link{ims}},
 \code{\link{propscore}}, \code{\link{hellinger}}, \code{\link{energy_distance}}
+
+Other utility: 
+\code{\link{chisq_utility}()},
+\code{\link{ci_proximity}()},
+\code{\link{energy_distance}()},
+\code{\link{gower}()},
+\code{\link{hellinger}()},
+\code{\link{mqs}()},
+\code{\link{pMSE}()},
+\code{\link{propscore}()},
+\code{\link{specks}()}
 }
 \author{
 Matthias Templ
 }
+\concept{utility}

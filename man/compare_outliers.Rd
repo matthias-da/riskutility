@@ -2,12 +2,20 @@
 % Please edit documentation in R/compare_outliers.R
 \name{compare_outliers}
 \alias{compare_outliers}
+\alias{compare_outliers.synth_pair}
+\alias{compare_outliers.default}
 \title{Compare Outlier Detection Between Original and Synthetic Data}
 \usage{
-compare_outliers(X, Y, method = "zscore", threshold = NULL, ...)
+compare_outliers(X, ...)
+
+\method{compare_outliers}{synth_pair}(X, ...)
+
+\method{compare_outliers}{default}(X, Y, method = "zscore", threshold = NULL, ...)
 }
 \arguments{
 \item{X}{A data frame or matrix of original data with numeric columns.}
+
+\item{...}{additional arguments passed to the underlying method (e.g., \code{eps} and \code{minPts} for DBSCAN).}
 
 \item{Y}{A data frame or matrix of anonymized/synthetic data with the same structure as \code{X}.}
 
@@ -15,8 +23,6 @@ compare_outliers(X, Y, method = "zscore", threshold = NULL, ...)
 
 \item{threshold}{Numeric. For \code{"zscore"}, the absolute z-score cutoff (default = 3). For \code{"robust"},
 the significance level for the chi-square cutoff (default = 0.975). Ignored for \code{"iqr"} and \code{"dbscan"}.}
-
-\item{...}{Additional arguments passed to the underlying method (e.g., \code{eps} and \code{minPts} for DBSCAN).}
 }
 \value{
 A list with:
@@ -60,3 +66,23 @@ comparison is performed on the entire dataset.
 }
 
 }
+\seealso{
+Other comparison: 
+\code{\link{ci_overlap}()},
+\code{\link{compare_boxplots}()},
+\code{\link{compare_chisq_gof}()},
+\code{\link{compare_correlation_matrices}()},
+\code{\link{compare_distributions_cont}()},
+\code{\link{compare_embedding}()},
+\code{\link{compare_feature_importance}()},
+\code{\link{compare_histograms}()},
+\code{\link{compare_ks_test}()},
+\code{\link{compare_means_frequencies}()},
+\code{\link{compare_missing_values}()},
+\code{\link{compare_model_performance}()},
+\code{\link{compare_multivariate_distribution}()},
+\code{\link{compare_multivariate_summary_statistics}()},
+\code{\link{compare_pca}()},
+\code{\link{compare_wasserstein}()}
+}
+\concept{comparison}

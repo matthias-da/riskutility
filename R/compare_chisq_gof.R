@@ -18,6 +18,8 @@
 #' @param simulate_p Logical. Whether to simulate p-values in the Chi-square test. Default is TRUE.
 #' @param B Numeric. The number of simulations to perform if simulate_p is TRUE. Default is 2000.
 #'
+#' @param ... additional arguments passed to methods
+#'
 #' @return A data.table containing the grouping variables (if provided), the Chi-square statistic, degrees of freedom, and p-value
 #'         for each group (or one overall row if group_vars is NULL).
 #'
@@ -31,6 +33,7 @@
 #'
 #' @importFrom data.table as.data.table rbindlist
 #' @importFrom stats chisq.test xtabs
+#' @family comparison
 #' @export
 #'
 #' @examples
@@ -56,12 +59,26 @@
 #' print(result_overall)
 #'
 #' # Test conditionally by grouping variables (e.g., "region" and "gender")
-#' result_by_group <- compare_chisq_gof(X, Y, cat_vars = c("gender"), group_vars = c("region", "occupation"),
-#'                                      weight_X = "weight", weight_Y = "weight",
-#'                                      simulate_p = TRUE, B = 2000)
+#' result_by_group <- compare_chisq_gof(X, Y,
+#'   cat_vars = c("gender"),
+#'   group_vars = c("region", "occupation"),
+#'   weight_X = "weight", weight_Y = "weight",
+#'   simulate_p = TRUE, B = 2000)
 #' print(result_by_group)
-compare_chisq_gof <- function(X, Y, cat_vars, group_vars = NULL, weight_X = NULL, weight_Y = NULL,
-                              simulate_p = TRUE, B = 2000) {
+compare_chisq_gof <- function(X, ...) {
+  UseMethod("compare_chisq_gof")
+}
+
+#' @rdname compare_chisq_gof
+#' @export
+compare_chisq_gof.synth_pair <- function(X, ...) {
+  compare_chisq_gof.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_chisq_gof
+#' @export
+compare_chisq_gof.default <- function(X, Y, cat_vars, group_vars = NULL, weight_X = NULL, weight_Y = NULL,
+                              simulate_p = TRUE, B = 2000, ...) {
   # Convert X and Y to data.table if not already (use copy to avoid side effects)
   X <- copy(as.data.table(X))
   Y <- copy(as.data.table(Y))

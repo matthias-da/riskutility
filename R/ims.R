@@ -57,6 +57,7 @@
 #' \url{https://docs.mostly.ai/generators/evaluate-quality}
 #'
 #' @author Matthias Templ
+#' @family distance-risk
 #' @export
 #' @importFrom stats complete.cases
 #' @importFrom graphics barplot pie
@@ -128,6 +129,13 @@ ims.default <- function(X, Y,
   }
   if (length(missing_Y) > 0) {
     stop(paste("Variables missing in Y:", paste(missing_Y, collapse = ", ")))
+  }
+
+  # Check variable types match
+  for (var in vars) {
+    if (!identical(class(X[[var]]), class(Y[[var]]))) {
+      stop(paste("Variable", var, "has different class in X and Y."))
+    }
   }
 
   # Subset to selected variables
@@ -393,6 +401,7 @@ plot.ims <- function(x, y = NULL, ..., which = 1) {
 #'
 #' @seealso \code{\link{ims}} for identical match share
 #'
+#' @family distance-risk
 #' @export
 #' @examples
 #' set.seed(123)

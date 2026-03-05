@@ -2,20 +2,29 @@
 % Please edit documentation in R/compare_pca.R
 \name{compare_pca}
 \alias{compare_pca}
+\alias{compare_pca.synth_pair}
+\alias{compare_pca.default}
 \title{Compare Principal Component Analysis (PCA) between Two Datasets with Separate Loadings}
 \usage{
-compare_pca(
+compare_pca(X, ...)
+
+\method{compare_pca}{synth_pair}(X, ...)
+
+\method{compare_pca}{default}(
   X,
   Y,
   vars,
   center = TRUE,
   scale = TRUE,
   biplot = TRUE,
-  side_by_side = FALSE
+  side_by_side = FALSE,
+  ...
 )
 }
 \arguments{
 \item{X}{A data.frame or data.table containing the original dataset.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{A data.frame or data.table containing the anonymized/synthetic dataset.}
 
@@ -64,7 +73,9 @@ Y <- data.frame(
 )
 Y$expenses <- Y$income * 0.5 + rnorm(n = 1000, mean = 1000, sd = 500)
 # Combined PCA biplot with separate loadings for X (blue) and Y (red)
-res_combined <- compare_pca(X, Y, vars = c("income", "age", "expenses"), biplot = TRUE, side_by_side = FALSE)
+res_combined <- compare_pca(X, Y,
+  vars = c("income", "age", "expenses"),
+  biplot = TRUE, side_by_side = FALSE)
 print(res_combined$pca)
 print(res_combined$plot)
 
@@ -73,3 +84,23 @@ res_separate <- compare_pca(X, Y, vars = c("income", "age"), biplot = TRUE, side
 print(res_separate$pca)
 print(res_separate$plot)
 }
+\seealso{
+Other comparison: 
+\code{\link{ci_overlap}()},
+\code{\link{compare_boxplots}()},
+\code{\link{compare_chisq_gof}()},
+\code{\link{compare_correlation_matrices}()},
+\code{\link{compare_distributions_cont}()},
+\code{\link{compare_embedding}()},
+\code{\link{compare_feature_importance}()},
+\code{\link{compare_histograms}()},
+\code{\link{compare_ks_test}()},
+\code{\link{compare_means_frequencies}()},
+\code{\link{compare_missing_values}()},
+\code{\link{compare_model_performance}()},
+\code{\link{compare_multivariate_distribution}()},
+\code{\link{compare_multivariate_summary_statistics}()},
+\code{\link{compare_outliers}()},
+\code{\link{compare_wasserstein}()}
+}
+\concept{comparison}

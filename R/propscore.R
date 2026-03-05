@@ -19,11 +19,34 @@
 #' @param ... additional arguments passed to methods (currently unused)
 #' @importFrom randomForest randomForest
 #' @importFrom stats as.formula formula
-#' @importFrom simPop specifyInput simStructure simCategorical simContinuous pop
 #' @importFrom stats terms.formula
 #' @importFrom stats complete.cases
 #' @author Matthias Templ
-#' @return Propensity score measures
+#' @return An S3 object of class \code{"propscore"} containing:
+#' \describe{
+#'   \item{predictions}{Data frame of predicted propensity scores for all records.}
+#'   \item{ps_ratio}{Propensity score ratio (mean propensity of synthetic / original).}
+#'   \item{ps_score}{Propensity score statistic.}
+#'   \item{cr}{Classification rate.}
+#'   \item{mean_ps_x}{Mean propensity score for original records.}
+#'   \item{mean_ps_y}{Mean propensity score for synthetic records.}
+#'   \item{density_ratio}{Density ratio of propensity score distributions.}
+#'   \item{density_ratio_bayes}{Bayesian density ratio.}
+#'   \item{kl}{Kullback-Leibler divergence between propensity distributions.}
+#'   \item{kl_bayes}{Bayesian KL divergence.}
+#'   \item{mean_ratio}{Mean ratio of propensity densities.}
+#'   \item{sd_ratio}{Standard deviation of density ratio.}
+#'   \item{mean_ratio_bayes}{Mean Bayesian density ratio.}
+#'   \item{sd_ratio_bayes}{Standard deviation of Bayesian density ratio.}
+#'   \item{points}{Grid points used for density estimation.}
+#'   \item{denX}{Density estimates for original data propensity scores.}
+#'   \item{denY}{Density estimates for synthetic data propensity scores.}
+#'   \item{bayesspace}{Logical, whether Bayesian space was used.}
+#'   \item{n_x}{Number of original records.}
+#'   \item{n_y}{Number of synthetic records.}
+#'   \item{method}{Method used for propensity score estimation.}
+#' }
+#' @family utility
 #' @export
 #' @references
 #' Templ, M. Statistical Disclosure Control for Microdata: Methods and Applications in R.
@@ -297,7 +320,14 @@ propscore.default <- function(X, Y,
                 "mean_ratio" = mean_ratio,
                 "sd_ratio" = sd_ratio,
                 "mean_ratio_bayes" = mean_ratio_bayes,
-                "sd_ratio_bayes" = sd_ratio_bayes)
+                "sd_ratio_bayes" = sd_ratio_bayes,
+                "points" = points,
+                "denX" = density_X_orig,
+                "denY" = density_Y_orig,
+                "bayesspace" = FALSE,
+                "n_x" = n_x,
+                "n_y" = n_y,
+                "method" = method)
     class(results) <- "propscore"
     return(results)
 
@@ -318,9 +348,65 @@ print.propscore <- function(x, ...){
 #'
 #' @param object an object of class "propscore"
 #' @param ... additional arguments passed to the summary method
+#' @return An object of class \code{summary.propscore} with the following components:
+#' \describe{
+#'   \item{ps_score}{The propensity score statistic (pMSE).}
+#'   \item{ps_ratio}{Ratio of predictions below vs above the class ratio.}
+#'   \item{cr}{Class ratio (proportion of synthetic records in the combined set).}
+#'   \item{mean_ps_x}{Mean predicted propensity for original records.}
+#'   \item{mean_ps_y}{Mean predicted propensity for synthetic records.}
+#'   \item{kl}{KL divergence between propensity density estimates.}
+#'   \item{kl_bayes}{KL divergence in Bayes (log-ratio) space.}
+#'   \item{mean_ratio}{Mean density ratio.}
+#'   \item{sd_ratio}{Standard deviation of density ratio.}
+#'   \item{n_x}{Number of original records.}
+#'   \item{n_y}{Number of synthetic records.}
+#'   \item{method}{Method used for propensity estimation.}
+#' }
 #' @export
-summary.propscore <- function(object, ...){
-  cat("TBD")
+summary.propscore <- function(object, ...) {
+  res <- list(
+    ps_score = object$ps_score,
+    ps_ratio = object$ps_ratio,
+    cr = object$cr,
+    mean_ps_x = object$mean_ps_x,
+    mean_ps_y = object$mean_ps_y,
+    kl = object$kl,
+    kl_bayes = object$kl_bayes,
+    mean_ratio = object$mean_ratio,
+    sd_ratio = object$sd_ratio,
+    mean_ratio_bayes = object$mean_ratio_bayes,
+    sd_ratio_bayes = object$sd_ratio_bayes,
+    n_x = object$n_x,
+    n_y = object$n_y,
+    method = object$method
+  )
+  class(res) <- "summary.propscore"
+  res
+}
+
+#' Print method for summary.propscore objects
+#'
+#' @param x an object of class "summary.propscore"
+#' @param ... additional arguments passed to the print method
+#' @export
+print.summary.propscore <- function(x, ...) {
+  cat("Propensity Score Utility Summary\n")
+  cat("================================\n")
+  cat("Method:          ", x$method, "\n")
+  cat("Sample sizes:     n_original =", x$n_x, ", n_synthetic =", x$n_y, "\n")
+  cat("Class ratio (cr):", round(x$cr, 4), "\n\n")
+  cat("Propensity Score Statistic (pMSE):", format(x$ps_score, digits = 4), "\n")
+  cat("PS ratio (below/above cr):       ", round(x$ps_ratio, 4), "\n\n")
+  cat("Mean propensity (original): ", round(x$mean_ps_x, 4), "\n")
+  cat("Mean propensity (synthetic):", round(x$mean_ps_y, 4), "\n\n")
+  cat("KL divergence:              ", format(x$kl, digits = 4), "\n")
+  cat("KL divergence (Bayes space):", format(x$kl_bayes, digits = 4), "\n")
+  cat("Mean density ratio:         ", round(x$mean_ratio, 4),
+      " (sd:", round(x$sd_ratio, 4), ")\n")
+  cat("Mean density ratio (Bayes): ", round(x$mean_ratio_bayes, 4),
+      " (sd:", round(x$sd_ratio_bayes, 4), ")\n")
+  invisible(x)
 }
 
 #' Plot method for propscore objects

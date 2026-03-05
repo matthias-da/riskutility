@@ -62,6 +62,7 @@
 #' WIREs Computational Statistics, 8(1), 27-38.
 #'
 #' @author Matthias Templ
+#' @family utility
 #' @export
 #' @importFrom stats complete.cases sd
 #'

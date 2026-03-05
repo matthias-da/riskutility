@@ -24,6 +24,7 @@
 #' @param na.rm logical, remove records with NA values (default: TRUE)
 #' @param seed integer, random seed for holdout sampling (default: NULL)
 #' @param verbose logical, print progress messages (default: TRUE)
+#' @param ... additional arguments passed to methods
 #'
 #' @return An object of class "disclosure_report" containing:
 #' \itemize{
@@ -98,7 +99,26 @@
 #' print(report)
 #' summary(report)
 #' plot(report)
-disclosure_report <- function(X, Y,
+disclosure_report <- function(X, ...) {
+  UseMethod("disclosure_report")
+}
+
+#' @rdname disclosure_report
+#' @export
+disclosure_report.synth_pair <- function(X, ...) {
+  disclosure_report.default(
+    X = X$original,
+    Y = X$synthetic,
+    key_vars = X$key_vars,
+    target_var = X$target_var,
+    holdout = X$holdout,
+    ...
+  )
+}
+
+#' @rdname disclosure_report
+#' @export
+disclosure_report.default <- function(X, Y,
                               key_vars = NULL,
                               target_var = NULL,
                               holdout = NULL,
@@ -109,7 +129,7 @@ disclosure_report <- function(X, Y,
                               rapid_model = "rf",
                               na.rm = TRUE,
                               seed = NULL,
-                              verbose = TRUE) {
+                              verbose = TRUE, ...) {
 
   # Input validation
   if (!is.data.frame(X)) stop("X must be a data frame.")

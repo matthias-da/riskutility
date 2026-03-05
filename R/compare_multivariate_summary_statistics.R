@@ -9,6 +9,8 @@
 #' @param weight_X Optional. A character string specifying the sampling weight variable in X.
 #' @param weight_Y Optional. A character string specifying the sampling weight variable in Y.
 #'
+#' @param ... additional arguments passed to methods
+#'
 #' @return A list with two elements:
 #' \describe{
 #'   \item{continuous}{A list containing:
@@ -37,6 +39,7 @@
 #' @details For continuous variables, if sampling weights are provided the function computes weighted means using \code{weighted.mean} and weighted covariance matrices using a custom function. The correlation matrices are derived from the covariance matrices. For categorical variables, if weights are provided the frequencies are computed as the sum of weights; otherwise, raw counts are used. Joint frequency tables are normalized to obtain relative frequencies.
 #'
 #' @importFrom data.table as.data.table rbindlist
+#' @family comparison
 #' @export
 #'
 #' @examples
@@ -64,8 +67,20 @@
 #'
 #' print(result$continuous)
 #' print(result$categorical)
-compare_multivariate_summary_statistics <- function(X, Y, cont_vars, cat_vars,
-                                                    weight_X = NULL, weight_Y = NULL) {
+compare_multivariate_summary_statistics <- function(X, ...) {
+  UseMethod("compare_multivariate_summary_statistics")
+}
+
+#' @rdname compare_multivariate_summary_statistics
+#' @export
+compare_multivariate_summary_statistics.synth_pair <- function(X, ...) {
+  compare_multivariate_summary_statistics.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_multivariate_summary_statistics
+#' @export
+compare_multivariate_summary_statistics.default <- function(X, Y, cont_vars, cat_vars,
+                                                    weight_X = NULL, weight_Y = NULL, ...) {
   # Convert datasets to data.table if needed
   X <- as.data.table(X)
   Y <- as.data.table(Y)

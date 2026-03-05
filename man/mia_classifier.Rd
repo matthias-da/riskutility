@@ -2,9 +2,15 @@
 % Please edit documentation in R/mia.R
 \name{mia_classifier}
 \alias{mia_classifier}
+\alias{mia_classifier.synth_pair}
+\alias{mia_classifier.default}
 \title{Membership Inference Attack metric via classification}
 \usage{
-mia_classifier(
+mia_classifier(real_data, ...)
+
+\method{mia_classifier}{synth_pair}(real_data, ...)
+
+\method{mia_classifier}{default}(
   real_data,
   synt_data,
   hout_data,
@@ -15,11 +21,14 @@ mia_classifier(
   num_eval_iter = 5L,
   seed = NULL,
   num_trees = 300L,
-  num_threads = 1L
+  num_threads = 1L,
+  ...
 )
 }
 \arguments{
 \item{real_data}{data.frame. Records used to train the synthetic generator.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{synt_data}{data.frame. Synthetic records produced by the generator.}
 
@@ -47,14 +56,20 @@ holdout splits. Default 5.}
 \item{num_threads}{integer. Threads for parallelism. Default 1.}
 }
 \value{
-Named list with MIA precision, recall, macro F1 (means and SEs).
-\itemize{
-\item MIA recall is the primary privacy metric.
-\item The evaluation test set is balanced (50/50).
-\item Values near 0.5 indicate performance close to random guessing (low risk).
-\item Values > 0.5 indicate the synthetic data leaks training membership.
-\item Values < 0.5 indicate performance worse than random guessing.
+An object of class \code{"mia"} with components:
+\describe{
+\item{MIA precision}{Mean precision across iterations.}
+\item{MIA precision se}{Standard error of precision.}
+\item{MIA recall}{Mean recall (primary privacy metric).}
+\item{MIA recall se}{Standard error of recall.}
+\item{MIA macro F1}{Mean macro F1 score.}
+\item{MIA macro F1 se}{Standard error of macro F1.}
+\item{num_eval_iter}{Number of evaluation iterations.}
+\item{method}{Classification method used.}
 }
+Values near 0.5 indicate performance close to random guessing (low risk).
+Values > 0.5 indicate the synthetic data leaks training membership.
+Values < 0.5 indicate performance worse than random guessing.
 }
 \description{
 Membership Inference Attack metric via classification

@@ -41,6 +41,14 @@
 #'                     0.05, 0.2, 0.1), nrow = 3, byrow = TRUE)
 #' mutualInformation(X, Y, jointXY, normalized = TRUE)
 #'
+#' @references
+#' Shannon, C.E. (1948). A Mathematical Theory of Communication.
+#' \emph{Bell System Technical Journal}, 27(3), 379--423.
+#'
+#' Cover, T.M. & Thomas, J.A. (2006). \emph{Elements of Information Theory}.
+#' 2nd edition. Wiley-Interscience.
+#'
+#' @family information-theory
 #' @export
 mutualInformation <- function(X, Y, joint, Z = NULL, normalized = FALSE) {
   # Helper: entropy

@@ -2,9 +2,15 @@
 % Please edit documentation in R/compare_feature_importance.R
 \name{compare_feature_importance}
 \alias{compare_feature_importance}
+\alias{compare_feature_importance.synth_pair}
+\alias{compare_feature_importance.default}
 \title{Compare Feature Importance between Real and Synthetic Data}
 \usage{
-compare_feature_importance(
+compare_feature_importance(X, ...)
+
+\method{compare_feature_importance}{synth_pair}(X, ...)
+
+\method{compare_feature_importance}{default}(
   X,
   Y,
   formula,
@@ -12,11 +18,14 @@ compare_feature_importance(
   importance_type = c("model", "permutation", "shap"),
   pred_wrapper = NULL,
   metric = "Accuracy",
-  nsim = 5
+  nsim = 5,
+  ...
 )
 }
 \arguments{
 \item{X}{Original dataset (data.frame or data.table). Must include the target variable.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{Synthetic/anonymized dataset (data.frame or data.table). Must include the target variable.}
 
@@ -101,3 +110,23 @@ if (requireNamespace("vip", quietly = TRUE)) {
 }
 
 }
+\seealso{
+Other comparison: 
+\code{\link{ci_overlap}()},
+\code{\link{compare_boxplots}()},
+\code{\link{compare_chisq_gof}()},
+\code{\link{compare_correlation_matrices}()},
+\code{\link{compare_distributions_cont}()},
+\code{\link{compare_embedding}()},
+\code{\link{compare_histograms}()},
+\code{\link{compare_ks_test}()},
+\code{\link{compare_means_frequencies}()},
+\code{\link{compare_missing_values}()},
+\code{\link{compare_model_performance}()},
+\code{\link{compare_multivariate_distribution}()},
+\code{\link{compare_multivariate_summary_statistics}()},
+\code{\link{compare_outliers}()},
+\code{\link{compare_pca}()},
+\code{\link{compare_wasserstein}()}
+}
+\concept{comparison}

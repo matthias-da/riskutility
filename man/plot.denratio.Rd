@@ -2,7 +2,7 @@
 % Please edit documentation in R/densitydiff_1d_num.R
 \name{plot.denratio}
 \alias{plot.denratio}
-\title{Plot method for denpca objects}
+\title{Plot method for denratio objects}
 \usage{
 \method{plot}{denratio}(x, y, ..., which = 1)
 }

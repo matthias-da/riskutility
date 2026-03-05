@@ -50,6 +50,7 @@
 #' \emph{Privacy in Statistical Databases}, 122-137.
 #'
 #' @author Matthias Templ
+#' @family attribution-risk
 #' @export
 #' @importFrom stats complete.cases aggregate median sd
 #' @importFrom graphics hist barplot abline legend pie

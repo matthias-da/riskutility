@@ -35,18 +35,40 @@
 #'     threshold.}
 #' }
 #'
+#' @references
+#' Thees, O., Mueller, N., & Templ, M. (2026). Beyond the Trade-off Curve:
+#' Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and
+#' Synthetic Data. \emph{Journal of Official Statistics}.
+#'
 #' @seealso \code{\link{rapid}}, \code{\link{rapid_test}}
 #'
+#' @family rapid
 #' @examples
-#' \dontrun{
-#' sel <- rapid_threshold_select(
-#'   original, synthetic,
-#'   quasi_identifiers = c("age", "sex", "region"),
-#'   sensitive_attribute = "income",
-#'   model_type = "rf"
+#' # Small runnable example
+#' set.seed(42)
+#' X <- data.frame(
+#'   age = sample(20:60, 80, replace = TRUE),
+#'   sex = sample(c("M", "F"), 80, replace = TRUE),
+#'   income = rnorm(80, 50000, 10000)
 #' )
+#' Y <- X
+#' Y$income <- Y$income + rnorm(80, 0, 5000)
+#' sel <- rapid_threshold_select(X, Y,
+#'   quasi_identifiers = c("age", "sex"),
+#'   sensitive_attribute = "income",
+#'   model_type = "lm",
+#'   epsilon_range = seq(5, 30, by = 5),
+#'   n_permutations = 9)
 #' print(sel)
-#' plot(sel)
+#'
+#' \donttest{
+#' # With random forest and finer grid
+#' sel2 <- rapid_threshold_select(X, Y,
+#'   quasi_identifiers = c("age", "sex"),
+#'   sensitive_attribute = "income",
+#'   model_type = "rf", n_permutations = 199)
+#' print(sel2)
+#' plot(sel2)
 #' }
 #'
 #' @export
@@ -182,6 +204,9 @@ rapid_threshold_select <- function(original_data, synthetic_data,
 }
 
 
+#' @rdname rapid_threshold_select
+#' @param x an object of class \code{"rapid_threshold"}
+#' @param ... additional arguments (ignored)
 #' @export
 print.rapid_threshold <- function(x, ...) {
   cat("\n  RAPID Data-Driven Threshold Selection\n\n")
@@ -202,6 +227,63 @@ print.rapid_threshold <- function(x, ...) {
 }
 
 
+#' Summary method for rapid_threshold objects
+#'
+#' @param object an object of class "rapid_threshold"
+#' @param ... additional arguments (ignored)
+#' @return An object of class "summary.rapid_threshold"
+#' @export
+summary.rapid_threshold <- function(object, ...) {
+  n_sig <- sum(object$results$significant)
+  summ <- list(
+    threshold_star = object$threshold_star,
+    alpha = object$alpha,
+    is_categorical = object$is_categorical,
+    n_thresholds = nrow(object$results),
+    n_significant = n_sig,
+    pct_significant = 100 * n_sig / nrow(object$results),
+    rapid_at_star = if (!is.na(object$threshold_star)) object$observed_rapid$rapid else NA_real_,
+    threshold_range = range(object$results$threshold),
+    results = object$results
+  )
+  class(summ) <- "summary.rapid_threshold"
+  summ
+}
+
+
+#' Print method for summary.rapid_threshold objects
+#'
+#' @param x an object of class "summary.rapid_threshold"
+#' @param ... additional arguments (ignored)
+#' @export
+print.summary.rapid_threshold <- function(x, ...) {
+  cat("Summary: RAPID Threshold Selection\n")
+  cat("===================================\n\n")
+
+  type_label <- if (x$is_categorical) "tau" else "epsilon"
+
+  cat("Threshold Grid:\n")
+  cat("  Range:      [", sprintf("%.3f", x$threshold_range[1]), ", ",
+      sprintf("%.3f", x$threshold_range[2]), "]\n", sep = "")
+  cat("  Evaluated:  ", x$n_thresholds, "\n")
+  cat("  Significant:", x$n_significant, sprintf("(%.1f%%)", x$pct_significant), "\n")
+  cat("  Alpha:      ", sprintf("%.2f", x$alpha), "\n\n")
+
+  if (!is.na(x$threshold_star)) {
+    cat("Recommended ", type_label, "*: ", sprintf("%.3f", x$threshold_star), "\n", sep = "")
+    cat("RAPID at ", type_label, "*:    ", sprintf("%.4f", x$rapid_at_star), "\n\n", sep = "")
+  } else {
+    cat("No threshold significant at alpha = ", sprintf("%.2f", x$alpha), "\n\n", sep = "")
+  }
+
+  cat("Results:\n")
+  print(x$results, row.names = FALSE)
+  cat("\n")
+  invisible(x)
+}
+
+
+#' @rdname rapid_threshold_select
 #' @export
 plot.rapid_threshold <- function(x, ...) {
   df <- x$results

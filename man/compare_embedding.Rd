@@ -2,9 +2,15 @@
 % Please edit documentation in R/compare_embedding.R
 \name{compare_embedding}
 \alias{compare_embedding}
+\alias{compare_embedding.synth_pair}
+\alias{compare_embedding.default}
 \title{Compare Dimensionality Reduction Methods (t-SNE, UMAP, MDS-Sammon) for Two Datasets}
 \usage{
-compare_embedding(
+compare_embedding(X, ...)
+
+\method{compare_embedding}{synth_pair}(X, ...)
+
+\method{compare_embedding}{default}(
   X,
   Y,
   vars,
@@ -12,11 +18,14 @@ compare_embedding(
   perplexity = 30,
   n_neighbors = 15,
   side_by_side = FALSE,
-  seed = NULL
+  seed = NULL,
+  ...
 )
 }
 \arguments{
 \item{X, Y}{data.frame or data.table: datasets to compare.}
+
+\item{...}{additional arguments passed to methods}
 
 \item{vars}{Character vector: numeric variables for dimensionality reduction.}
 
@@ -70,3 +79,23 @@ if (requireNamespace("uwot", quietly = TRUE)) {
 }
 }
 }
+\seealso{
+Other comparison: 
+\code{\link{ci_overlap}()},
+\code{\link{compare_boxplots}()},
+\code{\link{compare_chisq_gof}()},
+\code{\link{compare_correlation_matrices}()},
+\code{\link{compare_distributions_cont}()},
+\code{\link{compare_feature_importance}()},
+\code{\link{compare_histograms}()},
+\code{\link{compare_ks_test}()},
+\code{\link{compare_means_frequencies}()},
+\code{\link{compare_missing_values}()},
+\code{\link{compare_model_performance}()},
+\code{\link{compare_multivariate_distribution}()},
+\code{\link{compare_multivariate_summary_statistics}()},
+\code{\link{compare_outliers}()},
+\code{\link{compare_pca}()},
+\code{\link{compare_wasserstein}()}
+}
+\concept{comparison}

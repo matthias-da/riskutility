@@ -178,8 +178,17 @@ Zhao, Z., et al. (2021). CTAB-GAN: Effective Table Data Synthesizing.
 }
 \seealso{
 \code{\link{nndr}} for nearest neighbor distance ratio,
-\code{\link{ims}} for exact match detection
+\code{\link{ims}} for exact match detection,
+\code{\link{nnaa}} for nearest-neighbor adversarial accuracy
+
+Other distance-risk: 
+\code{\link{hitting_rate}()},
+\code{\link{ims}()},
+\code{\link{nnaa}()},
+\code{\link{nndr}()},
+\code{\link{repu}()}
 }
 \author{
 Matthias Templ
 }
+\concept{distance-risk}

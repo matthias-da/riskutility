@@ -4,10 +4,13 @@
 #'
 #' @param x numeric vector
 #' @param y numeric vector
+#' @seealso \code{\link{rapid}}
+#'
 #' @author Matthias Templ
 #' @rdname evaluation_stats
 #' @name evaluation_stats
 #' @aliases mape mae mse rmse ait
+#' @family evaluation
 #' @return The MAPE, MAE, MSE, RMSE, and (normalized) AIT (Aitchison distance)
 #' between two vectors.
 #' @examples

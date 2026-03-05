@@ -11,8 +11,11 @@
 #' @param cat_vars Optional. A character vector of categorical variables used for grouping. Default is NULL, in which
 #'        case the KS test is performed on the entire datasets.
 #'
+#' @param ... additional arguments passed to methods
+#'
 #' @return A data.table with columns for the grouping variables (if provided), the KS test statistic, and the corresponding
 #'         p-value. If no grouping is provided, a data.table with one row is returned.
+#' @family comparison
 #' @export
 #'
 #' @examples
@@ -37,7 +40,19 @@
 #' # Perform KS test within groups defined by gender
 #' compare_ks_test(X, Y, num_var = "income", cat_vars = c("gender"))
 #' compare_ks_test(X, Y, num_var = "income", cat_vars = c("gender","region"))
-compare_ks_test <- function(X, Y, num_var, cat_vars = NULL) {
+compare_ks_test <- function(X, ...) {
+  UseMethod("compare_ks_test")
+}
+
+#' @rdname compare_ks_test
+#' @export
+compare_ks_test.synth_pair <- function(X, ...) {
+  compare_ks_test.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_ks_test
+#' @export
+compare_ks_test.default <- function(X, Y, num_var, cat_vars = NULL, ...) {
   # Convert X and Y to data.table if they are not already
   X <- as.data.table(X)
   Y <- as.data.table(Y)

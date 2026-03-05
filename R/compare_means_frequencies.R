@@ -19,6 +19,8 @@
 #' @param stats A character vector of summary measures to compute for continuous variables. Options include "mean", "median", "sd", "IQR", "mad", "huber", "skewness", and "kurtosis".
 #'              Default is c("mean", "median", "sd", "IQR", "mad", "huber", "skewness", "kurtosis").
 #'
+#' @param ... additional arguments passed to methods
+#'
 #' @return A list containing three elements:
 #' \describe{
 #'   \item{continuous_summary}{A data.table with overall summary statistics for each continuous variable in X and Y.}
@@ -38,6 +40,7 @@
 #'
 #' @importFrom data.table as.data.table rbindlist
 #' @importFrom MASS huber
+#' @family comparison
 #' @export
 #'
 #' @examples
@@ -68,9 +71,21 @@
 #' print(result$continuous_summary)
 #' print(result$conditional_summary)
 #' print(result$categorical_summary)
-compare_means_frequencies <- function(X, Y, cont_vars, cat_vars, group_vars = NULL,
+compare_means_frequencies <- function(X, ...) {
+  UseMethod("compare_means_frequencies")
+}
+
+#' @rdname compare_means_frequencies
+#' @export
+compare_means_frequencies.synth_pair <- function(X, ...) {
+  compare_means_frequencies.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_means_frequencies
+#' @export
+compare_means_frequencies.default <- function(X, Y, cont_vars, cat_vars, group_vars = NULL,
                                       weight_X = NULL, weight_Y = NULL,
-                                      stats = c("mean", "median", "sd", "IQR", "mad", "huber", "skewness", "kurtosis")) {
+                                      stats = c("mean", "median", "sd", "IQR", "mad", "huber", "skewness", "kurtosis"), ...) {
   # Convert to data.table
   X <- as.data.table(X)
   Y <- as.data.table(Y)

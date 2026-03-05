@@ -16,6 +16,8 @@
 #' @param Y A data frame or matrix of synthetic/anonymized data with the same structure as \code{X}.
 #' @param method Character. The method to use for comparison: \code{"percentage"} (default) or \code{"pattern"}.
 #'
+#' @param ... additional arguments passed to methods
+#'
 #' @return An object of class \code{"missingCompare"}:
 #' \itemize{
 #'   \item For \code{"percentage"}: a list with a data frame (\code{summary}) reporting per-variable missing
@@ -44,8 +46,21 @@
 #' }
 #'
 #' @importFrom stats na.omit quantile
+#' @family comparison
 #' @export
-compare_missing_values <- function(X, Y, method = "percentage") {
+compare_missing_values <- function(X, ...) {
+  UseMethod("compare_missing_values")
+}
+
+#' @rdname compare_missing_values
+#' @export
+compare_missing_values.synth_pair <- function(X, ...) {
+  compare_missing_values.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_missing_values
+#' @export
+compare_missing_values.default <- function(X, Y, method = "percentage", ...) {
   # Check inputs
   if (!is.data.frame(X) && !is.matrix(X))
     stop("X must be a data frame or matrix.")

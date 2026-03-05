@@ -17,6 +17,8 @@
 #'   \code{"point_biserial"} (if the nominal variable is binary) or \code{"eta_squared"} (for nominal variables with more than two levels).
 #'   The default is \code{"point_biserial"}.
 #'
+#' @param ... additional arguments passed to methods
+#'
 #' @return A list with three elements:
 #' \describe{
 #'   \item{corr_X}{The correlation matrix computed from dataset X.}
@@ -33,6 +35,7 @@
 #'
 #' @importFrom data.table as.data.table
 #' @importFrom MASS cov.rob
+#' @family comparison
 #' @export
 #'
 #' @examples
@@ -63,10 +66,25 @@
 #' print(res2$corr_Y)
 #'
 #' # Mixed example: income (continuous) vs gender (nominal); point-biserial or eta-squared is computed.
-#' res3 <- compare_correlation_matrices(X, Y, vars = c("income", "gender"), method = "pearson", mixed_method = "point_biserial")
+#' res3 <- compare_correlation_matrices(X, Y,
+#'   vars = c("income", "gender"),
+#'   method = "pearson",
+#'   mixed_method = "point_biserial")
 #' print(res3$corr_X)
 #' print(res3$corr_Y)
-compare_correlation_matrices <- function(X, Y, vars, method = "pearson", mixed_method = "point_biserial") {
+compare_correlation_matrices <- function(X, ...) {
+  UseMethod("compare_correlation_matrices")
+}
+
+#' @rdname compare_correlation_matrices
+#' @export
+compare_correlation_matrices.synth_pair <- function(X, ...) {
+  compare_correlation_matrices.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_correlation_matrices
+#' @export
+compare_correlation_matrices.default <- function(X, Y, vars, method = "pearson", mixed_method = "point_biserial", ...) {
 
   # Convert X and Y to data.table if needed
   X <- as.data.table(X)

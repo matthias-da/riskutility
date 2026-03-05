@@ -48,6 +48,7 @@
 #'   \code{\link{compare_ks_test}} for distribution comparison
 #'
 #' @author Matthias Templ
+#' @family utility
 #' @export
 #' @importFrom stats t.test weighted.mean complete.cases qt sd
 #'

@@ -48,7 +48,8 @@ privacy_score(sensitivity, visibility)
 privacy_score(sensitivity, visibility, normalize = TRUE)
 
 # Example 3: Privacy evaluation example
-# Assume visibility corresponds to number of users who can see each attribute (e.g., in a social network)
+# Assume visibility corresponds to number of users
+# who can see each attribute (e.g., social network)
 psych_profile <- c(stress_score = 0.9, diagnosis = 1.0)
 visibility <- c(stress_score = 5, diagnosis = 2)
 privacy_score(psych_profile, visibility)
@@ -57,3 +58,14 @@ privacy_score(psych_profile, visibility)
 \references{
 Wagner, I., & Eckhoff, D. (2018). Technical Privacy Metrics: A Systematic Survey. \emph{ACM Computing Surveys}, 51(3), 1–38. https://doi.org/10.1145/3168389
 }
+\seealso{
+Other information-theory: 
+\code{\link{Entropy}},
+\code{\link{EntropyMeasures}},
+\code{\link{information_surprisal}()},
+\code{\link{max_info_leakage}()},
+\code{\link{mutualInformation}()},
+\code{\link{positive_information_disclosure}()},
+\code{\link{systemAnonymityLevel}()}
+}
+\concept{information-theory}

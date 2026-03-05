@@ -46,3 +46,14 @@ if (pid > 1) message("Privacy risk detected: PID > 1")
 Wagner, I., & Eckhoff, D. (2018). Technical Privacy Metrics: A Systematic Survey.
 ACM Computing Surveys (CSUR), 51(3), Article 57. Section 5.2.11.
 }
+\seealso{
+Other information-theory: 
+\code{\link{Entropy}},
+\code{\link{EntropyMeasures}},
+\code{\link{information_surprisal}()},
+\code{\link{max_info_leakage}()},
+\code{\link{mutualInformation}()},
+\code{\link{privacy_score}()},
+\code{\link{systemAnonymityLevel}()}
+}
+\concept{information-theory}

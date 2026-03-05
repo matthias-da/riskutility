@@ -42,18 +42,22 @@
 #' allowing simplified calls like \code{dcap(pair)} instead of
 #' \code{dcap(X, Y, key_vars = ..., target_var = ...)}.
 #'
-#' For users of synthpop or simPop packages, convenience constructors are available:
+#' For users of synthpop, simPop, or sdcMicro packages, convenience constructors
+#' are available:
 #' \itemize{
 #'   \item \code{\link{from_synthpop}}: Create from synthpop's synds objects
 #'   \item \code{\link{from_simPop}}: Create from simPop's simPopObj objects
+#'   \item \code{\link{from_sdcMicro}}: Create from sdcMicro's sdcMicroObj objects
 #' }
 #'
 #' @seealso
-#' \code{\link{from_synthpop}}, \code{\link{from_simPop}} for package-specific constructors,
+#' \code{\link{from_synthpop}}, \code{\link{from_simPop}}, \code{\link{from_sdcMicro}}
+#' for package-specific constructors,
 #' \code{\link{dcap}}, \code{\link{tcap}}, \code{\link{ims}}, \code{\link{hellinger}}
 #' for functions with synth_pair methods
 #'
 #' @importFrom utils head
+#' @family containers
 #' @export
 #' @examples
 #' # Create example data
@@ -437,24 +441,26 @@ from_simPop <- function(x, key_vars = NULL, target_var = NULL,
 
   # Check if simPop is available
   if (!requireNamespace("simPop", quietly = TRUE)) {
-    stop("Package 'simPop' is required for this function. Please install it.")
+    stop("Package 'simPop' is required for this function. Please install it.",
+         call. = FALSE)
   }
 
-  # Extract sample and population
-  sample_obj <- simPop::sampleObj(x)
-  original <- as.data.frame(sample_obj@data)
+  # Extract sample and population using accessors (not @ slot access)
+  original <- as.data.frame(simPop::samp(x))
   synthetic <- as.data.frame(simPop::pop(x))
 
   # Get weight variable if requested
   weight_original <- NULL
   if (use_sample_weights) {
+    sample_obj <- simPop::sampleObj(x)
     weight_var <- sample_obj@weight
     if (length(weight_var) > 0 && nchar(weight_var) > 0 && weight_var %in% names(original)) {
       weight_original <- weight_var
     }
   }
 
-  # Build metadata
+  # Build metadata from the simPopObj directly
+  sample_obj <- simPop::sampleObj(x)
   meta <- list(
     strata = if (length(sample_obj@strata) > 0) sample_obj@strata else NA,
     hhid = if (length(sample_obj@hhid) > 0) sample_obj@hhid else NA,
@@ -469,6 +475,136 @@ from_simPop <- function(x, key_vars = NULL, target_var = NULL,
     weight_original = weight_original,
     weight_synthetic = NULL,  # Population typically has no weights
     source = "simPop",
+    metadata = meta,
+    ...
+  )
+}
+
+
+#' Extract comparison data from sdcMicro object
+#'
+#' Creates a \code{\link{synth_pair}} object from an sdcMicro \code{sdcMicroObj}.
+#'
+#' @param x An sdcMicro object of class "sdcMicroObj"
+#' @param target_var Character string naming the sensitive target variable (optional).
+#'   If NULL and sensible variables are defined in the sdcMicro object, the first
+#'   sensible variable is used.
+#' @param use_weights Logical, whether to extract and use sampling weights
+#'   from the sdcMicro object (default: TRUE)
+#' @param ... Additional arguments passed to \code{\link{synth_pair}}
+#'
+#' @return An object of class "synth_pair"
+#'
+#' @details
+#' The sdcMicro package provides statistical disclosure control methods for
+#' microdata (local suppression, recoding, microaggregation, PRAM, noise addition,
+#' etc.). The \code{sdcMicroObj} S4 class stores both the original and anonymized
+#' data. This function extracts both into a \code{synth_pair} for evaluation
+#' with riskutility measures.
+#'
+#' Note that sdcMicro produces \emph{anonymized} data (perturbation of real records),
+#' not truly synthetic data. Nonetheless, many risk and utility measures apply
+#' equally. In particular, attribution-based measures (CAP family), distance-based
+#' measures, and all utility measures can be used to compare original vs.
+#' anonymized microdata.
+#'
+#' Variable roles are automatically extracted from the sdcMicro object:
+#' \itemize{
+#'   \item \strong{key_vars}: Categorical quasi-identifiers (\code{keyVars} slot)
+#'   \item \strong{target_var}: Sensitive variable (\code{sensibleVar} slot, first entry)
+#'   \item \strong{weight_original}: Sampling weight (\code{weightVar} slot)
+#'   \item \strong{num_vars}: Numeric key variables (\code{numVars} slot)
+#' }
+#'
+#' The anonymized data is reconstructed via \code{sdcMicro::extractManipData()},
+#' which combines manipulated key, numeric, and PRAM variables with unmodified
+#' columns from the original data.
+#'
+#' @seealso \code{\link{synth_pair}}, \code{\link{from_synthpop}}, \code{\link{from_simPop}}
+#'
+#' @export
+#' @examples
+#' \donttest{
+#' if (requireNamespace("sdcMicro", quietly = TRUE)) {
+#'   # Create a simple sdcMicro object
+#'   data("testdata2", package = "sdcMicro")
+#'   sdc <- sdcMicro::createSdcObj(
+#'     dat = testdata2,
+#'     keyVars = c("urbrur", "roof", "walls", "water", "sex"),
+#'     numVars = c("expend", "income", "savings"),
+#'     weightVar = "sampling_weight"
+#'   )
+#'   # Apply some anonymization
+#'   sdc <- sdcMicro::localSuppression(sdc)
+#'   # Create synth_pair
+#'   pair <- from_sdcMicro(sdc)
+#'   print(pair)
+#' }
+#' }
+from_sdcMicro <- function(x, target_var = NULL, use_weights = TRUE, ...) {
+
+  if (!inherits(x, "sdcMicroObj")) {
+    stop("x must be an 'sdcMicroObj' from the sdcMicro package")
+  }
+
+  if (!requireNamespace("sdcMicro", quietly = TRUE)) {
+    stop("Package 'sdcMicro' is required for this function. Please install it.",
+         call. = FALSE)
+  }
+
+  # Extract original data
+  original <- as.data.frame(x@origData)
+
+  # Extract anonymized data (combines manipulated + unmodified columns)
+  synthetic <- as.data.frame(sdcMicro::extractManipData(x))
+
+  # Convert key variable indices to names
+  key_vars <- NULL
+  if (!is.null(x@keyVars) && length(x@keyVars) > 0) {
+    key_vars <- names(original)[x@keyVars]
+  }
+
+  # Convert numeric variable indices to names (stored as metadata)
+  num_var_names <- NULL
+  if (!is.null(x@numVars) && length(x@numVars) > 0) {
+    num_var_names <- names(original)[x@numVars]
+  }
+
+  # Convert sensitive variable indices to names
+  if (is.null(target_var) && !is.null(x@sensibleVar) && length(x@sensibleVar) > 0) {
+    target_var <- names(original)[x@sensibleVar[1]]
+  }
+
+  # Extract weight variable name
+  weight_original <- NULL
+  if (use_weights && !is.null(x@weightVar) && length(x@weightVar) > 0) {
+    wname <- names(original)[x@weightVar]
+    if (length(wname) > 0 && nchar(wname) > 0 && wname %in% names(original)) {
+      weight_original <- wname
+    }
+  }
+
+  # Build metadata
+  meta <- list(
+    num_key_vars = num_var_names,
+    hhId = if (!is.null(x@hhId) && length(x@hhId) > 0) names(original)[x@hhId] else NA,
+    strataVar = if (!is.null(x@strataVar) && length(x@strataVar) > 0) names(original)[x@strataVar] else NA,
+    has_local_suppression = !is.null(x@localSuppression),
+    has_pram = !is.null(x@pram),
+    deleted_vars = if (!is.null(x@deletedVars)) x@deletedVars else character(0)
+  )
+
+  # Combine key_vars (categorical) and num_var_names for the vars parameter
+  all_key_vars <- unique(c(key_vars, num_var_names))
+
+  synth_pair(
+    original = original,
+    synthetic = synthetic,
+    key_vars = if (length(all_key_vars) > 0) all_key_vars else NULL,
+    target_var = target_var,
+    weight_original = weight_original,
+    weight_synthetic = weight_original,  # sdcMicro preserves records, same weights
+    source = "sdcMicro",
     metadata = meta,
     ...
   )

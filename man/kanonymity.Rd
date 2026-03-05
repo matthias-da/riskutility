@@ -88,9 +88,26 @@ Sweeney, L. (2002). k-Anonymity: A Model for Protecting Privacy.
 }
 \seealso{
 \code{\link{ldiversity}} for l-diversity assessment,
+\code{\link{tcloseness}} for t-closeness assessment,
 \code{\link{suda}} for special uniques detection,
 \code{\link{individual_risk}} for probabilistic risk assessment
+
+Other privacy-models: 
+\code{\link{attacker_risk}()},
+\code{\link{delta_presence}()},
+\code{\link{domias}()},
+\code{\link{drisk}()},
+\code{\link{epsilon_identifiability}()},
+\code{\link{individual_risk}()},
+\code{\link{ldiversity}()},
+\code{\link{linkability}()},
+\code{\link{population_uniqueness}()},
+\code{\link{recordLinkage}()},
+\code{\link{singling_out}()},
+\code{\link{suda}()},
+\code{\link{tcloseness}()}
 }
 \author{
 Matthias Templ
 }
+\concept{privacy-models}

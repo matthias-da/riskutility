@@ -4,12 +4,14 @@
 \alias{plot.compare_feature_importance}
 \title{Plot method for compare_feature_importance objects}
 \usage{
-\method{plot}{compare_feature_importance}(x, y = NULL, ...)
+\method{plot}{compare_feature_importance}(x, y = NULL, which = 1, ...)
 }
 \arguments{
 \item{x}{an object of class "compare_feature_importance"}
 
 \item{y}{not used}
+
+\item{which}{integer, which plot to produce (default 1). Currently only 1 is available.}
 
 \item{...}{additional arguments passed to plotting functions}
 }

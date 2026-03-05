@@ -139,7 +139,13 @@ Attribution Probability for Synthetic Data: An Exploration.
 \seealso{
 \code{\link{synth_pair}} for creating a comparison pair,
 \code{\link{tcap}} for per-record CAP, \code{\link{disco}} for disclosive records
+
+Other attribution-risk: 
+\code{\link{disco}()},
+\code{\link{tcap}()},
+\code{\link{weap}()}
 }
 \author{
 Matthias Templ
 }
+\concept{attribution-risk}

@@ -23,6 +23,8 @@
 #' the approximation.
 #' @param bounds A logical value indicating whether to use bounds in the CDF
 #' calculation.
+#' @param ... additional arguments passed to methods
+#' @family comparison
 #' @export
 #' @return A list with class \code{"compare"} containing the following
 #' components:
@@ -121,9 +123,21 @@
 #' plot(result, which = "density")
 #' plot(result, which = "density_bayes")
 
-compare_distributions_cont <- function(X, Y, variables = NULL, kind = NULL, conditional = NULL,
+compare_distributions_cont <- function(X, ...) {
+  UseMethod("compare_distributions_cont")
+}
+
+#' @rdname compare_distributions_cont
+#' @export
+compare_distributions_cont.synth_pair <- function(X, ...) {
+  compare_distributions_cont.default(X = X$original, Y = X$synthetic, ...)
+}
+
+#' @rdname compare_distributions_cont
+#' @export
+compare_distributions_cont.default <- function(X, Y, variables = NULL, kind = NULL, conditional = NULL,
                           weights = NULL, approx = c(FALSE, TRUE),
-                          n_approx = 10000, bounds = TRUE)
+                          n_approx = 10000, bounds = TRUE, ...)
 {
   # Function to check and convert to data.table if necessary
   convert_to_data_table <- function(X) {
@@ -210,6 +224,10 @@ compare_distributions_cont <- function(X, Y, variables = NULL, kind = NULL, cond
     lab <- c("Sample 1", "Sample 2")
   }
 
+  if (!requireNamespace("simPop", quietly = TRUE)) {
+    stop("Package 'simPop' is required for compare_distributions_cont(). Please install it.",
+         call. = FALSE)
+  }
   tmp <- simPop::getCdf(variables, weights.samp, conditional, X, approx = approx[1],
                 n = n_approx[1], name = lab[1])
   values <- tmp$values
@@ -380,6 +398,24 @@ compare_distributions_cont <- function(X, Y, variables = NULL, kind = NULL, cond
 NULL
 
 
+#' Print method for compare_distributions_cont objects
+#'
+#' @param x an object of class "compare_distributions_cont"
+#' @param ... additional arguments (ignored)
+#' @export
+print.compare_distributions_cont <- function(x, ...) {
+  cat("Continuous Distribution Comparison\n")
+  cat("==================================\n\n")
+  cat("  Formula:", x$formula, "\n")
+  cat("  Kind:   ", x$kind, "\n")
+  cat("  Datasets:", paste(x$datasetNames, collapse = " vs. "), "\n")
+  n_vars <- length(unique(x$ecdf$.var))
+  cat("  Variables compared:", n_vars, "\n")
+  cat("  ECDF observations:", nrow(x$ecdf), "\n\n")
+  cat("  Available plot types: 'ecdf', 'density', 'density_bayes',\n")
+  cat("    'density_ratio', 'density_ratio_bayes'\n")
+  invisible(x)
+}
 
 
 #' Plot Method for Objects of Class "compare_distributions_cont"

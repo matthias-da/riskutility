@@ -53,3 +53,14 @@ systemAnonymityLevel(A2) # Should return 1 (maximum uncertainty)
 I. Wagner and D. Eckhoff (2018). Technical Privacy Metrics: A Systematic Survey.
 \emph{ACM Computing Surveys}, 51(3), Article 57. Section 5.2.8.
 }
+\seealso{
+Other information-theory: 
+\code{\link{Entropy}},
+\code{\link{EntropyMeasures}},
+\code{\link{information_surprisal}()},
+\code{\link{max_info_leakage}()},
+\code{\link{mutualInformation}()},
+\code{\link{positive_information_disclosure}()},
+\code{\link{privacy_score}()}
+}
+\concept{information-theory}

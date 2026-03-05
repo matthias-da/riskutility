@@ -2,19 +2,28 @@
 % Please edit documentation in R/mqs.R
 \name{mqs}
 \alias{mqs}
+\alias{mqs.synth_pair}
+\alias{mqs.default}
 \title{Model Quality Score}
 \usage{
-mqs(
+mqs(X, ...)
+
+\method{mqs}{synth_pair}(X, ...)
+
+\method{mqs}{default}(
   X,
   Y,
   form,
   methods = c("glm", "knn", "simpls", "rpart", "ranger"),
   na = "remove",
-  ntop = length(methods)
+  ntop = length(methods),
+  ...
 )
 }
 \arguments{
 \item{X}{data frame}
+
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{data frame}
 
@@ -87,6 +96,21 @@ m2 <- mqs(eusilc13puf, eusilc13puf_synth, na = "remove",
 m2
 }
 }
+\seealso{
+\code{\link{propscore}}, \code{\link{compare_model_performance}}
+
+Other utility: 
+\code{\link{chisq_utility}()},
+\code{\link{ci_proximity}()},
+\code{\link{energy_distance}()},
+\code{\link{gower}()},
+\code{\link{hellinger}()},
+\code{\link{pMSE}()},
+\code{\link{propscore}()},
+\code{\link{rumap}()},
+\code{\link{specks}()}
+}
 \author{
 Matthias Templ
 }
+\concept{utility}

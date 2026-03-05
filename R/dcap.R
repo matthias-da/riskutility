@@ -75,6 +75,7 @@
 #'   \code{\link{tcap}} for per-record CAP, \code{\link{disco}} for disclosive records
 #'
 #' @author Matthias Templ
+#' @family attribution-risk
 #' @export
 #' @importFrom VIM gowerD
 #' @importFrom data.table data.table merge.data.table setorder .N

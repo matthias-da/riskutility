@@ -106,7 +106,19 @@ Mathematik, 136, 210-271.
 \seealso{
 \code{\link{compare_chisq_gof}} for chi-squared goodness of fit,
 \code{\link{energy_distance}} for multivariate numeric comparison
+
+Other utility: 
+\code{\link{chisq_utility}()},
+\code{\link{ci_proximity}()},
+\code{\link{energy_distance}()},
+\code{\link{gower}()},
+\code{\link{mqs}()},
+\code{\link{pMSE}()},
+\code{\link{propscore}()},
+\code{\link{rumap}()},
+\code{\link{specks}()}
 }
 \author{
 Matthias Templ
 }
+\concept{utility}

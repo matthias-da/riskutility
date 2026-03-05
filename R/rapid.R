@@ -113,6 +113,7 @@
 #'   \code{\link{disclosure_report}} for comprehensive risk assessment
 #'
 #' @author Oscar Thees, Matthias Templ
+#' @family rapid
 #' @export
 #' @importFrom stats predict lm as.formula glm binomial model.matrix complete.cases median
 #' @examples
@@ -416,7 +417,7 @@ rapid.default <- function(X, Y,
     call = call
   )
 
-  class(result) <- c("rapid", class(result))
+  class(result) <- "rapid"
   return(result)
 }
 

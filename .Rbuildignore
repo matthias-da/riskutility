@@ -10,3 +10,7 @@
 ^data$
 ^doc$
 ^Meta$
+^CLAUDE\.md$
+^JSS_REVIEW_NOTES\.md$
+^JSS_TODO\.md$
+^recordLinkage_discussion\.md$

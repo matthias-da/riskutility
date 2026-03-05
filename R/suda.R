@@ -61,6 +61,7 @@
 #'
 #' @author Matthias Templ
 #' @importFrom utils combn
+#' @family privacy-models
 #' @export
 #' @examples
 #' # Create example data
