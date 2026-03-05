@@ -77,6 +77,22 @@
 #' of producing each anonymized record is computed as the product of per-variable
 #' transition probabilities. This avoids distance computation entirely.
 #'
+#' @section Predictive method:
+#' When \code{method = "predictive"}, a propensity model is fit on the stacked
+#' original + anonymized data to predict record origin (original = 1,
+#' synthetic = 0) from the quasi-identifiers. Records are then linked in the
+#' 1D propensity-score space. The propensity score
+#' \eqn{e(x) = P(\text{original} \mid \text{QIs} = x)} projects the multivariate
+#' QI space into a single dimension that maximally separates the two datasets.
+#'
+#' When \code{pred_se = TRUE} (default) and \code{pred_model = "logit"}, the
+#' bandwidth for kernel weighting is derived from the Fisher information
+#' matrix of the logistic regression, giving each record a bandwidth equal to
+#' its prediction standard error. This follows the principle from
+#' Gaffert et al. (2015): records where the model is uncertain get wider
+#' kernels, while confidently classified records get narrow kernels (higher
+#' individual risk).
+#'
 #' @section Softmax risk weighting:
 #' When \code{risk_weighting = "softmax"}, closer candidates receive higher
 #' attribution probability via:
@@ -103,7 +119,8 @@
 #' @param x_anon data.frame. Perturbed/anonymized microdata.
 #' @param key character. Names of quasi-identifier variables used for linkage.
 #' @param method character. Linkage method: \code{"deterministic"} (default),
-#'   \code{"probabilistic"} (Fellegi-Sunter), or \code{"pram"} (transition matrix).
+#'   \code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
+#'   or \code{"predictive"} (propensity-score-based).
 #' @param risk_weighting character. How to weight candidates: \code{"uniform"}
 #'   (default, 1/|set|), \code{"softmax"} (exponential distance-weighting),
 #'   or \code{"kernel"} (kernel-weighted donor probabilities).
@@ -150,6 +167,11 @@
 #' @param pram_matrix named list of matrices. Transition matrices for the PRAM method.
 #'   Each element is a square matrix where entry (i,j) is P(output=j | input=i).
 #'   Names must correspond to variables in \code{key}.
+#' @param pred_model character. Model for the predictive method:
+#'   \code{"logit"} (default, logistic regression) or \code{"rf"} (random forest).
+#' @param pred_se logical. For the predictive method with \code{pred_model="logit"},
+#'   use the Fisher-information prediction SE as kernel bandwidth (default TRUE).
+#'   Ignored for \code{"rf"} or when \code{bandwidth} is user-supplied.
 #' @param return_matches logical. If TRUE, returns candidate indices per record (may be memory-heavy).
 #' @param ... additional arguments passed to methods.
 #'
@@ -206,6 +228,12 @@
 #' res4 <- recordLinkage(pair)
 #' print(res4)
 #'
+#' # Predictive method (propensity-score-based)
+#' res5 <- recordLinkage(x, x_anon, key = c("age","sex","region"),
+#'                       method = "predictive")
+#' print(res5)
+#' plot(res5, which = 4)  # propensity distributions
+#'
 #' # Plot risk distribution
 #' plot(res1)
 #' plot(res1, which = 2)
@@ -222,12 +250,15 @@
 #' linkage with probabilistic record linkage. Lecture Notes in Computer
 #' Science, 2504, 207-215. Springer.
 #'
+#' Gaffert, P., Meinfelder, F., & Bosch, V. (2015). Towards an MI-proper
+#' Predictive Mean Matching. Discussion Paper, University of Bamberg.
+#'
 #' Pagliuca, D., & Seri, G. (1999). Some results of individual ranking
 #' method on the system of enterprise accounts annual survey (Esprit SDC Project,
 #' Deliverable MI-3/D2). Unpublished technical report.
 #'
-#' @seealso \code{\link{attacker_risk}}, \code{\link{individual_risk}},
-#'   \code{\link{drisk}}
+#' @seealso \code{\link{individual_risk}}, \code{\link{dcr}},
+#'   \code{\link{nndr}}
 #' @family privacy-models
 #' @importFrom stats quantile mad
 #' @importFrom graphics hist abline legend par plot points
@@ -253,7 +284,7 @@ recordLinkage.default <- function(X,
                                   x_anon,
                                   key,
                                   method = c("deterministic", "probabilistic",
-                                             "pram"),
+                                             "pram", "predictive"),
                                   risk_weighting = c("uniform", "softmax",
                                                      "kernel"),
                                   kappa = NULL,
@@ -275,12 +306,15 @@ recordLinkage.default <- function(X,
                                   u_probs = NULL,
                                   fs_threshold = NULL,
                                   pram_matrix = NULL,
+                                  pred_model = c("logit", "rf"),
+                                  pred_se = TRUE,
                                   return_matches = FALSE,
                                   ...) {
 
     method <- match.arg(method)
     risk_weighting <- match.arg(risk_weighting)
     kernel <- match.arg(kernel)
+    pred_model <- match.arg(pred_model)
     truth <- match.arg(truth)
     na_anon <- match.arg(na_anon)
     strategy <- match.arg(strategy)
@@ -374,6 +408,13 @@ recordLinkage.default <- function(X,
                           threshold_used = fs_threshold)
     }
 
+    # Predictive: fit propensity model ----
+    prop_fit <- NULL
+    if (method == "predictive") {
+        prop_fit <- .fit_propensity(X, x_anon, key,
+                                    pred_model = pred_model, ...)
+    }
+
     # blocking ----
     if (!is.null(block)) {
         if (!is.character(block) || length(block) < 1L)
@@ -440,6 +481,62 @@ recordLinkage.default <- function(X,
                 norm_probs <- pram_probs[nonzero] / sum(pram_probs[nonzero])
                 true_local <- match(tpos, guess)
                 risk[i] <- norm_probs[true_local]
+            }
+
+            if (isTRUE(return_matches)) matches[[i]] <- guess
+            next
+        }
+
+        if (method == "predictive") {
+            # Distance in propensity-score space
+            p_i <- prop_fit$p_original[i]
+            p_cand <- prop_fit$p_synthetic[cand]
+            di <- abs(p_i - p_cand)
+
+            d_min[i] <- min(di)
+            tpos <- true_idx[i]
+            j_in <- match(tpos, cand)
+            if (!is.na(j_in)) d_true[i] <- di[j_in]
+
+            # Use strategy to select guess set
+            guess <- .choose_guess_set(
+                d = di, cand = cand, strategy = strategy,
+                k = k, threshold = threshold
+            )
+
+            cand_n[i] <- length(guess)
+            if (cand_n[i] == 0L) {
+                risk[i] <- 0
+                true_in_set[i] <- FALSE
+                if (isTRUE(return_matches)) matches[[i]] <- integer(0)
+                next
+            }
+
+            true_in_set[i] <- (true_idx[i] %in% guess)
+
+            if (!true_in_set[i]) {
+                risk[i] <- 0
+            } else {
+                guess_local_idx <- match(guess, cand)
+                d_guess <- di[guess_local_idx]
+
+                # Determine bandwidth: Fisher SE if available
+                bw <- bandwidth
+                if (is.null(bw) && isTRUE(pred_se) &&
+                    pred_model == "logit" &&
+                    !is.null(prop_fit$se_original)) {
+                    bw <- prop_fit$se_original[i]
+                }
+
+                if (risk_weighting == "kernel") {
+                    w <- .kernel_risk(d_guess, bandwidth = bw, kernel = kernel)
+                } else if (risk_weighting == "softmax") {
+                    w <- .softmax_risk(d_guess, kappa)
+                } else {
+                    w <- rep(1 / length(d_guess), length(d_guess))
+                }
+                true_local <- match(true_idx[i], guess)
+                risk[i] <- w[true_local]
             }
 
             if (isTRUE(return_matches)) matches[[i]] <- guess
@@ -600,11 +697,23 @@ recordLinkage.default <- function(X,
             risk_weighting = risk_weighting,
             kappa = kappa,
             bandwidth = bandwidth,
-            kernel = kernel
+            kernel = kernel,
+            pred_model = pred_model,
+            pred_se = pred_se
         )
     )
     if (isTRUE(return_matches)) out$matches <- matches
     if (!is.null(fs_params)) out$fs_params <- fs_params
+    if (method == "predictive" && !is.null(prop_fit)) {
+        out$propensity_info <- list(
+            pred_model = pred_model,
+            pred_se = pred_se,
+            mean_propensity_original = mean(prop_fit$p_original),
+            mean_propensity_synthetic = mean(prop_fit$p_synthetic),
+            propensity_original = prop_fit$p_original,
+            propensity_synthetic = prop_fit$p_synthetic
+        )
+    }
     if (method == "pram") {
         out$pram_info <- list(
             variables_used = key,
@@ -813,6 +922,72 @@ recordLinkage.default <- function(X,
 }
 
 #' @keywords internal
+.fit_propensity <- function(X, x_anon, key, pred_model = "logit", ...) {
+    X_key <- X[, key, drop = FALSE]
+    A_key <- x_anon[, key, drop = FALSE]
+    n_orig <- nrow(X_key)
+    n_anon <- nrow(A_key)
+
+    stacked <- rbind(X_key, A_key)
+    stacked$.label <- c(rep(1L, n_orig), rep(0L, n_anon))
+
+    # Convert characters to factors for GLM
+    for (v in key) {
+        if (is.character(stacked[[v]])) stacked[[v]] <- factor(stacked[[v]])
+    }
+    # Drop unused factor levels
+    for (v in key) {
+        if (is.factor(stacked[[v]])) stacked[[v]] <- droplevels(stacked[[v]])
+    }
+
+    formula <- stats::as.formula(paste(".label ~", paste(key, collapse = " + ")))
+
+    if (pred_model == "logit") {
+        fit <- stats::glm(formula, data = stacked, family = stats::binomial(),
+                          control = list(maxit = 50))
+        p_all <- stats::predict(fit, type = "response")
+
+        # Fisher-information-based SE: sqrt(diag(X %*% vcov %*% t(X)))
+        X_mat <- stats::model.matrix(fit)
+        V <- stats::vcov(fit)
+        # SE on linear predictor (logit) scale
+        se_link <- sqrt(pmax(0, rowSums((X_mat %*% V) * X_mat)))
+        # Transform to response scale via delta method: se_p = p*(1-p)*se_link
+        se_all <- p_all * (1 - p_all) * se_link
+        se_all <- pmax(se_all, .Machine$double.eps)
+
+        list(
+            p_original = unname(p_all[seq_len(n_orig)]),
+            p_synthetic = unname(p_all[n_orig + seq_len(n_anon)]),
+            se_original = unname(se_all[seq_len(n_orig)]),
+            se_synthetic = unname(se_all[n_orig + seq_len(n_anon)])
+        )
+
+    } else if (pred_model == "rf") {
+        if (!requireNamespace("ranger", quietly = TRUE))
+            stop("Package 'ranger' required for pred_model='rf'. ",
+                 "Install with: install.packages('ranger')", call. = FALSE)
+
+        stacked$.label <- factor(stacked$.label, levels = c("0", "1"))
+        user_args <- list(...)
+        default_args <- list(formula = formula, data = stacked,
+                             probability = TRUE, num.trees = 500)
+        args <- modifyList(default_args, user_args)
+        fit <- do.call(ranger::ranger, args)
+        p_all <- stats::predict(fit, data = stacked)$predictions[, "1"]
+
+        list(
+            p_original = p_all[seq_len(n_orig)],
+            p_synthetic = p_all[n_orig + seq_len(n_anon)],
+            se_original = NULL,
+            se_synthetic = NULL
+        )
+    } else {
+        stop("pred_model must be 'logit' or 'rf'.", call. = FALSE)
+    }
+}
+
+#' @keywords internal
 .fs_em <- function(X, x_anon, key, type, true_idx, rng,
                    n_sample = 500L) {
     n <- nrow(X)
@@ -1000,6 +1175,16 @@ print.recordLinkageRisk <- function(x, ...) {
         cat("NA handling: ", s$na_anon, "\n", sep = "")
     }
 
+    if (s$method == "predictive") {
+        cat("Pred. model: ", s$pred_model, "\n", sep = "")
+        cat("Fisher SE:   ", if (isTRUE(s$pred_se)) "yes" else "no", "\n", sep = "")
+        if (!is.null(x$propensity_info)) {
+            cat(sprintf("Mean propensity: %.3f (orig) / %.3f (synth)\n",
+                        x$propensity_info$mean_propensity_original,
+                        x$propensity_info$mean_propensity_synthetic))
+        }
+    }
+
     cat("\nRisk Summary\n")
     cat(sprintf("  Mean risk:       %6.4f\n", o$mean_risk))
     cat(sprintf("  Max risk:        %6.4f\n", o$max_risk))
@@ -1069,7 +1254,8 @@ summary.recordLinkageRisk <- function(object, ...) {
         pct_true_in_set = object$overall$pct_true_in_set,
         mean_candidate_size = object$overall$mean_candidate_size,
         privacy_pass = object$privacy_pass,
-        fs_params = object$fs_params
+        fs_params = object$fs_params,
+        propensity_info = object$propensity_info
     )
 
     class(summ) <- "summary.recordLinkageRisk"
@@ -1126,6 +1312,14 @@ print.summary.recordLinkageRisk <- function(x, ...) {
         }
     }
 
+    if (!is.null(x$propensity_info)) {
+        cat("\nPropensity Model:\n")
+        cat("  Model:", x$propensity_info$pred_model, "\n")
+        cat(sprintf("  Mean propensity: %.4f (orig) / %.4f (synth)\n",
+                    x$propensity_info$mean_propensity_original,
+                    x$propensity_info$mean_propensity_synthetic))
+    }
+
     cat(sprintf("\nMean candidate size: %.1f\n", x$mean_candidate_size))
     cat(sprintf("True match in candidate set: %.1f%%\n",
                 100 * x$pct_true_in_set))
@@ -1143,16 +1337,19 @@ print.summary.recordLinkageRisk <- function(x, ...) {
 #' @param which integer, which plot(s) to show:
 #'   1 = Risk distribution histogram,
 #'   2 = Distance vs risk scatterplot,
-#'   3 = Per-variable discriminative power (probabilistic method only)
-#' @importFrom graphics hist abline legend par plot points text barplot
+#'   3 = Per-variable discriminative power (probabilistic method only),
+#'   4 = Propensity score distributions (predictive method only)
+#' @importFrom graphics hist abline legend par plot points text barplot lines
 #' @export
 plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1) {
-    show <- rep(FALSE, 3)
+    show <- rep(FALSE, 4)
     show[which] <- TRUE
 
     n_plots <- sum(show)
     if (n_plots > 1) {
-        op <- par(mfrow = c(1, min(n_plots, 3)))
+        ncol <- min(n_plots, 2)
+        nrow <- ceiling(n_plots / ncol)
+        op <- par(mfrow = c(nrow, ncol))
         on.exit(par(op))
     }
 
@@ -1222,6 +1419,30 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1) {
             plot.new()
             text(0.5, 0.5,
                  "Plot 3 requires method='probabilistic'",
+                 cex = 1.2)
+        }
+    }
+
+    if (show[4]) {
+        if (!is.null(x$propensity_info)) {
+            p_orig <- x$propensity_info$propensity_original
+            p_synth <- x$propensity_info$propensity_synthetic
+            d_orig <- stats::density(p_orig, from = 0, to = 1)
+            d_synth <- stats::density(p_synth, from = 0, to = 1)
+            ylim <- range(c(d_orig$y, d_synth$y))
+            plot(d_orig, main = "Propensity Score Distributions",
+                 xlab = "Propensity Score P(original | QIs)",
+                 ylab = "Density", col = "steelblue", lwd = 2,
+                 ylim = ylim)
+            lines(d_synth, col = "coral", lwd = 2)
+            legend("topright",
+                   legend = c("Original", "Synthetic"),
+                   col = c("steelblue", "coral"),
+                   lwd = 2, cex = 0.8)
+        } else {
+            plot.new()
+            text(0.5, 0.5,
+                 "Plot 4 requires method='predictive'",
                  cex = 1.2)
         }
     }

@@ -16,7 +16,8 @@
 \item{which}{integer, which plot(s) to show:
 1 = Risk distribution histogram,
 2 = Distance vs risk scatterplot,
-3 = Per-variable discriminative power (probabilistic method only)}
+3 = Per-variable discriminative power (probabilistic method only),
+4 = Propensity score distributions (predictive method only)}
 }
 \description{
 Plot method for recordLinkageRisk

@@ -14,7 +14,7 @@ recordLinkage(X, ...)
   X,
   x_anon,
   key,
-  method = c("deterministic", "probabilistic", "pram"),
+  method = c("deterministic", "probabilistic", "pram", "predictive"),
   risk_weighting = c("uniform", "softmax", "kernel"),
   kappa = NULL,
   bandwidth = NULL,
@@ -32,6 +32,8 @@ recordLinkage(X, ...)
   u_probs = NULL,
   fs_threshold = NULL,
   pram_matrix = NULL,
+  pred_model = c("logit", "rf"),
+  pred_se = TRUE,
   return_matches = FALSE,
   ...
 )
@@ -46,7 +48,8 @@ recordLinkage(X, ...)
 \item{key}{character. Names of quasi-identifier variables used for linkage.}
 
 \item{method}{character. Linkage method: \code{"deterministic"} (default),
-\code{"probabilistic"} (Fellegi-Sunter), or \code{"pram"} (transition matrix).}
+\code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
+or \code{"predictive"} (propensity-score-based).}
 
 \item{risk_weighting}{character. How to weight candidates: \code{"uniform"}
 (default, 1/|set|), \code{"softmax"} (exponential distance-weighting),
@@ -110,6 +113,13 @@ defaults to 0 (include all records with positive evidence of match).}
 \item{pram_matrix}{named list of matrices. Transition matrices for the PRAM method.
 Each element is a square matrix where entry (i,j) is P(output=j | input=i).
 Names must correspond to variables in \code{key}.}
+
+\item{pred_model}{character. Model for the predictive method:
+\code{"logit"} (default, logistic regression) or \code{"rf"} (random forest).}
+
+\item{pred_se}{logical. For the predictive method with \code{pred_model="logit"},
+use the Fisher-information prediction SE as kernel bandwidth (default TRUE).
+Ignored for \code{"rf"} or when \code{bandwidth} is user-supplied.}
 
 \item{return_matches}{logical. If TRUE, returns candidate indices per record (may be memory-heavy).}
 }
@@ -204,6 +214,24 @@ of producing each anonymized record is computed as the product of per-variable
 transition probabilities. This avoids distance computation entirely.
 }
 
+\section{Predictive method}{
+
+When \code{method = "predictive"}, a propensity model is fit on the stacked
+original + anonymized data to predict record origin (original = 1,
+synthetic = 0) from the quasi-identifiers. Records are then linked in the
+1D propensity-score space. The propensity score
+\eqn{e(x) = P(\text{original} \mid \text{QIs} = x)} projects the multivariate
+QI space into a single dimension that maximally separates the two datasets.
+
+When \code{pred_se = TRUE} (default) and \code{pred_model = "logit"}, the
+bandwidth for kernel weighting is derived from the Fisher information
+matrix of the logistic regression, giving each record a bandwidth equal to
+its prediction standard error. This follows the principle from
+Gaffert et al. (2015): records where the model is uncertain get wider
+kernels, while confidently classified records get narrow kernels (higher
+individual risk).
+}
+
 \section{Softmax risk weighting}{
 
 When \code{risk_weighting = "softmax"}, closer candidates receive higher
@@ -279,6 +307,12 @@ pair <- synth_pair(x, x_anon, key_vars = c("age","sex","region"))
 res4 <- recordLinkage(pair)
 print(res4)
 
+# Predictive method (propensity-score-based)
+res5 <- recordLinkage(x, x_anon, key = c("age","sex","region"),
+                      method = "predictive")
+print(res5)
+plot(res5, which = 4)  # propensity distributions
+
 # Plot risk distribution
 plot(res1)
 plot(res1, which = 2)
@@ -296,12 +330,15 @@ Domingo-Ferrer, J., & Torra, V. (2002). Validating distance-based record
 linkage with probabilistic record linkage. Lecture Notes in Computer
 Science, 2504, 207-215. Springer.
 
+Gaffert, P., Meinfelder, F., & Bosch, V. (2015). Towards an MI-proper
+Predictive Mean Matching. Discussion Paper, University of Bamberg.
+
 Pagliuca, D., & Seri, G. (1999). Some results of individual ranking
 method on the system of enterprise accounts annual survey (Esprit SDC Project,
 Deliverable MI-3/D2). Unpublished technical report.
 }
 \seealso{
-\code{\link{attacker_risk}}, \code{\link{individual_risk}},
-\code{\link{drisk}}
+\code{\link{individual_risk}}, \code{\link{dcr}},
+\code{\link{nndr}}
 }
 \concept{privacy-models}

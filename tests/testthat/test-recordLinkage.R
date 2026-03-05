@@ -583,3 +583,134 @@ test_that("quantile threshold works", {
                        threshold = list(type = "quantile", p = 0.1))
   expect_s3_class(res, "recordLinkageRisk")
 })
+
+
+# ── Predictive method tests ────────────────────────────────────────────
+
+test_that("predictive method returns propensity_info", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive")
+  expect_true(!is.null(res$propensity_info))
+  expect_equal(res$propensity_info$pred_model, "logit")
+  expect_equal(length(res$propensity_info$propensity_original), 50)
+  expect_equal(length(res$propensity_info$propensity_synthetic), 50)
+})
+
+test_that("predictive: propensity scores are in [0,1]", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive")
+  expect_true(all(res$propensity_info$propensity_original >= 0))
+  expect_true(all(res$propensity_info$propensity_original <= 1))
+  expect_true(all(res$propensity_info$propensity_synthetic >= 0))
+  expect_true(all(res$propensity_info$propensity_synthetic <= 1))
+})
+
+test_that("predictive: identical data gives propensity near 0.5", {
+  set.seed(42)
+  n <- 50
+  x <- data.frame(a = 1:n, b = factor(rep(c("x", "y"), n / 2)))
+  res <- recordLinkage(x, x, key = c("a", "b"), method = "predictive")
+  p <- res$propensity_info$mean_propensity_original
+  expect_true(abs(p - 0.5) < 0.2)
+})
+
+test_that("predictive: independent data gives valid risk", {
+  set.seed(123)
+  n <- 100
+  x <- data.frame(a = sample(1:20, n, TRUE),
+                  b = factor(sample(c("x", "y", "z"), n, TRUE)))
+  x_anon <- data.frame(a = sample(1:20, n, TRUE),
+                        b = factor(sample(c("x", "y", "z"), n, TRUE)))
+  res <- recordLinkage(x, x_anon, key = c("a", "b"),
+                       method = "predictive")
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_true(all(res$per_record$risk >= 0))
+  expect_true(all(res$per_record$risk <= 1))
+})
+
+test_that("predictive: Fisher SE bandwidth used by default (logit)", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive", risk_weighting = "kernel")
+  expect_equal(res$settings$pred_se, TRUE)
+  expect_equal(res$settings$pred_model, "logit")
+})
+
+test_that("predictive: user bandwidth overrides Fisher SE", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive", risk_weighting = "kernel",
+                       bandwidth = 0.1)
+  expect_equal(res$settings$bandwidth, 0.1)
+})
+
+test_that("predictive: works with softmax weighting", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive", risk_weighting = "softmax")
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_true(all(res$per_record$risk >= 0))
+  expect_true(all(res$per_record$risk <= 1))
+})
+
+test_that("predictive: works with uniform weighting", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive", risk_weighting = "uniform")
+  expect_s3_class(res, "recordLinkageRisk")
+})
+
+test_that("predictive: d_true and d_min populated", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive")
+  expect_true(any(!is.na(res$per_record$d_true)))
+  expect_true(all(!is.na(res$per_record$d_min)))
+})
+
+test_that("predictive: strategy parameter works", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive",
+                       strategy = "threshold", threshold = 0.1)
+  expect_s3_class(res, "recordLinkageRisk")
+})
+
+test_that("predictive: blocking works", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive", block = "region")
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_equal(nrow(res$per_record), 50)
+})
+
+test_that("predictive: print shows propensity info", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive")
+  expect_output(print(res), "predictive")
+  expect_output(print(res), "propensity")
+})
+
+test_that("predictive: summary includes propensity info", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive")
+  s <- summary(res)
+  expect_output(print(s), "Propensity")
+})
+
+test_that("predictive: plot which=4 works", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive")
+  expect_no_error(plot(res, which = 4))
+})
+
+test_that("predictive: plot which=4 placeholder for non-predictive", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_no_error(plot(res, which = 4))
+})
