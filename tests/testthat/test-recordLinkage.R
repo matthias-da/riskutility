@@ -172,85 +172,85 @@ test_that("softmax weighting produces valid risk values", {
 })
 
 
-# ── Midastouch weighting tests ──────────────────────────────────────────
+# ── Kernel weighting tests ──────────────────────────────────────────
 
-test_that("midastouch (gaussian) weights sum to 1", {
-  w <- riskutility:::.midastouch_risk(c(0.1, 0.3, 0.5))
+test_that("kernel (gaussian) weights sum to 1", {
+  w <- riskutility:::.kernel_risk(c(0.1, 0.3, 0.5))
   expect_equal(sum(w), 1, tolerance = 1e-10)
 })
 
-test_that("midastouch gives highest weight to closest record", {
-  w <- riskutility:::.midastouch_risk(c(0.05, 0.3, 0.8))
+test_that("kernel gives highest weight to closest record", {
+  w <- riskutility:::.kernel_risk(c(0.05, 0.3, 0.8))
   expect_true(w[1] > w[2])
   expect_true(w[2] > w[3])
 })
 
-test_that("midastouch with equal distances gives uniform weights", {
-  w <- riskutility:::.midastouch_risk(c(0.5, 0.5, 0.5))
+test_that("kernel with equal distances gives uniform weights", {
+  w <- riskutility:::.kernel_risk(c(0.5, 0.5, 0.5))
   expect_equal(w, rep(1/3, 3), tolerance = 1e-10)
 })
 
-test_that("midastouch with user-supplied bandwidth works", {
-  w <- riskutility:::.midastouch_risk(c(0.1, 0.5), bandwidth = 0.2)
+test_that("kernel with user-supplied bandwidth works", {
+  w <- riskutility:::.kernel_risk(c(0.1, 0.5), bandwidth = 0.2)
   expect_equal(sum(w), 1, tolerance = 1e-10)
   expect_true(w[1] > w[2])
 })
 
-test_that("midastouch epanechnikov gives zero weight beyond bandwidth", {
+test_that("kernel epanechnikov gives zero weight beyond bandwidth", {
   # bandwidth = 0.3, so d=0.5 > bandwidth -> weight 0
-  w <- riskutility:::.midastouch_risk(c(0.1, 0.5), bandwidth = 0.3,
+  w <- riskutility:::.kernel_risk(c(0.1, 0.5), bandwidth = 0.3,
                                       kernel = "epanechnikov")
   expect_equal(w[2], 0, tolerance = 1e-10)
   expect_equal(w[1], 1, tolerance = 1e-10)
 })
 
-test_that("midastouch tricube gives zero weight beyond bandwidth", {
-  w <- riskutility:::.midastouch_risk(c(0.1, 0.5), bandwidth = 0.3,
+test_that("kernel tricube gives zero weight beyond bandwidth", {
+  w <- riskutility:::.kernel_risk(c(0.1, 0.5), bandwidth = 0.3,
                                       kernel = "tricube")
   expect_equal(w[2], 0, tolerance = 1e-10)
   expect_equal(w[1], 1, tolerance = 1e-10)
 })
 
-test_that("midastouch single distance returns 1", {
-  w <- riskutility:::.midastouch_risk(0.5)
+test_that("kernel single distance returns 1", {
+  w <- riskutility:::.kernel_risk(0.5)
   expect_equal(w, 1)
 })
 
-test_that("midastouch empty distance returns empty", {
-  w <- riskutility:::.midastouch_risk(numeric(0))
+test_that("kernel empty distance returns empty", {
+  w <- riskutility:::.kernel_risk(numeric(0))
   expect_equal(length(w), 0)
 })
 
-test_that("midastouch weighting produces valid risk values", {
+test_that("kernel weighting produces valid risk values", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       risk_weighting = "midastouch")
+                       risk_weighting = "kernel")
   expect_true(all(res$per_record$risk >= 0))
   expect_true(all(res$per_record$risk <= 1))
-  expect_equal(res$settings$risk_weighting, "midastouch")
+  expect_equal(res$settings$risk_weighting, "kernel")
   expect_equal(res$settings$kernel, "gaussian")
 })
 
-test_that("midastouch differs from uniform with multi-candidate sets", {
+test_that("kernel differs from uniform with multi-candidate sets", {
   d <- .make_test_data(50)
   ru <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
                       strategy = "threshold", threshold = 0.3,
                       risk_weighting = "uniform")
   rm <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
                       strategy = "threshold", threshold = 0.3,
-                      risk_weighting = "midastouch")
-  # With many candidates, midastouch should produce different risks
+                      risk_weighting = "kernel")
+  # With many candidates, kernel should produce different risks
   multi <- which(ru$per_record$cand_n > 2)
   if (length(multi) > 0) {
     expect_false(all(ru$per_record$risk[multi] == rm$per_record$risk[multi]))
   }
 })
 
-test_that("midastouch + probabilistic method works", {
+test_that("kernel + probabilistic method works", {
   d <- .make_test_data(30)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
                        method = "probabilistic",
-                       risk_weighting = "midastouch")
+                       risk_weighting = "kernel")
   expect_s3_class(res, "recordLinkageRisk")
   expect_true(all(res$per_record$risk >= 0))
   expect_true(all(res$per_record$risk <= 1))
@@ -260,17 +260,17 @@ test_that("all three kernels produce valid output", {
   d <- .make_test_data(30)
   for (k in c("gaussian", "epanechnikov", "tricube")) {
     res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                         risk_weighting = "midastouch", kernel = k)
+                         risk_weighting = "kernel", kernel = k)
     expect_s3_class(res, "recordLinkageRisk")
     expect_true(all(res$per_record$risk >= 0))
     expect_true(all(res$per_record$risk <= 1))
   }
 })
 
-test_that("print and summary show midastouch kernel info", {
+test_that("print and summary show kernel kernel info", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       risk_weighting = "midastouch",
+                       risk_weighting = "kernel",
                        kernel = "epanechnikov")
   expect_output(print(res), "epanechnikov")
   s <- summary(res)

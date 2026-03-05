@@ -15,7 +15,7 @@ recordLinkage(X, ...)
   x_anon,
   key,
   method = c("deterministic", "probabilistic", "pram"),
-  risk_weighting = c("uniform", "softmax", "midastouch"),
+  risk_weighting = c("uniform", "softmax", "kernel"),
   kappa = NULL,
   bandwidth = NULL,
   kernel = c("gaussian", "epanechnikov", "tricube"),
@@ -50,16 +50,16 @@ recordLinkage(X, ...)
 
 \item{risk_weighting}{character. How to weight candidates: \code{"uniform"}
 (default, 1/|set|), \code{"softmax"} (exponential distance-weighting),
-or \code{"midastouch"} (kernel-weighted donor probabilities).}
+or \code{"kernel"} (kernel-weighted donor probabilities).}
 
 \item{kappa}{numeric or NULL. Temperature parameter for softmax weighting.
 If NULL (default), auto-calibrated as \code{2 / range(distances)}.}
 
-\item{bandwidth}{numeric or NULL. Bandwidth for midastouch kernel weighting.
+\item{bandwidth}{numeric or NULL. Bandwidth for kernel weighting.
 If NULL (default), auto-selected via Silverman's rule on the candidate
 distances.}
 
-\item{kernel}{character. Kernel function for midastouch weighting:
+\item{kernel}{character. Kernel function for kernel weighting:
 \code{"gaussian"} (default), \code{"epanechnikov"}, or \code{"tricube"}.}
 
 \item{truth}{character. How to define the true match for scoring:
@@ -213,11 +213,10 @@ The temperature \code{kappa} is auto-calibrated from the distance range
 if not supplied. This replaces the uniform \eqn{1/|candidate\_set|} risk.
 }
 
-\section{Midastouch risk weighting}{
+\section{Kernel risk weighting}{
 
-When \code{risk_weighting = "midastouch"}, donor probabilities are computed
-via kernel-weighted distances following the Midastouch approach
-(Siddique & Belin, 2008). Each candidate \eqn{j} receives weight
+When \code{risk_weighting = "kernel"}, donor probabilities are computed
+via kernel-weighted distances. Each candidate \eqn{j} receives weight
 proportional to a kernel function evaluated at its scaled distance:
 \deqn{w_j = K(d_j / h) \Big/ \sum_k K(d_k / h)}
 where \eqn{h} is a bandwidth and \eqn{K} is one of:
@@ -259,14 +258,14 @@ res2 <- recordLinkage(x, x_anon, key = c("age","sex","region"),
                       risk_weighting = "softmax")
 print(res2)
 
-# Midastouch kernel-weighted risk (Gaussian kernel, auto bandwidth)
+# Kernel-weighted risk (Gaussian kernel, auto bandwidth)
 res2b <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-                       risk_weighting = "midastouch")
+                       risk_weighting = "kernel")
 print(res2b)
 
-# Midastouch with Epanechnikov kernel
+# Kernel weighting with Epanechnikov kernel
 res2c <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-                       risk_weighting = "midastouch",
+                       risk_weighting = "kernel",
                        kernel = "epanechnikov")
 print(res2c)
 
@@ -296,10 +295,6 @@ Journal of the American Statistical Association, 64(328), 1183-1210.
 Domingo-Ferrer, J., & Torra, V. (2002). Validating distance-based record
 linkage with probabilistic record linkage. Lecture Notes in Computer
 Science, 2504, 207-215. Springer.
-
-Siddique, J., & Belin, T. R. (2008). Using an approximation to the Fisher
-information matrix to weight donor pools in multiple imputation.
-Computational Statistics & Data Analysis, 53(2), 405-414.
 
 Pagliuca, D., & Seri, G. (1999). Some results of individual ranking
 method on the system of enterprise accounts annual survey (Esprit SDC Project,

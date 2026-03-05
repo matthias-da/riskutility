@@ -84,10 +84,9 @@
 #' The temperature \code{kappa} is auto-calibrated from the distance range
 #' if not supplied. This replaces the uniform \eqn{1/|candidate\_set|} risk.
 #'
-#' @section Midastouch risk weighting:
-#' When \code{risk_weighting = "midastouch"}, donor probabilities are computed
-#' via kernel-weighted distances following the Midastouch approach
-#' (Siddique & Belin, 2008). Each candidate \eqn{j} receives weight
+#' @section Kernel risk weighting:
+#' When \code{risk_weighting = "kernel"}, donor probabilities are computed
+#' via kernel-weighted distances. Each candidate \eqn{j} receives weight
 #' proportional to a kernel function evaluated at its scaled distance:
 #' \deqn{w_j = K(d_j / h) \Big/ \sum_k K(d_k / h)}
 #' where \eqn{h} is a bandwidth and \eqn{K} is one of:
@@ -107,13 +106,13 @@
 #'   \code{"probabilistic"} (Fellegi-Sunter), or \code{"pram"} (transition matrix).
 #' @param risk_weighting character. How to weight candidates: \code{"uniform"}
 #'   (default, 1/|set|), \code{"softmax"} (exponential distance-weighting),
-#'   or \code{"midastouch"} (kernel-weighted donor probabilities).
+#'   or \code{"kernel"} (kernel-weighted donor probabilities).
 #' @param kappa numeric or NULL. Temperature parameter for softmax weighting.
 #'   If NULL (default), auto-calibrated as \code{2 / range(distances)}.
-#' @param bandwidth numeric or NULL. Bandwidth for midastouch kernel weighting.
+#' @param bandwidth numeric or NULL. Bandwidth for kernel weighting.
 #'   If NULL (default), auto-selected via Silverman's rule on the candidate
 #'   distances.
-#' @param kernel character. Kernel function for midastouch weighting:
+#' @param kernel character. Kernel function for kernel weighting:
 #'   \code{"gaussian"} (default), \code{"epanechnikov"}, or \code{"tricube"}.
 #' @param truth character. How to define the true match for scoring:
 #'   one of \code{"row"} (default) or \code{"id"}.
@@ -186,14 +185,14 @@
 #'                       risk_weighting = "softmax")
 #' print(res2)
 #'
-#' # Midastouch kernel-weighted risk (Gaussian kernel, auto bandwidth)
+#' # Kernel-weighted risk (Gaussian kernel, auto bandwidth)
 #' res2b <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-#'                        risk_weighting = "midastouch")
+#'                        risk_weighting = "kernel")
 #' print(res2b)
 #'
-#' # Midastouch with Epanechnikov kernel
+#' # Kernel weighting with Epanechnikov kernel
 #' res2c <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-#'                        risk_weighting = "midastouch",
+#'                        risk_weighting = "kernel",
 #'                        kernel = "epanechnikov")
 #' print(res2c)
 #'
@@ -222,10 +221,6 @@
 #' Domingo-Ferrer, J., & Torra, V. (2002). Validating distance-based record
 #' linkage with probabilistic record linkage. Lecture Notes in Computer
 #' Science, 2504, 207-215. Springer.
-#'
-#' Siddique, J., & Belin, T. R. (2008). Using an approximation to the Fisher
-#' information matrix to weight donor pools in multiple imputation.
-#' Computational Statistics & Data Analysis, 53(2), 405-414.
 #'
 #' Pagliuca, D., & Seri, G. (1999). Some results of individual ranking
 #' method on the system of enterprise accounts annual survey (Esprit SDC Project,
@@ -260,7 +255,7 @@ recordLinkage.default <- function(X,
                                   method = c("deterministic", "probabilistic",
                                              "pram"),
                                   risk_weighting = c("uniform", "softmax",
-                                                     "midastouch"),
+                                                     "kernel"),
                                   kappa = NULL,
                                   bandwidth = NULL,
                                   kernel = c("gaussian", "epanechnikov",
@@ -489,12 +484,12 @@ recordLinkage.default <- function(X,
                 w <- w / sum(w)
                 true_local <- match(tpos, guess)
                 risk[i] <- w[true_local]
-            } else if (risk_weighting == "midastouch") {
-                # Midastouch kernel weighting over LRs
+            } else if (risk_weighting == "kernel") {
+                # Kernel weighting over LRs
                 # Transform LRs to distances: negate so higher LR = smaller d
                 lr_above <- lr[above]
                 pseudo_d <- max(lr_above) - lr_above
-                w <- .midastouch_risk(pseudo_d, bandwidth, kernel)
+                w <- .kernel_risk(pseudo_d, bandwidth, kernel)
                 true_local <- match(tpos, guess)
                 risk[i] <- w[true_local]
             } else {
@@ -544,10 +539,10 @@ recordLinkage.default <- function(X,
             w <- .softmax_risk(di[guess_local_idx], kappa)
             true_local <- match(true_idx[i], guess)
             risk[i] <- w[true_local]
-        } else if (risk_weighting == "midastouch") {
-            # Kernel-weighted donor risk (Midastouch)
+        } else if (risk_weighting == "kernel") {
+            # Kernel-weighted donor risk
             guess_local_idx <- match(guess, cand)
-            w <- .midastouch_risk(di[guess_local_idx], bandwidth, kernel)
+            w <- .kernel_risk(di[guess_local_idx], bandwidth, kernel)
             true_local <- match(true_idx[i], guess)
             risk[i] <- w[true_local]
         } else {
@@ -784,7 +779,7 @@ recordLinkage.default <- function(X,
 }
 
 #' @keywords internal
-.midastouch_risk <- function(d, bandwidth = NULL,
+.kernel_risk <- function(d, bandwidth = NULL,
                              kernel = "gaussian") {
     n <- length(d)
     if (n == 0L) return(numeric(0))
@@ -989,7 +984,7 @@ print.recordLinkageRisk <- function(x, ...) {
 
     cat("Method:      ", s$method, "\n", sep = "")
     wt_label <- s$risk_weighting
-    if (s$risk_weighting == "midastouch")
+    if (s$risk_weighting == "kernel")
         wt_label <- paste0(wt_label, " (", s$kernel, " kernel)")
     cat("Weighting:   ", wt_label, "\n", sep = "")
     cat("Keys:        ", paste(s$key, collapse = ", "), "\n", sep = "")
@@ -1092,7 +1087,7 @@ print.summary.recordLinkageRisk <- function(x, ...) {
     cat("============================\n\n")
 
     wt_label <- x$risk_weighting
-    if (x$risk_weighting == "midastouch")
+    if (x$risk_weighting == "kernel")
         wt_label <- paste0(wt_label, " (", x$kernel, " kernel)")
     cat("Method:", x$method, "| Weighting:", wt_label, "\n")
     cat("Key variables:", paste(x$key_vars, collapse = ", "), "\n")
