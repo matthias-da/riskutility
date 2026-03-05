@@ -1,5 +1,6 @@
 tests/testthat/Rplots.pdf
 JSS_REVIEW_NOTES.md
+JSS_TODO.md
 .claude
 CLAUDE.md
 # History files
@@ -54,3 +55,5 @@ rsconnect/
 /doc/
 /Meta/
 .DS_Store
+R/recordLinkage.R
+.worktrees/
