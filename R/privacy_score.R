@@ -45,6 +45,7 @@
 #' privacy_score(psych_profile, visibility)
 #'
 #' @family information-theory
+#' @author Matthias Templ
 #' @export
 privacy_score <- function(sensitivity, visibility, normalize = FALSE) {
   if (!all(names(sensitivity) %in% names(visibility))) {

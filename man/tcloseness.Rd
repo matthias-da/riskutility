@@ -8,7 +8,7 @@
 \usage{
 tcloseness(X, ...)
 
-\method{tcloseness}{synth_pair}(X, t = 0.2, ...)
+\method{tcloseness}{synth_pair}(X, t = 0.2, data = c("synthetic", "original"), ...)
 
 \method{tcloseness}{default}(X, key_vars, sensitive_var, t = 0.2, na.rm = TRUE, ...)
 }
@@ -18,6 +18,9 @@ tcloseness(X, ...)
 \item{...}{additional arguments passed to methods (currently unused)}
 
 \item{t}{numeric, the t-closeness threshold (default: 0.2)}
+
+\item{data}{character, which dataset to assess: "synthetic" (default) or "original".
+Only used by the synth_pair method.}
 
 \item{key_vars}{character vector of quasi-identifier variable names}
 
@@ -112,6 +115,7 @@ t-Closeness: Privacy Beyond k-Anonymity and l-Diversity.
 Other privacy-models: 
 \code{\link{attacker_risk}()},
 \code{\link{delta_presence}()},
+\code{\link{disclosure_report}()},
 \code{\link{domias}()},
 \code{\link{drisk}()},
 \code{\link{epsilon_identifiability}()},
@@ -119,6 +123,7 @@ Other privacy-models:
 \code{\link{kanonymity}()},
 \code{\link{ldiversity}()},
 \code{\link{linkability}()},
+\code{\link{mia_classifier}()},
 \code{\link{population_uniqueness}()},
 \code{\link{recordLinkage}()},
 \code{\link{singling_out}()},

@@ -40,6 +40,7 @@
 #'
 #' @importFrom data.table as.data.table rbindlist
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 #'
 #' @examples

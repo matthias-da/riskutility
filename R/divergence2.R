@@ -54,6 +54,7 @@
 #' CumulativeEntropy(x)
 #'
 #' @family information-theory
+#' @author Matthias Templ
 #' @rdname EntropyMeasures
 #' @export
 RenyiEntropy <- function(p, alpha = 2) {

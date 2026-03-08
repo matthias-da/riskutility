@@ -8,7 +8,7 @@
 \usage{
 kanonymity(X, ...)
 
-\method{kanonymity}{synth_pair}(X, k = 5, ...)
+\method{kanonymity}{synth_pair}(X, k = 5, data = c("synthetic", "original"), ...)
 
 \method{kanonymity}{default}(X, key_vars, k = 5, na.rm = TRUE, ...)
 }
@@ -18,6 +18,9 @@ kanonymity(X, ...)
 \item{...}{additional arguments passed to methods (currently unused)}
 
 \item{k}{integer, the k-anonymity threshold to check against (default: 5)}
+
+\item{data}{character, which dataset to assess: "synthetic" (default) or "original".
+Only used by the synth_pair method.}
 
 \item{key_vars}{character vector of quasi-identifier variable names}
 
@@ -95,12 +98,14 @@ Sweeney, L. (2002). k-Anonymity: A Model for Protecting Privacy.
 Other privacy-models: 
 \code{\link{attacker_risk}()},
 \code{\link{delta_presence}()},
+\code{\link{disclosure_report}()},
 \code{\link{domias}()},
 \code{\link{drisk}()},
 \code{\link{epsilon_identifiability}()},
 \code{\link{individual_risk}()},
 \code{\link{ldiversity}()},
 \code{\link{linkability}()},
+\code{\link{mia_classifier}()},
 \code{\link{population_uniqueness}()},
 \code{\link{recordLinkage}()},
 \code{\link{singling_out}()},

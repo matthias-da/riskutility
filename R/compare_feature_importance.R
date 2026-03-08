@@ -79,6 +79,7 @@
 #'
 #' @importFrom data.table data.table
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 compare_feature_importance <- function(X, ...) {
   UseMethod("compare_feature_importance")

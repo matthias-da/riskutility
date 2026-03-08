@@ -35,6 +35,7 @@
 #' @importFrom data.table as.data.table rbindlist
 #' @importFrom MASS ginv
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 #'
 #' @examples

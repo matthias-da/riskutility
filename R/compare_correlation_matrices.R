@@ -36,6 +36,7 @@
 #' @importFrom data.table as.data.table
 #' @importFrom MASS cov.rob
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 #'
 #' @examples

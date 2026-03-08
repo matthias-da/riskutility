@@ -8,7 +8,7 @@
 \usage{
 suda(X, ...)
 
-\method{suda}{synth_pair}(X, max_msu = NULL, ...)
+\method{suda}{synth_pair}(X, max_msu = NULL, data = c("synthetic", "original"), ...)
 
 \method{suda}{default}(X, key_vars, max_msu = NULL, missing = NA, na.rm = TRUE, ...)
 }
@@ -19,6 +19,9 @@ suda(X, ...)
 
 \item{max_msu}{integer, maximum size of Minimal Sample Uniques to consider
 (default: NULL, uses all variables up to length(key_vars))}
+
+\item{data}{character, which dataset to assess: "synthetic" (default) or "original".
+Only used by the synth_pair method.}
 
 \item{key_vars}{character vector of quasi-identifier variable names}
 
@@ -103,6 +106,7 @@ A Recursive Search Algorithm for Statistical Disclosure Assessment.
 Other privacy-models: 
 \code{\link{attacker_risk}()},
 \code{\link{delta_presence}()},
+\code{\link{disclosure_report}()},
 \code{\link{domias}()},
 \code{\link{drisk}()},
 \code{\link{epsilon_identifiability}()},
@@ -110,6 +114,7 @@ Other privacy-models:
 \code{\link{kanonymity}()},
 \code{\link{ldiversity}()},
 \code{\link{linkability}()},
+\code{\link{mia_classifier}()},
 \code{\link{population_uniqueness}()},
 \code{\link{recordLinkage}()},
 \code{\link{singling_out}()},

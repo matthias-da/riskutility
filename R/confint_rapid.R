@@ -44,6 +44,7 @@
 #' @seealso \code{\link{rapid}}, \code{\link{rapid_test}}
 #'
 #' @family rapid
+#' @author Oscar Thees, Matthias Templ
 #' @examples
 #' # Small runnable example
 #' set.seed(42)

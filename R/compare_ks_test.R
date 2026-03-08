@@ -16,6 +16,7 @@
 #' @return A data.table with columns for the grouping variables (if provided), the KS test statistic, and the corresponding
 #'         p-value. If no grouping is provided, a data.table with one row is returned.
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 #'
 #' @examples

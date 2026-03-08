@@ -47,6 +47,7 @@
 #'
 #' @importFrom stats na.omit quantile
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 compare_missing_values <- function(X, ...) {
   UseMethod("compare_missing_values")

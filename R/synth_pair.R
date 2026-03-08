@@ -58,6 +58,7 @@
 #'
 #' @importFrom utils head
 #' @family containers
+#' @author Matthias Templ
 #' @export
 #' @examples
 #' # Create example data

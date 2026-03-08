@@ -15,6 +15,7 @@
 #'
 #' @importFrom data.table as.data.table
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 #'
 #' @examples

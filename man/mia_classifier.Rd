@@ -6,12 +6,12 @@
 \alias{mia_classifier.default}
 \title{Membership Inference Attack metric via classification}
 \usage{
-mia_classifier(real_data, ...)
+mia_classifier(X, ...)
 
-\method{mia_classifier}{synth_pair}(real_data, ...)
+\method{mia_classifier}{synth_pair}(X, ...)
 
 \method{mia_classifier}{default}(
-  real_data,
+  X,
   synt_data,
   hout_data,
   cols = NULL,
@@ -26,7 +26,7 @@ mia_classifier(real_data, ...)
 )
 }
 \arguments{
-\item{real_data}{data.frame. Records used to train the synthetic generator.}
+\item{X}{data.frame or synth_pair. Records used to train the synthetic generator.}
 
 \item{...}{additional arguments passed to methods}
 
@@ -58,12 +58,13 @@ holdout splits. Default 5.}
 \value{
 An object of class \code{"mia"} with components:
 \describe{
-\item{MIA precision}{Mean precision across iterations.}
-\item{MIA precision se}{Standard error of precision.}
-\item{MIA recall}{Mean recall (primary privacy metric).}
-\item{MIA recall se}{Standard error of recall.}
-\item{MIA macro F1}{Mean macro F1 score.}
-\item{MIA macro F1 se}{Standard error of macro F1.}
+\item{precision}{Mean precision across iterations.}
+\item{precision_se}{Standard error of precision.}
+\item{recall}{Mean recall (primary privacy metric).}
+\item{recall_se}{Standard error of recall.}
+\item{macro_f1}{Mean macro F1 score.}
+\item{macro_f1_se}{Standard error of macro F1.}
+\item{privacy_pass}{Logical, TRUE if recall <= 0.55.}
 \item{num_eval_iter}{Number of evaluation iterations.}
 \item{method}{Classification method used.}
 }
@@ -74,3 +75,25 @@ Values < 0.5 indicate performance worse than random guessing.
 \description{
 Membership Inference Attack metric via classification
 }
+\seealso{
+Other privacy-models: 
+\code{\link{attacker_risk}()},
+\code{\link{delta_presence}()},
+\code{\link{disclosure_report}()},
+\code{\link{domias}()},
+\code{\link{drisk}()},
+\code{\link{epsilon_identifiability}()},
+\code{\link{individual_risk}()},
+\code{\link{kanonymity}()},
+\code{\link{ldiversity}()},
+\code{\link{linkability}()},
+\code{\link{population_uniqueness}()},
+\code{\link{recordLinkage}()},
+\code{\link{singling_out}()},
+\code{\link{suda}()},
+\code{\link{tcloseness}()}
+}
+\author{
+Matthias Templ
+}
+\concept{privacy-models}

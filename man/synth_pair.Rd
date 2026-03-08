@@ -117,4 +117,7 @@ for package-specific constructors,
 \code{\link{dcap}}, \code{\link{tcap}}, \code{\link{ims}}, \code{\link{hellinger}}
 for functions with synth_pair methods
 }
+\author{
+Matthias Templ
+}
 \concept{containers}

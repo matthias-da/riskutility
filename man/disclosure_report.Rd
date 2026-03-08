@@ -141,7 +141,25 @@ plot(report)
 \code{\link{dcap}}, \code{\link{tcap}}, \code{\link{weap}},
 \code{\link{disco}}, \code{\link{rapid}}, \code{\link{dcr}}, \code{\link{nndr}},
 \code{\link{ims}}
+
+Other privacy-models: 
+\code{\link{attacker_risk}()},
+\code{\link{delta_presence}()},
+\code{\link{domias}()},
+\code{\link{drisk}()},
+\code{\link{epsilon_identifiability}()},
+\code{\link{individual_risk}()},
+\code{\link{kanonymity}()},
+\code{\link{ldiversity}()},
+\code{\link{linkability}()},
+\code{\link{mia_classifier}()},
+\code{\link{population_uniqueness}()},
+\code{\link{recordLinkage}()},
+\code{\link{singling_out}()},
+\code{\link{suda}()},
+\code{\link{tcloseness}()}
 }
 \author{
 Matthias Templ
 }
+\concept{privacy-models}

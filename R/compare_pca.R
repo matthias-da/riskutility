@@ -32,6 +32,7 @@
 #' @importFrom stats prcomp
 #' @importFrom ggplot2 ggplot aes geom_point geom_segment geom_text labs theme_minimal scale_color_manual
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 #'
 #' @examples

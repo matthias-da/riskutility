@@ -43,6 +43,7 @@
 #' systemAnonymityLevel(A2) # Should return 1 (maximum uncertainty)
 #'
 #' @family information-theory
+#' @author Matthias Templ
 #' @export
 systemAnonymityLevel <- function(A) {
   if (!is.matrix(A) || !is.numeric(A)) stop("A must be a numeric matrix.")

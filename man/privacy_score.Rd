@@ -68,4 +68,7 @@ Other information-theory:
 \code{\link{positive_information_disclosure}()},
 \code{\link{systemAnonymityLevel}()}
 }
+\author{
+Matthias Templ
+}
 \concept{information-theory}

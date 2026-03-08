@@ -49,6 +49,7 @@
 #' 2nd edition. Wiley-Interscience.
 #'
 #' @family information-theory
+#' @author Matthias Templ
 #' @export
 mutualInformation <- function(X, Y, joint, Z = NULL, normalized = FALSE) {
   # Helper: entropy

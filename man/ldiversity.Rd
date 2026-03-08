@@ -8,7 +8,7 @@
 \usage{
 ldiversity(X, ...)
 
-\method{ldiversity}{synth_pair}(X, l = 2, c = 2, ...)
+\method{ldiversity}{synth_pair}(X, l = 2, c = 2, data = c("synthetic", "original"), ...)
 
 \method{ldiversity}{default}(X, key_vars, sensitive_var, l = 2, c = 2, na.rm = TRUE, ...)
 }
@@ -20,6 +20,9 @@ ldiversity(X, ...)
 \item{l}{integer, the l-diversity threshold to check against (default: 2)}
 
 \item{c}{numeric, the c parameter for recursive (c,l)-diversity (default: 2)}
+
+\item{data}{character, which dataset to assess: "synthetic" (default) or "original".
+Only used by the synth_pair method.}
 
 \item{key_vars}{character vector of quasi-identifier variable names}
 
@@ -103,12 +106,14 @@ l-Diversity: Privacy Beyond k-Anonymity.
 Other privacy-models: 
 \code{\link{attacker_risk}()},
 \code{\link{delta_presence}()},
+\code{\link{disclosure_report}()},
 \code{\link{domias}()},
 \code{\link{drisk}()},
 \code{\link{epsilon_identifiability}()},
 \code{\link{individual_risk}()},
 \code{\link{kanonymity}()},
 \code{\link{linkability}()},
+\code{\link{mia_classifier}()},
 \code{\link{population_uniqueness}()},
 \code{\link{recordLinkage}()},
 \code{\link{singling_out}()},

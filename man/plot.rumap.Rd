@@ -73,3 +73,6 @@ X-axis = PC1(utility), Y-axis = PC1(risk).
 \seealso{
 \code{\link{rumap}} for creating rumap objects
 }
+\author{
+Matthias Templ
+}

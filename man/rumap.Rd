@@ -6,12 +6,12 @@
 \alias{rumap.default}
 \title{Multivariate Risk-Utility Map (RU-Map)}
 \usage{
-rumap(original, ...)
+rumap(X, ...)
 
-\method{rumap}{synth_pair}(original, ...)
+\method{rumap}{synth_pair}(X, ...)
 
 \method{rumap}{default}(
-  original,
+  X,
   synthetic,
   risk_measures = c("dcap", "tcap", "disco", "ims", "repu"),
   utility_measures = c("pmse", "wasserstein", "hellinger", "energy", "ci_proximity"),
@@ -29,7 +29,7 @@ rumap(original, ...)
 )
 }
 \arguments{
-\item{original}{A data.frame containing the original dataset.}
+\item{X}{A synth_pair object, or a data.frame containing the original dataset.}
 
 \item{...}{additional arguments passed to methods}
 

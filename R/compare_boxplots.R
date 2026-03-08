@@ -21,6 +21,7 @@
 #' @param ... additional arguments passed to methods
 #' @return A ggplot2 boxplot visualization comparing the distributions.
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 #'
 #' @examples

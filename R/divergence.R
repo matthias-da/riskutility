@@ -28,6 +28,7 @@
 #' @rdname Entropy
 #' @name Entropy
 #' @family information-theory
+#' @author Matthias Templ
 #' @export KLDiv
 #' @export KLDiv_bayes
 #' @export JSDiv

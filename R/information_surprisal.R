@@ -37,6 +37,7 @@
 #' ACM Computing Surveys, 51(3), Article 57. \doi{10.1145/3168389}
 #'
 #' @family information-theory
+#' @author Matthias Templ
 #' @export
 information_surprisal <- function(p, logbase = 2) {
   if (any(p <= 0)) {

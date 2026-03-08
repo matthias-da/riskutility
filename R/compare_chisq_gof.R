@@ -34,6 +34,7 @@
 #' @importFrom data.table as.data.table rbindlist
 #' @importFrom stats chisq.test xtabs
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 #'
 #' @examples

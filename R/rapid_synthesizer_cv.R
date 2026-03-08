@@ -52,6 +52,7 @@
 #' @seealso \code{\link{rapid}}, \code{\link{rapid_test}}
 #'
 #' @family rapid
+#' @author Oscar Thees, Matthias Templ
 #' @examples
 #' \dontrun{
 #' cv <- rapid_synthesizer_cv(

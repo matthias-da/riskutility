@@ -159,6 +159,7 @@ Methods and Applications in R}. Springer.
 Other privacy-models: 
 \code{\link{attacker_risk}()},
 \code{\link{delta_presence}()},
+\code{\link{disclosure_report}()},
 \code{\link{domias}()},
 \code{\link{drisk}()},
 \code{\link{epsilon_identifiability}()},
@@ -166,6 +167,7 @@ Other privacy-models:
 \code{\link{kanonymity}()},
 \code{\link{ldiversity}()},
 \code{\link{linkability}()},
+\code{\link{mia_classifier}()},
 \code{\link{recordLinkage}()},
 \code{\link{singling_out}()},
 \code{\link{suda}()},

@@ -91,6 +91,9 @@ Other information-theory:
 \code{\link{privacy_score}()},
 \code{\link{systemAnonymityLevel}()}
 }
+\author{
+Matthias Templ
+}
 \concept{information-theory}
 \keyword{entropy}
 \keyword{privacy}

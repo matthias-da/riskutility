@@ -21,6 +21,7 @@
 #' @import ggplot2
 #' @import data.table
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 #'
 #' @examples

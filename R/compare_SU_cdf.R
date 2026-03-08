@@ -67,6 +67,7 @@
 #' #' print(result$formula)
 #' #' head(result$ecdf)
 #' #'
+#' #' @author Matthias Templ
 #' #' @export
 #' compare <- function(X, Y, variables = NULL, conditional = NULL,
 #'                           weights = NULL, approx = c(FALSE, TRUE),

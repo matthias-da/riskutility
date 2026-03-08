@@ -58,6 +58,7 @@
 #'   \code{\link{rapid_threshold_select}}
 #'
 #' @family rapid
+#' @author Oscar Thees, Matthias Templ
 #' @examples
 #' # Small runnable example with few permutations
 #' set.seed(42)

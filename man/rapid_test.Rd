@@ -136,4 +136,7 @@ Other rapid:
 \code{\link{rapid_synthesizer_cv}()},
 \code{\link{rapid_threshold_select}()}
 }
+\author{
+Oscar Thees, Matthias Templ
+}
 \concept{rapid}

@@ -25,6 +25,7 @@
 #' @importFrom data.table rbindlist
 #' @return A ggplot2 histogram visualization comparing the distributions.
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 #'
 #' @examples

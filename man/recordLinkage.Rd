@@ -401,4 +401,7 @@ Other privacy-models:
 \code{\link{suda}()},
 \code{\link{tcloseness}()}
 }
+\author{
+Roman Mueller and Matthias Templ
+}
 \concept{privacy-models}

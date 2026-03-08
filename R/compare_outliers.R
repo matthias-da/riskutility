@@ -45,6 +45,7 @@
 #' }
 #'
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 compare_outliers <- function(X, ...) {
   UseMethod("compare_outliers")

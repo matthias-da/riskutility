@@ -25,6 +25,7 @@
 #' calculation.
 #' @param ... additional arguments passed to methods
 #' @family comparison
+#' @author Matthias Templ
 #' @export
 #' @return A list with class \code{"compare"} containing the following
 #' components:

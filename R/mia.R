@@ -95,7 +95,7 @@
 # -----------------------------------------------------------------------------
 #' Membership Inference Attack metric via classification
 #'
-#' @param real_data data.frame. Records used to train the synthetic generator.
+#' @param X data.frame or synth_pair. Records used to train the synthetic generator.
 #' @param synt_data data.frame. Synthetic records produced by the generator.
 #' @param hout_data data.frame. Holdout records from the same population,
 #'   NOT used to train the generator.
@@ -115,49 +115,52 @@
 #'
 #' @return An object of class \code{"mia"} with components:
 #' \describe{
-#'   \item{MIA precision}{Mean precision across iterations.}
-#'   \item{MIA precision se}{Standard error of precision.}
-#'   \item{MIA recall}{Mean recall (primary privacy metric).}
-#'   \item{MIA recall se}{Standard error of recall.}
-#'   \item{MIA macro F1}{Mean macro F1 score.}
-#'   \item{MIA macro F1 se}{Standard error of macro F1.}
+#'   \item{precision}{Mean precision across iterations.}
+#'   \item{precision_se}{Standard error of precision.}
+#'   \item{recall}{Mean recall (primary privacy metric).}
+#'   \item{recall_se}{Standard error of recall.}
+#'   \item{macro_f1}{Mean macro F1 score.}
+#'   \item{macro_f1_se}{Standard error of macro F1.}
+#'   \item{privacy_pass}{Logical, TRUE if recall <= 0.55.}
 #'   \item{num_eval_iter}{Number of evaluation iterations.}
 #'   \item{method}{Classification method used.}
 #' }
 #' Values near 0.5 indicate performance close to random guessing (low risk).
 #' Values > 0.5 indicate the synthetic data leaks training membership.
 #' Values < 0.5 indicate performance worse than random guessing.
+#' @family privacy-models
+#' @author Matthias Templ
 #' @export
-mia_classifier <- function(real_data, ...) {
+mia_classifier <- function(X, ...) {
   UseMethod("mia_classifier")
 }
 
 #' @rdname mia_classifier
 #' @export
-mia_classifier.synth_pair <- function(real_data, ...) {
-  if (!is.null(real_data$source) && real_data$source == "sdcMicro") {
-    stop("mia_classifier is designed for synthetic data evaluation (membership ",
-         "inference against a generative model) and is not applicable to ",
-         "traditionally anonymized data (sdcMicro objects).",
+mia_classifier.synth_pair <- function(X, ...) {
+  if (!is.null(X$source) && X$source == "sdcMicro") {
+    stop("mia_classifier is designed for synthetic data evaluation and is not applicable to ",
+         "traditionally anonymized data (sdcMicro objects). ",
+         "Use dcr, nndr, or ims for distance-based privacy evaluation instead.",
          call. = FALSE)
   }
-  if (is.null(real_data$holdout)) {
+  if (is.null(X$holdout)) {
     stop("mia_classifier requires holdout data. Provide a synth_pair with holdout, ",
          "or use mia_classifier.default() directly with real_data, synt_data, hout_data.",
          call. = FALSE)
   }
   mia_classifier.default(
-    real_data = real_data$original,
-    synt_data = real_data$synthetic,
-    hout_data = real_data$holdout,
-    cols = real_data$vars,
+    X = X$original,
+    synt_data = X$synthetic,
+    hout_data = X$holdout,
+    cols = X$vars,
     ...
   )
 }
 
 #' @rdname mia_classifier
 #' @export
-mia_classifier.default <- function(real_data,
+mia_classifier.default <- function(X,
                            synt_data,
                            hout_data,
                            cols          = NULL,
@@ -188,6 +191,8 @@ mia_classifier.default <- function(real_data,
     )
   }
   clf_fn <- classifiers[[method]]
+
+  real_data <- X
 
   # --- Input validation ------------------------------------------------------
   if (!is.data.frame(real_data) || !is.data.frame(synt_data) || !is.data.frame(hout_data)) {
@@ -408,17 +413,18 @@ mia_classifier.default <- function(real_data,
   f <- mean_se(f1s)
 
   result <- list(
-    "MIA precision"    = p$mean,
-    "MIA precision se" = p$se,
-    "MIA recall"       = r$mean,
-    "MIA recall se"    = r$se,
-    "MIA macro F1"     = f$mean,
-    "MIA macro F1 se"  = f$se,
-    "num_eval_iter"    = num_eval_iter,
-    "method"           = method
+    precision    = p$mean,
+    precision_se = p$se,
+    recall       = r$mean,
+    recall_se    = r$se,
+    macro_f1     = f$mean,
+    macro_f1_se  = f$se,
+    num_eval_iter = num_eval_iter,
+    method        = method
   )
+  result$privacy_pass <- !is.na(r$mean) && r$mean <= 0.55
   class(result) <- "mia"
-  result
+  return(result)
 }
 
 
@@ -432,13 +438,13 @@ print.mia <- function(x, ...) {
   cat("==========================================\n\n")
   cat("  Method:     ", x$method, "\n")
   cat("  Iterations: ", x[["num_eval_iter"]], "\n\n")
-  cat("  Precision:  ", sprintf("%.4f", x[["MIA precision"]]),
-      sprintf("(SE: %.4f)", x[["MIA precision se"]]), "\n")
-  cat("  Recall:     ", sprintf("%.4f", x[["MIA recall"]]),
-      sprintf("(SE: %.4f)", x[["MIA recall se"]]), "\n")
-  cat("  Macro F1:   ", sprintf("%.4f", x[["MIA macro F1"]]),
-      sprintf("(SE: %.4f)", x[["MIA macro F1 se"]]), "\n\n")
-  recall <- x[["MIA recall"]]
+  cat("  Precision:  ", sprintf("%.4f", x$precision),
+      sprintf("(SE: %.4f)", x$precision_se), "\n")
+  cat("  Recall:     ", sprintf("%.4f", x$recall),
+      sprintf("(SE: %.4f)", x$recall_se), "\n")
+  cat("  Macro F1:   ", sprintf("%.4f", x$macro_f1),
+      sprintf("(SE: %.4f)", x$macro_f1_se), "\n\n")
+  recall <- x$recall
   if (!is.na(recall)) {
     if (recall > 0.6) {
       cat("  Risk level: HIGH (recall substantially above 0.5 baseline)\n")
@@ -448,6 +454,7 @@ print.mia <- function(x, ...) {
       cat("  Risk level: LOW (recall near or below 0.5 baseline)\n")
     }
   }
+  cat("  Privacy pass:", x$privacy_pass, "\n")
   invisible(x)
 }
 
@@ -460,15 +467,15 @@ print.mia <- function(x, ...) {
 #' @export
 summary.mia <- function(object, ...) {
   summ <- list(
-    precision = object[["MIA precision"]],
-    precision_se = object[["MIA precision se"]],
-    recall = object[["MIA recall"]],
-    recall_se = object[["MIA recall se"]],
-    macro_f1 = object[["MIA macro F1"]],
-    macro_f1_se = object[["MIA macro F1 se"]],
+    precision = object$precision,
+    precision_se = object$precision_se,
+    recall = object$recall,
+    recall_se = object$recall_se,
+    macro_f1 = object$macro_f1,
+    macro_f1_se = object$macro_f1_se,
     num_eval_iter = object[["num_eval_iter"]],
     method = object[["method"]],
-    recall_excess = object[["MIA recall"]] - 0.5
+    recall_excess = object$recall - 0.5
   )
   class(summ) <- "summary.mia"
   summ
@@ -505,5 +512,35 @@ print.summary.mia <- function(x, ...) {
     }
   }
 
+  invisible(x)
+}
+
+
+#' Plot method for mia objects
+#'
+#' @param x an object of class "mia"
+#' @param y not used
+#' @param ... additional arguments (ignored)
+#' @param which integer, which plot: 1 = metric barplot (default)
+#' @export
+#' @importFrom graphics barplot arrows
+plot.mia <- function(x, y = NULL, ..., which = 1) {
+  if (which == 1) {
+    means <- c(x$precision, x$recall, x$macro_f1)
+    ses <- c(x$precision_se, x$recall_se, x$macro_f1_se)
+    names(means) <- c("Precision", "Recall", "Macro F1")
+
+    bp <- barplot(means, ylim = c(0, min(1, max(means + ses, na.rm = TRUE) * 1.2)),
+                  col = c("steelblue", "coral", "seagreen"),
+                  main = "MIA Classification Metrics",
+                  ylab = "Score", border = NA)
+    abline(h = 0.5, lty = 2, col = "grey40")
+
+    # Add error bars
+    if (!any(is.na(ses))) {
+      arrows(bp, means - ses, bp, means + ses,
+             angle = 90, code = 3, length = 0.05, col = "grey30")
+    }
+  }
   invisible(x)
 }

@@ -48,6 +48,7 @@
 #'
 #' @seealso \code{\link{rumap}} for creating rumap objects
 #'
+#' @author Matthias Templ
 #' @export
 #' @importFrom graphics plot points lines polygon segments text legend axis mtext abline arrows
 #' @importFrom graphics par layout image
