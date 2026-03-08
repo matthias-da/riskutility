@@ -197,6 +197,10 @@
 #'   use the Fisher-information prediction SE as kernel bandwidth (default TRUE).
 #'   Ignored for \code{"rf"} or when \code{bandwidth} is user-supplied.
 #' @param return_matches logical. If TRUE, returns candidate indices per record (may be memory-heavy).
+#' @param risk_threshold numeric. Threshold for classifying records as "high risk"
+#'   and for the \code{privacy_pass} flag (default 0.1). Records with risk above
+#'   this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
+#'   The \code{privacy_pass} flag is TRUE when \code{mean_risk <= risk_threshold}.
 #' @param ... additional arguments passed to methods.
 #'
 #' @return An object of class \code{"recordLinkageRisk"}: a list with components
@@ -343,6 +347,7 @@ recordLinkage.default <- function(X,
                                   pred_model = c("logit", "rf"),
                                   pred_se = TRUE,
                                   return_matches = FALSE,
+                                  risk_threshold = 0.1,
                                   ...) {
 
     method <- match.arg(method)
@@ -732,8 +737,8 @@ recordLinkage.default <- function(X,
     overall <- list(
         mean_risk = mean(risk),
         max_risk = max(risk),
-        n_high_risk = sum(risk > 0.1),
-        pct_high_risk = mean(risk > 0.1),
+        n_high_risk = sum(risk > risk_threshold),
+        pct_high_risk = mean(risk > risk_threshold),
         risk_quantiles = as.numeric(
             stats::quantile(risk, probs = c(0, .25, .5, .75, 1))
         ),
@@ -757,7 +762,7 @@ recordLinkage.default <- function(X,
             d_min = d_min
         ),
         overall = overall,
-        privacy_pass = overall$mean_risk <= 0.1,
+        privacy_pass = overall$mean_risk <= risk_threshold,
         n_original = nrow(X),
         n_synthetic = nrow(x_anon),
         n_query = n_query,
@@ -781,7 +786,8 @@ recordLinkage.default <- function(X,
             bandwidth = bandwidth,
             kernel = kernel,
             pred_model = pred_model,
-            pred_se = pred_se
+            pred_se = pred_se,
+            risk_threshold = risk_threshold
         )
     )
     if (isTRUE(return_matches)) out$matches <- matches
@@ -1282,15 +1288,16 @@ print.recordLinkageRisk <- function(x, ...) {
     cat("\nRisk Summary\n")
     cat(sprintf("  Mean risk:       %6.4f\n", o$mean_risk))
     cat(sprintf("  Max risk:        %6.4f\n", o$max_risk))
-    cat(sprintf("  High risk (>0.1): %d (%.1f%%)\n",
-                o$n_high_risk, 100 * o$pct_high_risk))
+    thresh <- if (!is.null(x$settings$risk_threshold)) x$settings$risk_threshold else 0.1
+    cat(sprintf("  High risk (>%.2g): %d (%.1f%%)\n",
+                thresh, o$n_high_risk, 100 * o$pct_high_risk))
 
     cat("\nPrivacy Assessment: ")
     if (x$privacy_pass) {
         cat("PASS\n")
     } else {
         cat("WARNING\n")
-        cat("  Mean re-identification risk exceeds 0.1.\n")
+        cat(sprintf("  Mean re-identification risk exceeds %.2g.\n", thresh))
     }
 
     invisible(x)

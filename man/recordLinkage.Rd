@@ -36,6 +36,7 @@ recordLinkage(X, ...)
   pred_model = c("logit", "rf"),
   pred_se = TRUE,
   return_matches = FALSE,
+  risk_threshold = 0.1,
   ...
 )
 }
@@ -133,6 +134,11 @@ use the Fisher-information prediction SE as kernel bandwidth (default TRUE).
 Ignored for \code{"rf"} or when \code{bandwidth} is user-supplied.}
 
 \item{return_matches}{logical. If TRUE, returns candidate indices per record (may be memory-heavy).}
+
+\item{risk_threshold}{numeric. Threshold for classifying records as "high risk"
+and for the \code{privacy_pass} flag (default 0.1). Records with risk above
+this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
+The \code{privacy_pass} flag is TRUE when \code{mean_risk <= risk_threshold}.}
 }
 \value{
 An object of class \code{"recordLinkageRisk"}: a list with components
@@ -381,6 +387,7 @@ Deliverable MI-3/D2). Unpublished technical report.
 Other privacy-models: 
 \code{\link{attacker_risk}()},
 \code{\link{delta_presence}()},
+\code{\link{disclosure_report}()},
 \code{\link{domias}()},
 \code{\link{drisk}()},
 \code{\link{epsilon_identifiability}()},
@@ -388,6 +395,7 @@ Other privacy-models:
 \code{\link{kanonymity}()},
 \code{\link{ldiversity}()},
 \code{\link{linkability}()},
+\code{\link{mia_classifier}()},
 \code{\link{population_uniqueness}()},
 \code{\link{singling_out}()},
 \code{\link{suda}()},
