@@ -196,7 +196,7 @@ the same quasi-identifier values).
 # WEAP only uses synthetic data (Y) - it measures disclosure risk
 # within the synthetic dataset itself
 weap_result <- weap(
-  Y = synthetic,
+  synthetic,
   key_vars = key_vars,
   target_var = target_var
 )

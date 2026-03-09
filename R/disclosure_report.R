@@ -1,25 +1,28 @@
 #' Comprehensive Disclosure Risk Report
 #'
 #' Computes multiple disclosure risk metrics and produces a comprehensive report
-#' for synthetic data privacy assessment. Combines attribution-based measures
-#' (DCAP, TCAP, WEAP, DiSCO, RAPID) and distance-based measures (DCR, NNDR, IMS).
+#' for data privacy assessment. Combines attribution-based measures
+#' (DCAP, TCAP, WEAP, DiSCO, RAPID), distance-based measures (DCR, NNDR, IMS,
+#' dRisk, hitting rate), privacy models (k-anonymity, l-diversity, t-closeness),
+#' and membership inference attacks (singling out, linkability, NNAA, DOMIAS).
+#' Works for both synthetic and traditionally anonymized data.
 #'
 #' @param X data frame of original data
-#' @param Y data frame of synthetic data
+#' @param Y data frame of synthetic/anonymized data
 #' @param key_vars character vector of quasi-identifier variable names for
-#'   attribution-based metrics. If NULL, these metrics are skipped.
+#'   attribution-based and privacy model metrics. If NULL, these metrics are skipped.
 #' @param target_var character, name of the sensitive target variable for
 #'   attribution-based metrics. If NULL, these metrics are skipped.
-#' @param holdout data frame of holdout data for distance-based metrics.
-#'   If NULL, automatically created from X using holdout_fraction.
+#' @param holdout data frame of holdout data for distance-based and membership
+#'   inference metrics. If NULL, automatically created from X using holdout_fraction.
 #' @param holdout_fraction numeric, fraction of X to use as holdout (default: 0.5)
 #' @param distance_vars character vector of variables for distance-based metrics.
 #'   If NULL, all common variables are used.
 #' @param distance_method character, distance method for DCR/NNDR: "gower" or
 #'   "euclidean" (default: "gower")
 #' @param compute character vector specifying which metrics to compute.
-#'   Default is "all". Options: "all", "attribution", "distance", or specific
-#'   metric names: "dcap", "tcap", "weap", "disco", "rapid", "dcr", "nndr", "ims".
+#'   Default is "all". Options: "all", "attribution", "distance", "privacy",
+#'   "membership", or specific metric names (see Details).
 #' @param rapid_model character, model type for RAPID: "rf" (default), "lm", "cart"
 #' @param na.rm logical, remove records with NA values (default: TRUE)
 #' @param seed integer, random seed for holdout sampling (default: NULL)
@@ -30,30 +33,48 @@
 #' \itemize{
 #'   \item results: list of individual metric results
 #'   \item summary: data frame with key metrics and pass/fail status
-#'   \item overall_risk: character, overall risk assessment ("low", "medium", "high")
+#'   \item overall_risk: character, overall risk assessment ("LOW", "MEDIUM", "HIGH")
 #'   \item n_pass: number of metrics that passed
 #'   \item n_fail: number of metrics that failed/warned
 #'   \item parameters: list of input parameters used
 #' }
 #'
 #' @details
-#' This function provides a one-stop assessment of synthetic data disclosure risk
-#' by computing multiple complementary metrics:
+#' This function provides a one-stop assessment of disclosure risk
+#' by computing multiple complementary metrics across four families:
 #'
 #' \strong{Attribution-Based Metrics} (require key_vars and target_var):
 #' \itemize{
-#'   \item DCAP: Overall correct attribution probability
-#'   \item TCAP: Per-record attribution risk with categories
-#'   \item WEAP: Within equivalence class attribution (on synthetic only)
-#'   \item DiSCO: Count of disclosive synthetic records
-#'   \item RAPID: ML-based attribute inference risk (requires ranger package)
+#'   \item dcap: Overall correct attribution probability
+#'   \item tcap: Per-record attribution risk with categories
+#'   \item weap: Within equivalence class attribution (on synthetic only)
+#'   \item disco: Count of disclosive synthetic records
+#'   \item rapid: ML-based attribute inference risk (requires ranger package)
 #' }
 #'
 #' \strong{Distance-Based Metrics} (use holdout comparison):
 #' \itemize{
-#'   \item DCR: Distance to closest record ratio
-#'   \item NNDR: Nearest neighbor distance ratio
-#'   \item IMS: Identical match share (exact copies)
+#'   \item dcr: Distance to closest record ratio
+#'   \item nndr: Nearest neighbor distance ratio
+#'   \item ims: Identical match share (exact copies)
+#'   \item drisk: Disclosure risk for continuous variables
+#'   \item hitting_rate: Fraction of records within threshold distance
+#' }
+#'
+#' \strong{Privacy Models} (single-dataset, require key_vars):
+#' \itemize{
+#'   \item kanonymity: Minimum equivalence class size
+#'   \item ldiversity: Sensitive attribute diversity per EC (requires target_var)
+#'   \item tcloseness: EMD between EC and overall distribution (requires target_var)
+#'   \item individual_risk: Frequency-based per-record risk
+#' }
+#'
+#' \strong{Membership Inference} (require holdout):
+#' \itemize{
+#'   \item singling_out: Predicate-based uniqueness attack (GDPR criterion)
+#'   \item linkability: Record linkage attack (GDPR criterion)
+#'   \item nnaa: Nearest-neighbor adversarial accuracy / privacy loss
+#'   \item domias: Density-based membership inference (requires ranger package)
 #' }
 #'
 #' The overall risk is determined by the number of failed checks:
@@ -65,9 +86,13 @@
 #'
 #' @seealso \code{\link{dcap}}, \code{\link{tcap}}, \code{\link{weap}},
 #'   \code{\link{disco}}, \code{\link{rapid}}, \code{\link{dcr}}, \code{\link{nndr}},
-#'   \code{\link{ims}}
+#'   \code{\link{ims}}, \code{\link{drisk}}, \code{\link{hitting_rate}},
+#'   \code{\link{kanonymity}}, \code{\link{ldiversity}}, \code{\link{tcloseness}},
+#'   \code{\link{individual_risk}}, \code{\link{singling_out}},
+#'   \code{\link{linkability}}, \code{\link{nnaa}}, \code{\link{domias}}
 #'
 #' @author Matthias Templ
+#' @family privacy-models
 #' @export
 #' @examples
 #' # Create example data
@@ -138,18 +163,39 @@ disclosure_report.default <- function(X, Y,
   distance_method <- match.arg(distance_method)
 
   # Determine which metrics to compute
-  all_metrics <- c("dcap", "tcap", "weap", "disco", "rapid", "dcr", "nndr", "ims")
   attribution_metrics <- c("dcap", "tcap", "weap", "disco", "rapid")
-  distance_metrics <- c("dcr", "nndr", "ims")
+  distance_metrics <- c("dcr", "nndr", "ims", "drisk", "hitting_rate")
+  privacy_metrics <- c("kanonymity", "ldiversity", "tcloseness", "individual_risk")
+  membership_metrics <- c("singling_out", "linkability", "nnaa", "domias")
+  all_metrics <- c(attribution_metrics, distance_metrics,
+                   privacy_metrics, membership_metrics)
 
- if ("all" %in% compute) {
+  if ("all" %in% compute) {
     metrics_to_compute <- all_metrics
-  } else if ("attribution" %in% compute) {
-    metrics_to_compute <- attribution_metrics
-  } else if ("distance" %in% compute) {
-    metrics_to_compute <- distance_metrics
   } else {
-    metrics_to_compute <- intersect(tolower(compute), all_metrics)
+    metrics_to_compute <- character(0)
+    if ("attribution" %in% compute) {
+      metrics_to_compute <- c(metrics_to_compute, attribution_metrics)
+    }
+    if ("distance" %in% compute) {
+      metrics_to_compute <- c(metrics_to_compute, distance_metrics)
+    }
+    if ("privacy" %in% compute) {
+      metrics_to_compute <- c(metrics_to_compute, privacy_metrics)
+    }
+    if ("membership" %in% compute) {
+      metrics_to_compute <- c(metrics_to_compute, membership_metrics)
+    }
+    # Also allow specific metric names
+    specific <- setdiff(compute, c("all", "attribution", "distance",
+                                   "privacy", "membership"))
+    if (length(specific) > 0) {
+      metrics_to_compute <- unique(c(metrics_to_compute,
+                                     intersect(tolower(specific), all_metrics)))
+    }
+    if (length(metrics_to_compute) == 0) {
+      metrics_to_compute <- intersect(tolower(compute), all_metrics)
+    }
   }
 
   # Check if attribution metrics can be computed
@@ -161,6 +207,24 @@ disclosure_report.default <- function(X, Y,
     }
   }
 
+  # Check if privacy models can be computed (need at least key_vars)
+  can_compute_privacy <- !is.null(key_vars)
+  if (!can_compute_privacy) {
+    metrics_to_compute <- setdiff(metrics_to_compute, privacy_metrics)
+    if (verbose && length(intersect(compute, c("all", "privacy", privacy_metrics))) > 0) {
+      message("Note: Privacy model metrics skipped (key_vars not provided)")
+    }
+  }
+
+  # Privacy models needing target_var (ldiversity, tcloseness)
+  needs_target <- c("ldiversity", "tcloseness")
+  if (is.null(target_var) && any(needs_target %in% metrics_to_compute)) {
+    metrics_to_compute <- setdiff(metrics_to_compute, needs_target)
+    if (verbose) {
+      message("Note: ldiversity/tcloseness skipped (target_var not provided)")
+    }
+  }
+
   # Initialize results
   results <- list()
   summary_rows <- list()
@@ -168,8 +232,9 @@ disclosure_report.default <- function(X, Y,
   # Set seed for reproducibility
   if (!is.null(seed)) set.seed(seed)
 
-  # Create holdout if needed for distance metrics
-  if (any(c("dcr", "nndr") %in% metrics_to_compute)) {
+  # Create holdout if needed for distance or membership metrics
+  needs_holdout <- c("dcr", "nndr", "singling_out", "linkability", "nnaa", "domias")
+  if (any(needs_holdout %in% metrics_to_compute)) {
     if (is.null(holdout)) {
       n_holdout <- max(2, floor(nrow(X) * holdout_fraction))
       holdout_idx <- sample(nrow(X), n_holdout)
@@ -383,6 +448,282 @@ disclosure_report.default <- function(X, Y,
   }
 
   # ============================================
+  # ADDITIONAL DISTANCE-BASED METRICS
+  # ============================================
+
+  if ("drisk" %in% metrics_to_compute) {
+    if (verbose) message("Computing dRisk...")
+    tryCatch({
+      results$drisk <- drisk(X, Y, vars = distance_vars, method = "both",
+                             na.rm = na.rm)
+      drisk_val <- if (!is.null(results$drisk$drisk_interval)) {
+        results$drisk$drisk_interval
+      } else {
+        results$drisk$drisk_rmd
+      }
+      pass <- drisk_val < 0.05
+      summary_rows$drisk <- data.frame(
+        metric = "dRisk",
+        value = round(drisk_val, 4),
+        reference = "< 0.05",
+        ratio = round(drisk_val, 4),
+        status = ifelse(pass, "PASS", "WARNING"),
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      if (verbose) message("  dRisk failed: ", e$message)
+      summary_rows$drisk <<- data.frame(
+        metric = "dRisk", value = NA, reference = NA, ratio = NA,
+        status = "ERROR", stringsAsFactors = FALSE
+      )
+    })
+  }
+
+  if ("hitting_rate" %in% metrics_to_compute) {
+    if (verbose) message("Computing Hitting Rate...")
+    tryCatch({
+      results$hitting_rate <- hitting_rate(X, Y, vars = distance_vars,
+                                           method = distance_method,
+                                           na.rm = na.rm)
+      pass <- results$hitting_rate$rate < 0.05
+      summary_rows$hitting_rate <- data.frame(
+        metric = "Hitting Rate",
+        value = round(results$hitting_rate$rate, 4),
+        reference = "< 0.05",
+        ratio = round(results$hitting_rate$rate, 4),
+        status = ifelse(pass, "PASS", "WARNING"),
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      if (verbose) message("  Hitting Rate failed: ", e$message)
+      summary_rows$hitting_rate <<- data.frame(
+        metric = "Hitting Rate", value = NA, reference = NA, ratio = NA,
+        status = "ERROR", stringsAsFactors = FALSE
+      )
+    })
+  }
+
+  # ============================================
+  # PRIVACY MODELS (single-dataset)
+  # ============================================
+
+  if ("kanonymity" %in% metrics_to_compute && can_compute_privacy) {
+    if (verbose) message("Computing k-Anonymity...")
+    tryCatch({
+      results$kanonymity <- kanonymity(Y, key_vars = key_vars, na.rm = na.rm)
+      k_val <- results$kanonymity$k_level
+      pass <- k_val >= 5
+      summary_rows$kanonymity <- data.frame(
+        metric = "k-Anonymity",
+        value = k_val,
+        reference = ">= 5",
+        ratio = k_val,
+        status = ifelse(pass, "PASS", ifelse(k_val >= 2, "WARNING", "FAIL")),
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      if (verbose) message("  k-Anonymity failed: ", e$message)
+      summary_rows$kanonymity <<- data.frame(
+        metric = "k-Anonymity", value = NA, reference = NA, ratio = NA,
+        status = "ERROR", stringsAsFactors = FALSE
+      )
+    })
+  }
+
+  if ("ldiversity" %in% metrics_to_compute && can_compute_privacy) {
+    if (verbose) message("Computing l-Diversity...")
+    tryCatch({
+      results$ldiversity <- ldiversity(Y, key_vars = key_vars,
+                                       sensitive_var = target_var,
+                                       na.rm = na.rm)
+      l_val <- results$ldiversity$distinct_l
+      pass <- l_val >= 2
+      summary_rows$ldiversity <- data.frame(
+        metric = "l-Diversity",
+        value = l_val,
+        reference = ">= 2",
+        ratio = l_val,
+        status = ifelse(pass, "PASS", "WARNING"),
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      if (verbose) message("  l-Diversity failed: ", e$message)
+      summary_rows$ldiversity <<- data.frame(
+        metric = "l-Diversity", value = NA, reference = NA, ratio = NA,
+        status = "ERROR", stringsAsFactors = FALSE
+      )
+    })
+  }
+
+  if ("tcloseness" %in% metrics_to_compute && can_compute_privacy) {
+    if (verbose) message("Computing t-Closeness...")
+    tryCatch({
+      results$tcloseness <- tcloseness(Y, key_vars = key_vars,
+                                       sensitive_var = target_var,
+                                       na.rm = na.rm)
+      t_val <- results$tcloseness$t_achieved
+      pass <- t_val <= 0.2
+      summary_rows$tcloseness <- data.frame(
+        metric = "t-Closeness",
+        value = round(t_val, 4),
+        reference = "<= 0.2",
+        ratio = round(t_val, 4),
+        status = ifelse(pass, "PASS", "WARNING"),
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      if (verbose) message("  t-Closeness failed: ", e$message)
+      summary_rows$tcloseness <<- data.frame(
+        metric = "t-Closeness", value = NA, reference = NA, ratio = NA,
+        status = "ERROR", stringsAsFactors = FALSE
+      )
+    })
+  }
+
+  if ("individual_risk" %in% metrics_to_compute && can_compute_privacy) {
+    if (verbose) message("Computing Individual Risk...")
+    tryCatch({
+      results$individual_risk <- individual_risk(Y, key_vars = key_vars,
+                                                 na.rm = na.rm)
+      mean_risk <- mean(results$individual_risk$risk, na.rm = TRUE)
+      max_risk <- max(results$individual_risk$risk, na.rm = TRUE)
+      n_high <- sum(results$individual_risk$risk > 0.1, na.rm = TRUE)
+      pass <- mean_risk < 0.1
+      summary_rows$individual_risk <- data.frame(
+        metric = "Individual Risk",
+        value = round(mean_risk, 4),
+        reference = paste0(n_high, " high-risk (max=", round(max_risk, 3), ")"),
+        ratio = round(mean_risk, 4),
+        status = ifelse(pass, "PASS", "WARNING"),
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      if (verbose) message("  Individual Risk failed: ", e$message)
+      summary_rows$individual_risk <<- data.frame(
+        metric = "Individual Risk", value = NA, reference = NA, ratio = NA,
+        status = "ERROR", stringsAsFactors = FALSE
+      )
+    })
+  }
+
+  # ============================================
+  # MEMBERSHIP INFERENCE
+  # ============================================
+
+  if ("singling_out" %in% metrics_to_compute) {
+    if (verbose) message("Computing Singling Out Risk...")
+    tryCatch({
+      results$singling_out <- singling_out(train_data, Y,
+                                           holdout = holdout_data,
+                                           n_attacks = 500,
+                                           seed = seed, na.rm = na.rm)
+      risk_val <- results$singling_out$risk
+      pass <- risk_val < 0.1
+      summary_rows$singling_out <- data.frame(
+        metric = "Singling Out",
+        value = round(risk_val, 4),
+        reference = "< 0.1",
+        ratio = round(risk_val, 4),
+        status = ifelse(pass, "PASS", "WARNING"),
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      if (verbose) message("  Singling Out failed: ", e$message)
+      summary_rows$singling_out <<- data.frame(
+        metric = "Singling Out", value = NA, reference = NA, ratio = NA,
+        status = "ERROR", stringsAsFactors = FALSE
+      )
+    })
+  }
+
+  if ("linkability" %in% metrics_to_compute) {
+    if (verbose) message("Computing Linkability Risk...")
+    tryCatch({
+      results$linkability <- linkability(train_data, Y,
+                                         holdout = holdout_data,
+                                         n_attacks = 500,
+                                         seed = seed, na.rm = na.rm)
+      risk_val <- results$linkability$risk
+      pass <- risk_val < 0.1
+      summary_rows$linkability <- data.frame(
+        metric = "Linkability",
+        value = round(risk_val, 4),
+        reference = "< 0.1",
+        ratio = round(risk_val, 4),
+        status = ifelse(pass, "PASS", "WARNING"),
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      if (verbose) message("  Linkability failed: ", e$message)
+      summary_rows$linkability <<- data.frame(
+        metric = "Linkability", value = NA, reference = NA, ratio = NA,
+        status = "ERROR", stringsAsFactors = FALSE
+      )
+    })
+  }
+
+  if ("nnaa" %in% metrics_to_compute) {
+    if (verbose) message("Computing NNAA...")
+    tryCatch({
+      results$nnaa <- nnaa(train_data, Y,
+                           holdout = holdout_data,
+                           vars = distance_vars,
+                           method = distance_method,
+                           na.rm = na.rm, seed = seed)
+      pl_val <- results$nnaa$privacy_loss
+      pass <- pl_val < 0.05
+      summary_rows$nnaa <- data.frame(
+        metric = "NNAA",
+        value = round(pl_val, 4),
+        reference = "< 0.05",
+        ratio = round(pl_val, 4),
+        status = ifelse(pass, "PASS", "WARNING"),
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      if (verbose) message("  NNAA failed: ", e$message)
+      summary_rows$nnaa <<- data.frame(
+        metric = "NNAA", value = NA, reference = NA, ratio = NA,
+        status = "ERROR", stringsAsFactors = FALSE
+      )
+    })
+  }
+
+  if ("domias" %in% metrics_to_compute) {
+    if (verbose) message("Computing DOMIAS...")
+    if (!requireNamespace("ranger", quietly = TRUE)) {
+      if (verbose) message("  DOMIAS skipped: 'ranger' package not installed")
+      summary_rows$domias <- data.frame(
+        metric = "DOMIAS", value = NA, reference = NA, ratio = NA,
+        status = "SKIPPED", stringsAsFactors = FALSE
+      )
+    } else {
+      tryCatch({
+        results$domias <- domias(train_data, Y,
+                                 holdout = holdout_data,
+                                 vars = distance_vars,
+                                 na.rm = na.rm, seed = seed)
+        auc_val <- results$domias$auc
+        pass <- auc_val < 0.6
+        summary_rows$domias <- data.frame(
+          metric = "DOMIAS",
+          value = round(auc_val, 4),
+          reference = "< 0.6",
+          ratio = round(auc_val, 4),
+          status = ifelse(pass, "PASS", "WARNING"),
+          stringsAsFactors = FALSE
+        )
+      }, error = function(e) {
+        if (verbose) message("  DOMIAS failed: ", e$message)
+        summary_rows$domias <<- data.frame(
+          metric = "DOMIAS", value = NA, reference = NA, ratio = NA,
+          status = "ERROR", stringsAsFactors = FALSE
+        )
+      })
+    }
+  }
+
+  # ============================================
   # AGGREGATE RESULTS
   # ============================================
 
@@ -502,7 +843,9 @@ summary.disclosure_report <- function(object, ...) {
     n_total = object$n_total,
     summary_table = object$summary,
     attribution_results = list(),
-    distance_results = list()
+    distance_results = list(),
+    privacy_results = list(),
+    membership_results = list()
   )
 
   # Extract key values from attribution metrics
@@ -556,6 +899,70 @@ summary.disclosure_report <- function(object, ...) {
       pct = object$results$ims$ims_pct,
       n_identical = object$results$ims$n_identical,
       pass = object$results$ims$privacy_pass
+    )
+  }
+
+  if (!is.null(object$results$drisk)) {
+    summ$distance_results$drisk <- list(
+      interval = object$results$drisk$drisk_interval,
+      rmd = object$results$drisk$drisk_rmd
+    )
+  }
+
+  if (!is.null(object$results$hitting_rate)) {
+    summ$distance_results$hitting_rate <- list(
+      rate = object$results$hitting_rate$rate
+    )
+  }
+
+  # Extract privacy model results
+  if (!is.null(object$results$kanonymity)) {
+    summ$privacy_results$kanonymity <- list(
+      k_level = object$results$kanonymity$k_level
+    )
+  }
+
+  if (!is.null(object$results$ldiversity)) {
+    summ$privacy_results$ldiversity <- list(
+      distinct_l = object$results$ldiversity$distinct_l
+    )
+  }
+
+  if (!is.null(object$results$tcloseness)) {
+    summ$privacy_results$tcloseness <- list(
+      t_achieved = object$results$tcloseness$t_achieved
+    )
+  }
+
+  if (!is.null(object$results$individual_risk)) {
+    summ$privacy_results$individual_risk <- list(
+      mean_risk = mean(object$results$individual_risk$risk, na.rm = TRUE),
+      max_risk = max(object$results$individual_risk$risk, na.rm = TRUE)
+    )
+  }
+
+  # Extract membership inference results
+  if (!is.null(object$results$singling_out)) {
+    summ$membership_results$singling_out <- list(
+      risk = object$results$singling_out$risk
+    )
+  }
+
+  if (!is.null(object$results$linkability)) {
+    summ$membership_results$linkability <- list(
+      risk = object$results$linkability$risk
+    )
+  }
+
+  if (!is.null(object$results$nnaa)) {
+    summ$membership_results$nnaa <- list(
+      privacy_loss = object$results$nnaa$privacy_loss
+    )
+  }
+
+  if (!is.null(object$results$domias)) {
+    summ$membership_results$domias <- list(
+      auc = object$results$domias$auc
     )
   }
 
@@ -615,6 +1022,48 @@ print.summary.disclosure_report <- function(x, ...) {
       cat("  IMS:", sprintf("%.2f%%", x$distance_results$ims$pct),
           ", copies:", x$distance_results$ims$n_identical,
           ifelse(x$distance_results$ims$pass, "(PASS)", "(WARNING)"), "\n")
+    }
+    if (!is.null(x$distance_results$drisk)) {
+      cat("  dRisk interval:", round(x$distance_results$drisk$interval, 4),
+          ", RMD:", round(x$distance_results$drisk$rmd, 4), "\n")
+    }
+    if (!is.null(x$distance_results$hitting_rate)) {
+      cat("  Hitting Rate:", round(x$distance_results$hitting_rate$rate, 4), "\n")
+    }
+    cat("\n")
+  }
+
+  if (length(x$privacy_results) > 0) {
+    cat("Privacy Models:\n")
+    if (!is.null(x$privacy_results$kanonymity)) {
+      cat("  k-Anonymity: k =", x$privacy_results$kanonymity$k_level, "\n")
+    }
+    if (!is.null(x$privacy_results$ldiversity)) {
+      cat("  l-Diversity: l =", x$privacy_results$ldiversity$distinct_l, "\n")
+    }
+    if (!is.null(x$privacy_results$tcloseness)) {
+      cat("  t-Closeness: t =", round(x$privacy_results$tcloseness$t_achieved, 4), "\n")
+    }
+    if (!is.null(x$privacy_results$individual_risk)) {
+      cat("  Individual Risk: mean =", round(x$privacy_results$individual_risk$mean_risk, 4),
+          ", max =", round(x$privacy_results$individual_risk$max_risk, 4), "\n")
+    }
+    cat("\n")
+  }
+
+  if (length(x$membership_results) > 0) {
+    cat("Membership Inference:\n")
+    if (!is.null(x$membership_results$singling_out)) {
+      cat("  Singling Out risk:", round(x$membership_results$singling_out$risk, 4), "\n")
+    }
+    if (!is.null(x$membership_results$linkability)) {
+      cat("  Linkability risk:", round(x$membership_results$linkability$risk, 4), "\n")
+    }
+    if (!is.null(x$membership_results$nnaa)) {
+      cat("  NNAA privacy loss:", round(x$membership_results$nnaa$privacy_loss, 4), "\n")
+    }
+    if (!is.null(x$membership_results$domias)) {
+      cat("  DOMIAS AUC:", round(x$membership_results$domias$auc, 4), "\n")
     }
   }
 

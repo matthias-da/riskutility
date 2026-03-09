@@ -32,16 +32,16 @@ disclosure_report(X, ...)
 
 \item{...}{additional arguments passed to methods}
 
-\item{Y}{data frame of synthetic data}
+\item{Y}{data frame of synthetic/anonymized data}
 
 \item{key_vars}{character vector of quasi-identifier variable names for
-attribution-based metrics. If NULL, these metrics are skipped.}
+attribution-based and privacy model metrics. If NULL, these metrics are skipped.}
 
 \item{target_var}{character, name of the sensitive target variable for
 attribution-based metrics. If NULL, these metrics are skipped.}
 
-\item{holdout}{data frame of holdout data for distance-based metrics.
-If NULL, automatically created from X using holdout_fraction.}
+\item{holdout}{data frame of holdout data for distance-based and membership
+inference metrics. If NULL, automatically created from X using holdout_fraction.}
 
 \item{holdout_fraction}{numeric, fraction of X to use as holdout (default: 0.5)}
 
@@ -52,8 +52,8 @@ If NULL, all common variables are used.}
 "euclidean" (default: "gower")}
 
 \item{compute}{character vector specifying which metrics to compute.
-Default is "all". Options: "all", "attribution", "distance", or specific
-metric names: "dcap", "tcap", "weap", "disco", "rapid", "dcr", "nndr", "ims".}
+Default is "all". Options: "all", "attribution", "distance", "privacy",
+"membership", or specific metric names (see Details).}
 
 \item{rapid_model}{character, model type for RAPID: "rf" (default), "lm", "cart"}
 
@@ -68,7 +68,7 @@ An object of class "disclosure_report" containing:
 \itemize{
 \item results: list of individual metric results
 \item summary: data frame with key metrics and pass/fail status
-\item overall_risk: character, overall risk assessment ("low", "medium", "high")
+\item overall_risk: character, overall risk assessment ("LOW", "MEDIUM", "HIGH")
 \item n_pass: number of metrics that passed
 \item n_fail: number of metrics that failed/warned
 \item parameters: list of input parameters used
@@ -76,27 +76,48 @@ An object of class "disclosure_report" containing:
 }
 \description{
 Computes multiple disclosure risk metrics and produces a comprehensive report
-for synthetic data privacy assessment. Combines attribution-based measures
-(DCAP, TCAP, WEAP, DiSCO, RAPID) and distance-based measures (DCR, NNDR, IMS).
+for data privacy assessment. Combines attribution-based measures
+(DCAP, TCAP, WEAP, DiSCO, RAPID), distance-based measures (DCR, NNDR, IMS,
+dRisk, hitting rate), privacy models (k-anonymity, l-diversity, t-closeness),
+and membership inference attacks (singling out, linkability, NNAA, DOMIAS).
+Works for both synthetic and traditionally anonymized data.
 }
 \details{
-This function provides a one-stop assessment of synthetic data disclosure risk
-by computing multiple complementary metrics:
+This function provides a one-stop assessment of disclosure risk
+by computing multiple complementary metrics across four families:
 
 \strong{Attribution-Based Metrics} (require key_vars and target_var):
 \itemize{
-\item DCAP: Overall correct attribution probability
-\item TCAP: Per-record attribution risk with categories
-\item WEAP: Within equivalence class attribution (on synthetic only)
-\item DiSCO: Count of disclosive synthetic records
-\item RAPID: ML-based attribute inference risk (requires ranger package)
+\item dcap: Overall correct attribution probability
+\item tcap: Per-record attribution risk with categories
+\item weap: Within equivalence class attribution (on synthetic only)
+\item disco: Count of disclosive synthetic records
+\item rapid: ML-based attribute inference risk (requires ranger package)
 }
 
 \strong{Distance-Based Metrics} (use holdout comparison):
 \itemize{
-\item DCR: Distance to closest record ratio
-\item NNDR: Nearest neighbor distance ratio
-\item IMS: Identical match share (exact copies)
+\item dcr: Distance to closest record ratio
+\item nndr: Nearest neighbor distance ratio
+\item ims: Identical match share (exact copies)
+\item drisk: Disclosure risk for continuous variables
+\item hitting_rate: Fraction of records within threshold distance
+}
+
+\strong{Privacy Models} (single-dataset, require key_vars):
+\itemize{
+\item kanonymity: Minimum equivalence class size
+\item ldiversity: Sensitive attribute diversity per EC (requires target_var)
+\item tcloseness: EMD between EC and overall distribution (requires target_var)
+\item individual_risk: Frequency-based per-record risk
+}
+
+\strong{Membership Inference} (require holdout):
+\itemize{
+\item singling_out: Predicate-based uniqueness attack (GDPR criterion)
+\item linkability: Record linkage attack (GDPR criterion)
+\item nnaa: Nearest-neighbor adversarial accuracy / privacy loss
+\item domias: Density-based membership inference (requires ranger package)
 }
 
 The overall risk is determined by the number of failed checks:
@@ -140,7 +161,10 @@ plot(report)
 \seealso{
 \code{\link{dcap}}, \code{\link{tcap}}, \code{\link{weap}},
 \code{\link{disco}}, \code{\link{rapid}}, \code{\link{dcr}}, \code{\link{nndr}},
-\code{\link{ims}}
+\code{\link{ims}}, \code{\link{drisk}}, \code{\link{hitting_rate}},
+\code{\link{kanonymity}}, \code{\link{ldiversity}}, \code{\link{tcloseness}},
+\code{\link{individual_risk}}, \code{\link{singling_out}},
+\code{\link{linkability}}, \code{\link{nnaa}}, \code{\link{domias}}
 
 Other privacy-models: 
 \code{\link{attacker_risk}()},

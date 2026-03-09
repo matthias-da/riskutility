@@ -4,11 +4,11 @@
 #' data and provides comprehensive visualization tools for multivariate evaluation.
 #' This implements the framework from "Beyond the Trade-off Curve" (Thees, Müller, Templ 2026).
 #'
-#' @param original A data.frame containing the original dataset.
+#' @param X A synth_pair object, or a data.frame containing the original dataset.
 #' @param synthetic A data.frame or named list of data.frames containing synthetic dataset(s).
 #'   If a named list, each element is treated as a different synthetic data generator (SDG).
 #' @param risk_measures Character vector of risk measures to compute. Options:
-#'   "dcap", "tcap", "disco", "ims", "repu", "dcr", "nndr". Default includes all.
+#'   "dcap", "tcap", "disco", "ims", "repu", "dcr", "nndr", "rapid". Default includes all.
 #' @param utility_measures Character vector of utility measures to compute. Options:
 #'   "pmse", "wasserstein", "hellinger", "energy", "ci_proximity". Default includes all.
 #' @param key_vars Character vector of quasi-identifier variables (for attribution-based risk).
@@ -51,6 +51,7 @@
 #'   \item dcap: Differential Correct Attribution Probability
 #'   \item tcap: Targeted CAP (mean per-record risk)
 #'   \item disco: Disclosive in Synthetic Correct Original
+#'   \item rapid: Risk of Attribute Prediction-Induced Disclosure (ML-based)
 #'   \item ims: Identical Match Share
 #'   \item repu: Replicated Uniques
 #'   \item dcr: Distance to Closest Record ratio
@@ -126,31 +127,31 @@
 #' print(result)
 #' summary(result)
 #' }
-rumap <- function(original, ...) {
+rumap <- function(X, ...) {
   UseMethod("rumap")
 }
 
 #' @rdname rumap
 #' @export
-rumap.synth_pair <- function(original, ...) {
+rumap.synth_pair <- function(X, ...) {
   rumap.default(
-    original = original$original,
-    synthetic = original$synthetic,
-    key_vars = original$key_vars,
-    target_var = original$target_var,
-    holdout = original$holdout,
-    vars = original$vars,
-    cat_vars = original$cat_vars,
-    num_vars = original$num_vars,
+    X = X$original,
+    synthetic = X$synthetic,
+    key_vars = X$key_vars,
+    target_var = X$target_var,
+    holdout = X$holdout,
+    vars = X$vars,
+    cat_vars = X$cat_vars,
+    num_vars = X$num_vars,
     ...
   )
 }
 
 #' @rdname rumap
 #' @export
-rumap.default <- function(original,
+rumap.default <- function(X,
                   synthetic,
-                  risk_measures = c("dcap", "tcap", "disco", "ims", "repu"),
+                  risk_measures = c("dcap", "tcap", "disco", "rapid", "ims", "repu"),
                   utility_measures = c("pmse", "wasserstein", "hellinger", "energy", "ci_proximity"),
                   key_vars = NULL,
                   target_var = NULL,
@@ -162,6 +163,8 @@ rumap.default <- function(original,
                   normalize = TRUE,
                   seed = NULL,
                   na.rm = TRUE, ...) {
+
+  original <- X
 
   # Set seed for reproducibility
   if (!is.null(seed)) set.seed(seed)
@@ -196,7 +199,7 @@ rumap.default <- function(original,
   n_sdgs <- length(synthetic)
 
   # Validate risk measures
-  valid_risk <- c("dcap", "tcap", "disco", "ims", "repu", "dcr", "nndr")
+  valid_risk <- c("dcap", "tcap", "disco", "rapid", "ims", "repu", "dcr", "nndr")
   invalid_risk <- setdiff(risk_measures, valid_risk)
   if (length(invalid_risk) > 0) {
     warning(paste("Unknown risk measures ignored:", paste(invalid_risk, collapse = ", ")))
@@ -212,15 +215,17 @@ rumap.default <- function(original,
   }
 
   # Check required parameters for attribution-based risk
-  attr_risk <- intersect(risk_measures, c("dcap", "tcap", "disco"))
+  attr_risk <- intersect(risk_measures, c("dcap", "tcap", "disco", "rapid"))
   if (length(attr_risk) > 0) {
     if (is.null(key_vars)) {
       warning("key_vars not specified; attribution-based risk measures will be skipped")
       risk_measures <- setdiff(risk_measures, attr_risk)
     }
-    if (is.null(target_var) && "dcap" %in% risk_measures) {
-      warning("target_var not specified; dcap will be skipped")
-      risk_measures <- setdiff(risk_measures, "dcap")
+    if (is.null(target_var) && any(c("dcap", "rapid") %in% risk_measures)) {
+      skip_target <- intersect(c("dcap", "rapid"), risk_measures)
+      warning(paste(paste(skip_target, collapse = ", "),
+                    "require target_var; will be skipped"))
+      risk_measures <- setdiff(risk_measures, skip_target)
     }
   }
 
@@ -293,6 +298,19 @@ rumap.default <- function(original,
       }, error = function(e) {
         warning(paste("disco failed for", sdg_name, ":", e$message))
         risk_results[i, "disco"] <<- NA
+      })
+    }
+
+    # RAPID
+    if ("rapid" %in% risk_measures) {
+      tryCatch({
+        res <- rapid(original, Y, key_vars = key_vars, target_var = target_var,
+                     model_type = "lm", return_all_records = FALSE,
+                     store_model = FALSE, verbose = FALSE)
+        risk_results[i, "rapid"] <- res$rapid
+      }, error = function(e) {
+        warning(paste("rapid failed for", sdg_name, ":", e$message))
+        risk_results[i, "rapid"] <<- NA
       })
     }
 

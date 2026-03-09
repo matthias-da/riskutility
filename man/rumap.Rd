@@ -13,7 +13,7 @@ rumap(X, ...)
 \method{rumap}{default}(
   X,
   synthetic,
-  risk_measures = c("dcap", "tcap", "disco", "ims", "repu"),
+  risk_measures = c("dcap", "tcap", "disco", "rapid", "ims", "repu"),
   utility_measures = c("pmse", "wasserstein", "hellinger", "energy", "ci_proximity"),
   key_vars = NULL,
   target_var = NULL,
@@ -37,7 +37,7 @@ rumap(X, ...)
 If a named list, each element is treated as a different synthetic data generator (SDG).}
 
 \item{risk_measures}{Character vector of risk measures to compute. Options:
-"dcap", "tcap", "disco", "ims", "repu", "dcr", "nndr". Default includes all.}
+"dcap", "tcap", "disco", "ims", "repu", "dcr", "nndr", "rapid". Default includes all.}
 
 \item{utility_measures}{Character vector of utility measures to compute. Options:
 "pmse", "wasserstein", "hellinger", "energy", "ci_proximity". Default includes all.}
@@ -96,6 +96,7 @@ by computing multiple risk and utility measures simultaneously. It supports:
 \item dcap: Differential Correct Attribution Probability
 \item tcap: Targeted CAP (mean per-record risk)
 \item disco: Disclosive in Synthetic Correct Original
+\item rapid: Risk of Attribute Prediction-Induced Disclosure (ML-based)
 \item ims: Identical Match Share
 \item repu: Replicated Uniques
 \item dcr: Distance to Closest Record ratio
