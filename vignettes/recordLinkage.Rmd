@@ -1799,7 +1799,7 @@ to what candidate was chosen for record $j$. This "independent" mode
 corresponds to the classical distance-based record linkage (DBRL)
 framework of @domingoferrer2003disclosure.
 
-@domingoferrer2016gdbrl introduced *Global DBRL* (GDBRL), which models
+@herranz2016gdbrl introduced *Global DBRL* (GDBRL), which models
 a stronger attacker who enforces a one-to-one (bijective) assignment
 between original and anonymized records. The attacker solves a global
 optimization problem---minimizing total cost across all records

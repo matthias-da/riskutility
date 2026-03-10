@@ -141,7 +141,7 @@ each record independently (classical DBRL), \code{"bijective"} enforces
 one-to-one assignment via the Hungarian algorithm (GDBRL). Bijective
 matching models a stronger attacker who optimizes a global assignment and
 typically yields higher risk estimates. Requires the \pkg{clue} package.
-See Domingo-Ferrer & Muralidhar (2016).}
+See Herranz, Nin, Rodriguez & Tassa (2016).}
 
 \item{risk_threshold}{numeric. Threshold for classifying records as "high risk"
 and for the \code{privacy_pass} flag (default 0.1). Records with risk above
@@ -412,8 +412,9 @@ Pagliuca, D., & Seri, G. (1999). Some results of individual ranking
 method on the system of enterprise accounts annual survey (Esprit SDC Project,
 Deliverable MI-3/D2). Unpublished technical report.
 
-Domingo-Ferrer, J. & Muralidhar, K. (2016). On the privacy of distance-based
-record linkage risk assessment. Data & Knowledge Engineering, 100, 17-35.
+Herranz, J., Nin, J., Rodriguez, P., & Tassa, T. (2016). Revisiting
+distance-based record linkage for privacy-preserving release of statistical
+datasets. Data & Knowledge Engineering, 100, 78-93.
 }
 \seealso{
 \code{\link{individual_risk}}, \code{\link{dcr}},
