@@ -1467,6 +1467,139 @@ test_that("bijective: handles rectangular blocks via blocking (nq > ns in block)
   expect_true(all(res$per_record$risk %in% c(0, 1)))
 })
 
+## -- GDBRL correctness: hand-traced toy examples -------------------------
+
+test_that("bijective: known permutation yields correct assignment and risk", {
+  skip_if_not_installed("clue")
+  # Anon rows swapped: s1=50, s2=20, s3=80 vs orig q1=20, q2=50, q3=80
+  # Optimal: q1->s2(cost=0), q2->s1(cost=0), q3->s3(cost=0)
+  # true_idx = [1,2,3], assigned = [2,1,3] => risk = [0,0,1]
+  x <- data.frame(age = c(20, 50, 80))
+  x_anon <- data.frame(age = c(50, 20, 80))
+  res <- recordLinkage(x, x_anon, key = "age", matching = "bijective")
+  expect_identical(res$per_record$bijective_assigned, c(2L, 1L, 3L))
+  expect_identical(res$per_record$risk, c(0, 0, 1))
+})
+
+test_that("bijective: swapped anon yields all risk = 0", {
+  skip_if_not_installed("clue")
+  # q1(10), q2(11) vs s1(11), s2(10) -- rows swapped
+  # Optimal: q1->s2(cost=0), q2->s1(cost=0). Both assigned to wrong => risk=0
+  x <- data.frame(age = c(10, 11))
+  x_anon <- data.frame(age = c(11, 10))
+  res <- recordLinkage(x, x_anon, key = "age", matching = "bijective")
+  expect_identical(res$per_record$bijective_assigned, c(2L, 1L))
+  expect_true(all(res$per_record$risk == 0))
+})
+
+test_that("bijective: competing nearest neighbors resolved correctly", {
+  skip_if_not_installed("clue")
+  # q1(10), q2(12) both closest to s1(11), but s2(30) is far
+  # Bijective: q1->s1 (cost=1), q2->s2 (cost=18) is optimal over
+  #            q1->s2 (cost=20), q2->s1 (cost=1). Both get true match.
+  x <- data.frame(age = c(10, 12))
+  x_anon <- data.frame(age = c(11, 30))
+  res <- recordLinkage(x, x_anon, key = "age", matching = "bijective")
+  expect_identical(res$per_record$bijective_assigned, c(1L, 2L))
+  expect_true(all(res$per_record$risk == 1))
+})
+
+test_that("bijective: matches brute-force LSAP on 4x4 problem", {
+  skip_if_not_installed("clue")
+  # Brute-force all 4! = 24 permutations to find optimal assignment
+  brute_lsap <- function(cost) {
+    n <- nrow(cost)
+    all_perms <- function(v) {
+      if (length(v) == 1) return(list(v))
+      out <- list()
+      for (i in seq_along(v)) {
+        rest <- all_perms(v[-i])
+        for (p in rest) out <- c(out, list(c(v[i], p)))
+      }
+      out
+    }
+    perms <- all_perms(seq_len(n))
+    best_cost <- Inf; best_perm <- NULL
+    for (p in perms) {
+      tc <- sum(cost[cbind(seq_len(n), p)])
+      if (tc < best_cost) { best_cost <- tc; best_perm <- p }
+    }
+    best_perm
+  }
+  x <- data.frame(age = c(10, 30, 50, 70))
+  x_anon <- data.frame(age = c(12, 28, 53, 68))
+  rng <- diff(range(c(x$age, x_anon$age)))
+  cost <- outer(x$age, x_anon$age, function(a, b) abs(a - b)) / rng
+  bf_assign <- brute_lsap(cost)
+  res <- recordLinkage(x, x_anon, key = "age", matching = "bijective")
+  expect_identical(res$per_record$bijective_assigned, bf_assign)
+})
+
+test_that("bijective: matches brute-force LSAP on 5x5 problem", {
+  skip_if_not_installed("clue")
+  brute_lsap <- function(cost) {
+    n <- nrow(cost)
+    all_perms <- function(v) {
+      if (length(v) == 1) return(list(v))
+      out <- list()
+      for (i in seq_along(v)) {
+        rest <- all_perms(v[-i])
+        for (p in rest) out <- c(out, list(c(v[i], p)))
+      }
+      out
+    }
+    perms <- all_perms(seq_len(n))
+    best_cost <- Inf; best_perm <- NULL
+    for (p in perms) {
+      tc <- sum(cost[cbind(seq_len(n), p)])
+      if (tc < best_cost) { best_cost <- tc; best_perm <- p }
+    }
+    best_perm
+  }
+  x <- data.frame(age = c(10, 25, 40, 55, 70))
+  x_anon <- data.frame(age = c(13, 22, 44, 52, 73))
+  rng <- diff(range(c(x$age, x_anon$age)))
+  cost <- outer(x$age, x_anon$age, function(a, b) abs(a - b)) / rng
+  bf_assign <- brute_lsap(cost)
+  res <- recordLinkage(x, x_anon, key = "age", matching = "bijective")
+  expect_identical(res$per_record$bijective_assigned, bf_assign)
+})
+
+test_that("bijective: mean risk >= independent mean risk", {
+  skip_if_not_installed("clue")
+  set.seed(42)
+  n <- 100
+  x <- data.frame(
+    age = sample(18:80, n, TRUE),
+    sex = factor(sample(c("f", "m"), n, TRUE)),
+    region = factor(sample(paste0("R", 1:5), n, TRUE))
+  )
+  x_anon <- x
+  for (r in levels(x$region)) {
+    idx <- which(x$region == r)
+    x_anon$age[idx] <- sample(x$age[idx])
+  }
+  res_ind <- recordLinkage(x, x_anon, key = c("age", "sex", "region"),
+                           matching = "independent")
+  res_bij <- recordLinkage(x, x_anon, key = c("age", "sex", "region"),
+                           matching = "bijective")
+  expect_gte(res_bij$overall$mean_risk, res_ind$overall$mean_risk)
+})
+
+test_that("bijective: blocking constrains assignments within blocks", {
+  skip_if_not_installed("clue")
+  x <- data.frame(age = c(10, 20, 50, 60),
+                   grp = factor(c("A", "A", "B", "B")))
+  x_anon <- data.frame(age = c(12, 18, 52, 58),
+                        grp = factor(c("A", "A", "B", "B")))
+  res <- recordLinkage(x, x_anon, key = c("age", "grp"), block = "grp",
+                       matching = "bijective")
+  a <- res$per_record$bijective_assigned
+  expect_true(all(a[1:2] %in% 1:2))
+  expect_true(all(a[3:4] %in% 3:4))
+  expect_true(all(res$per_record$risk == 1))
+})
+
 test_that("independent matching is default and unchanged", {
   d <- .make_test_data(30)
   res1 <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
