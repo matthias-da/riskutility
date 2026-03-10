@@ -1564,21 +1564,129 @@ High tail risk (e.g., many records with $r > 0.5$) can coexist with a
 passing mean -- always check `overall$max_risk` and the risk band
 distribution alongside the pass/fail label.
 
+These risk bands are also stored per record in `per_record$risk_band`
+(a factor), enabling direct subsetting without recomputing thresholds.
+The Gini coefficient (`overall$risk_gini`) measures how concentrated
+risk is among a few records: values near 0 indicate uniform risk,
+while values near 1 indicate that all risk is concentrated in a
+small fraction of records.
+
 ## Identifying and Handling High-Risk Records
 
 When the risk assessment returns a warning, practitioners need to
-identify which records are at risk and decide on remedial action:
+identify which records are at risk and decide on remedial action.
+The `recordLinkageRisk` object provides several per-record diagnostics
+and helper functions for this purpose.
 
-```{r high-risk-records}
-# Extract records with risk > 0.5
-high_risk_idx <- which(res_real$per_record$risk > 0.5)
-cat("Records with risk > 0.5:", length(high_risk_idx), "of", nrow(res_real$per_record), "\n")
+### Per-record diagnostics
 
-# Inspect QI values of high-risk records to identify patterns
-high_risk_records <- census[high_risk_idx, c("age", "sex", "region", "educ")]
-high_risk_records$risk <- res_real$per_record$risk[high_risk_idx]
-knitr::kable(head(high_risk_records, 10), digits = 4,
-             caption = "QI values of high-risk records (first 10)")
+Each record in `per_record` now carries a categorical `risk_band`
+(very_low, low, moderate, high, very_high, unique_match) and a
+`d_rank` (the rank of the true match among all candidates, where
+rank 1 is the closest/best match):
+
+```{r per-record-diagnostics}
+head(res_real$per_record)
+table(res_real$per_record$risk_band)
+```
+
+### Top at-risk records
+
+Use `top_at_risk()` to retrieve the highest-risk records with their
+QI values:
+
+```{r top-at-risk}
+top <- top_at_risk(res_real, n = 10, data = census)
+knitr::kable(top, digits = 4,
+             caption = "Top 10 highest-risk records with QI values")
+```
+
+### Subpopulation analysis
+
+Use `risk_by_group()` to identify which subgroups carry the most
+risk:
+
+```{r risk-by-group}
+rg <- risk_by_group(res_real, group = "region", data = census)
+knitr::kable(rg, digits = 4,
+             caption = "Risk by region")
+```
+
+### Detailed record inspection
+
+For forensic analysis of a single record, use `inspect_record()`
+(requires `return_matches = TRUE`):
+
+```{r inspect-record}
+res_matches <- recordLinkage(census, census_anon,
+                             key = c("age", "sex", "region", "educ"),
+                             return_matches = TRUE)
+ir <- inspect_record(res_matches, i = which.max(res_matches$per_record$risk),
+                     data_orig = census, data_anon = census_anon)
+print(ir)
+```
+
+### Variable importance
+
+The `var_importance` field and `plot(x, which = 3)` show which
+QIs contribute most to linkage success:
+
+```{r var-importance}
+res_real$var_importance
+```
+```{r var-importance-plot, fig.width=6, fig.height=4}
+plot(res_real, which = 3)
+```
+
+### Risk band barplot
+
+The risk band barplot (`which = 5`) gives a quick visual overview
+of how records distribute across risk categories:
+
+```{r risk-band-plot, fig.width=6, fig.height=4}
+plot(res_real, which = 5)
+```
+
+### True-match rank distribution
+
+The rank distribution (`which = 6`) shows where the true match
+falls among candidates. A concentration at rank 1 means the
+attacker's best guess is usually correct:
+
+```{r rank-dist-plot, fig.width=6, fig.height=4}
+plot(res_real, which = 6)
+```
+
+### Risk by subgroup
+
+The risk-by-group barplot (`which = 7`) reveals which subpopulations
+carry the most risk. Error bars show the per-group maximum:
+
+```{r risk-by-group-plot, fig.width=6, fig.height=4}
+plot(res_real, which = 7, group = "region", data = census)
+```
+
+### Lorenz curve and Gini coefficient
+
+The Lorenz curve (`which = 8`) visualizes how concentrated risk is
+among a few records. The Gini coefficient (0 = uniform, 1 = all
+risk in one record) summarizes this:
+
+```{r lorenz-plot, fig.width=5, fig.height=5}
+plot(res_real, which = 8)
+```
+```{r risk-gini}
+res_real$overall$risk_gini
+```
+
+### Merging risks back to data
+
+Use `merge_per_record()` to join the risk diagnostics back to the
+original data for further analysis or export:
+
+```{r merge-per-record}
+merged <- merge_per_record(res_real, data = census)
+head(merged[order(merged$risk, decreasing = TRUE), ], 5)
 ```
 
 Common remedial actions include:
@@ -1679,6 +1787,70 @@ perturbative data. For a comprehensive assessment, combine identity
 disclosure metrics (such as `recordLinkage()`) with attribute disclosure
 metrics (such as TCAP or RAPID) and utility measures to understand the
 full risk-utility trade-off.
+
+
+# Bijective Matching (GDBRL)
+
+## Independent vs. Bijective Matching
+
+By default, `recordLinkage()` scores each query record independently:
+the attacker selects the best candidate for record $i$ without regard
+to what candidate was chosen for record $j$. This "independent" mode
+corresponds to the classical distance-based record linkage (DBRL)
+framework of @domingoferrer2003disclosure.
+
+@domingoferrer2016gdbrl introduced *Global DBRL* (GDBRL), which models
+a stronger attacker who enforces a one-to-one (bijective) assignment
+between original and anonymized records. The attacker solves a global
+optimization problem---minimizing total cost across all records
+simultaneously---using the Hungarian algorithm (linear sum assignment).
+Because the bijective constraint prevents multiple original records from
+being matched to the same anonymized record, the resulting risk
+estimates are typically higher than independent scoring: the attacker
+cannot "waste" the best candidates on multiple queries.
+
+Setting `matching = "bijective"` activates this mode. Risk becomes
+binary: 1 if the Hungarian algorithm assigns a record to its true match,
+0 otherwise. The `clue` package is required.
+
+## Comparison Example
+
+```{r bijective-comparison, cache=TRUE}
+# Independent matching (default) -- reuses census / census_anon from above
+res_ind <- recordLinkage(census, census_anon,
+                         key = c("age", "sex", "region", "educ"),
+                         matching = "independent")
+
+# Bijective matching (GDBRL)
+res_bij <- recordLinkage(census, census_anon,
+                         key = c("age", "sex", "region", "educ"),
+                         matching = "bijective")
+
+cat("Independent:  mean risk =", round(res_ind$overall$mean_risk, 4),
+    " | high-risk records:", res_ind$overall$n_high_risk, "\n")
+cat("Bijective:    mean risk =", round(res_bij$overall$mean_risk, 4),
+    " | high-risk records:", res_bij$overall$n_high_risk, "\n")
+```
+
+The bijective attacker typically achieves a higher re-identification
+rate because the one-to-one constraint forces globally optimal
+assignments. This is a worst-case scenario: in practice, an attacker
+rarely has the full membership knowledge and computational resources
+required for GDBRL. Nevertheless, reporting both independent and
+bijective risk provides a useful bracket on the true risk level.
+
+Bijective matching works with all four methods and with blocking. When
+blocking is enabled, the Hungarian algorithm runs independently within
+each block:
+
+```{r bijective-blocking, cache=TRUE}
+res_blk <- recordLinkage(census, census_anon,
+                         key = c("age", "sex", "region", "educ"),
+                         block = "region",
+                         matching = "bijective")
+cat("Bijective + blocking: mean risk =",
+    round(res_blk$overall$mean_risk, 4), "\n")
+```
 
 
 # Discussion and Conclusion

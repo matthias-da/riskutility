@@ -36,6 +36,7 @@ recordLinkage(X, ...)
   pred_model = c("logit", "rf"),
   pred_se = TRUE,
   return_matches = FALSE,
+  matching = c("independent", "bijective"),
   risk_threshold = 0.1,
   ...
 )
@@ -135,6 +136,13 @@ Ignored for \code{"rf"} or when \code{bandwidth} is user-supplied.}
 
 \item{return_matches}{logical. If TRUE, returns candidate indices per record (may be memory-heavy).}
 
+\item{matching}{character. Matching mode: \code{"independent"} (default) scores
+each record independently (classical DBRL), \code{"bijective"} enforces
+one-to-one assignment via the Hungarian algorithm (GDBRL). Bijective
+matching models a stronger attacker who optimizes a global assignment and
+typically yields higher risk estimates. Requires the \pkg{clue} package.
+See Domingo-Ferrer & Muralidhar (2016).}
+
 \item{risk_threshold}{numeric. Threshold for classifying records as "high risk"
 and for the \code{privacy_pass} flag (default 0.1). Records with risk above
 this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
@@ -142,12 +150,36 @@ The \code{privacy_pass} flag is TRUE when \code{mean_risk <= risk_threshold}.}
 }
 \value{
 An object of class \code{"recordLinkageRisk"}: a list with components
-\code{per_record} (data.frame with \code{n_query} rows), \code{overall} (list),
-\code{direction} (character), \code{n_query} (integer), \code{settings} (list),
-and optionally \code{matches} (list of integer vectors with row indices into
-the search dataset: \code{x_anon} for forward, \code{X} for reverse).
+\describe{
+\item{per_record}{data.frame with \code{n_query} rows and columns:
+\code{risk} (numeric, re-identification risk),
+\code{cand_n} (integer, candidate set size),
+\code{true_in_set} (logical),
+\code{d_true} (numeric, distance/score to true match),
+\code{d_min} (numeric, minimum distance),
+\code{d_rank} (integer, rank of true match among candidates),
+\code{risk_band} (factor with levels \code{"very_low"}, \code{"low"},
+\code{"moderate"}, \code{"high"}, \code{"very_high"},
+\code{"unique_match"}).
+When \code{matching = "bijective"}, an additional column
+\code{bijective_assigned} gives the search-side row index
+assigned by the Hungarian algorithm. In bijective mode,
+\code{risk} and \code{bijective_assigned} reflect the global
+one-to-one assignment, while \code{d_true}, \code{d_min}, and
+\code{d_rank} retain their per-record independent-scoring values
+from the main loop (useful for diagnostics).}
+\item{overall}{list with aggregate statistics including \code{risk_gini}
+(Gini coefficient of risk concentration).}
+\item{var_importance}{named numeric vector of per-variable importance.}
+\item{direction}{character, \code{"forward"} or \code{"reverse"}.}
+\item{matches}{(optional) list of integer vectors with candidate indices.}
+}
 When \code{direction = "forward"}, \code{per_record} has one row per
 original record; when \code{"reverse"}, one row per anonymized record.
+
+Use \code{\link{top_at_risk}}, \code{\link{risk_by_group}},
+\code{\link{merge_per_record}}, and \code{\link{inspect_record}} for
+post-hoc per-record analysis.
 }
 \description{
 Measures targeted re-identification risk by linking each original record to
@@ -379,6 +411,9 @@ Predictive Mean Matching. Discussion Paper, University of Bamberg.
 Pagliuca, D., & Seri, G. (1999). Some results of individual ranking
 method on the system of enterprise accounts annual survey (Esprit SDC Project,
 Deliverable MI-3/D2). Unpublished technical report.
+
+Domingo-Ferrer, J. & Muralidhar, K. (2016). On the privacy of distance-based
+record linkage risk assessment. Data & Knowledge Engineering, 100, 17-35.
 }
 \seealso{
 \code{\link{individual_risk}}, \code{\link{dcr}},
@@ -392,14 +427,18 @@ Other privacy-models:
 \code{\link{drisk}()},
 \code{\link{epsilon_identifiability}()},
 \code{\link{individual_risk}()},
+\code{\link{inspect_record}()},
 \code{\link{kanonymity}()},
 \code{\link{ldiversity}()},
 \code{\link{linkability}()},
+\code{\link{merge_per_record}()},
 \code{\link{mia_classifier}()},
 \code{\link{population_uniqueness}()},
+\code{\link{risk_by_group}()},
 \code{\link{singling_out}()},
 \code{\link{suda}()},
-\code{\link{tcloseness}()}
+\code{\link{tcloseness}()},
+\code{\link{top_at_risk}()}
 }
 \author{
 Roman Mueller and Matthias Templ

@@ -907,3 +907,571 @@ test_that("forward default backward compat: direction='forward', n_query set", {
   expect_equal(res$n_query, nrow(d$x))
   expect_equal(res$settings$direction, "forward")
 })
+
+
+# ── Per-record enhancement tests ─────────────────────────────────────────
+
+test_that("risk_band column exists and has correct factor levels", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_true("risk_band" %in% names(res$per_record))
+  expect_s3_class(res$per_record$risk_band, "factor")
+  expect_equal(levels(res$per_record$risk_band),
+               c("very_low", "low", "moderate", "high", "very_high",
+                 "unique_match"))
+})
+
+test_that("risk_band is consistent with risk values", {
+  set.seed(42)
+  x <- data.frame(a = 1:5, b = factor(c("x", "y", "x", "y", "x")))
+  res <- recordLinkage(x, x, key = c("a", "b"), strategy = "nearest")
+  # All risk=1 → should be "unique_match"
+  expect_true(all(res$per_record$risk_band == "unique_match"))
+})
+
+test_that("d_rank column exists and is integer", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_true("d_rank" %in% names(res$per_record))
+  expect_type(res$per_record$d_rank, "integer")
+})
+
+test_that("d_rank >= 1 when true_in_set is TRUE", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  in_set <- res$per_record$true_in_set
+  if (any(in_set)) {
+    expect_true(all(res$per_record$d_rank[in_set] >= 1L))
+  }
+})
+
+test_that("d_rank is 1 for exact copy with nearest strategy", {
+  x <- data.frame(a = 1:5, b = factor(c("x", "y", "z", "w", "v")))
+  res <- recordLinkage(x, x, key = c("a", "b"), strategy = "nearest")
+  # True match is the closest → rank 1
+  expect_true(all(res$per_record$d_rank == 1L))
+})
+
+test_that("d_rank handles ties with ties.method='min'", {
+  # Two identical records in x_anon -> tied distances
+  x <- data.frame(a = 1, b = factor("x"))
+  x_anon <- data.frame(a = c(1, 1, 2), b = factor(c("x", "x", "y")))
+  res <- recordLinkage(x, x_anon, key = c("a", "b"), strategy = "nearest",
+                       truth = "id", id = "a")
+  # With ties.method = "min", rank should be 1 (best case)
+  expect_equal(res$per_record$d_rank, 1L)
+})
+
+test_that("d_rank computed for probabilistic method", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "probabilistic")
+  expect_true("d_rank" %in% names(res$per_record))
+  expect_true(any(!is.na(res$per_record$d_rank)))
+})
+
+test_that("d_rank computed for PRAM method", {
+  x <- data.frame(a = factor(c("x", "y")), b = factor(c("1", "2")))
+  pram_m <- list(
+    a = matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
+               dimnames = list(c("x", "y"), c("x", "y"))),
+    b = matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2,
+               dimnames = list(c("1", "2"), c("1", "2")))
+  )
+  res <- recordLinkage(x, x, key = c("a", "b"),
+                       method = "pram", pram_matrix = pram_m)
+  expect_true("d_rank" %in% names(res$per_record))
+  expect_true(any(!is.na(res$per_record$d_rank)))
+})
+
+test_that("d_true is populated for PRAM method", {
+  x <- data.frame(a = factor(c("x", "y")), b = factor(c("1", "2")))
+  pram_m <- list(
+    a = matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
+               dimnames = list(c("x", "y"), c("x", "y"))),
+    b = matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2,
+               dimnames = list(c("1", "2"), c("1", "2")))
+  )
+  res <- recordLinkage(x, x, key = c("a", "b"),
+                       method = "pram", pram_matrix = pram_m)
+  expect_true(any(!is.na(res$per_record$d_true)))
+})
+
+
+# ── var_importance tests ─────────────────────────────────────────────────
+
+test_that("var_importance is named numeric for deterministic method", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_true(!is.null(res$var_importance))
+  expect_type(res$var_importance, "double")
+  expect_equal(length(res$var_importance), 3)
+  expect_equal(names(res$var_importance), c("age", "sex", "region"))
+})
+
+test_that("var_importance is named numeric for probabilistic method", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "probabilistic")
+  expect_type(res$var_importance, "double")
+  expect_equal(names(res$var_importance), c("age", "sex", "region"))
+})
+
+test_that("var_importance for PRAM reflects perturbation strength", {
+  x <- data.frame(a = factor(c("x", "y")), b = factor(c("1", "2")))
+  pram_m <- list(
+    a = matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
+               dimnames = list(c("x", "y"), c("x", "y"))),
+    b = matrix(c(0.5, 0.5, 0.5, 0.5), 2, 2,
+               dimnames = list(c("1", "2"), c("1", "2")))
+  )
+  res <- recordLinkage(x, x, key = c("a", "b"),
+                       method = "pram", pram_matrix = pram_m)
+  # b has more perturbation (50% off-diagonal) than a (10%)
+  expect_gt(res$var_importance["b"], res$var_importance["a"])
+})
+
+test_that("var_importance for predictive method", {
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive")
+  expect_type(res$var_importance, "double")
+  expect_equal(length(res$var_importance), 3)
+})
+
+
+# ── risk_gini tests ──────────────────────────────────────────────────────
+
+test_that("risk_gini is in [0, 1]", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_true(res$overall$risk_gini >= 0)
+  expect_true(res$overall$risk_gini <= 1)
+})
+
+test_that("risk_gini = 0 for uniform risk", {
+  # All records have risk=1
+  x <- data.frame(a = 1:5, b = factor(c("x", "y", "z", "w", "v")))
+  res <- recordLinkage(x, x, key = c("a", "b"), strategy = "nearest")
+  expect_equal(res$overall$risk_gini, 0, tolerance = 1e-10)
+})
+
+test_that("risk_gini in summary output", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  s <- summary(res)
+  expect_true(!is.null(s$risk_gini))
+  expect_output(print(s), "Gini")
+})
+
+
+# ── top_at_risk tests ────────────────────────────────────────────────────
+
+test_that("top_at_risk returns correct number of rows", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  top <- top_at_risk(res, n = 5)
+  expect_equal(nrow(top), 5)
+  expect_true("record_id" %in% names(top))
+})
+
+test_that("top_at_risk is sorted by risk descending", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  top <- top_at_risk(res, n = 10)
+  expect_true(all(diff(top$risk) <= 0))
+})
+
+test_that("top_at_risk with data appends QI columns", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  top <- top_at_risk(res, n = 5, data = d$x)
+  expect_true(all(c("age", "sex", "region") %in% names(top)))
+})
+
+test_that("top_at_risk handles n > nrow", {
+  d <- .make_test_data(10)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  top <- top_at_risk(res, n = 100)
+  expect_equal(nrow(top), 10)
+})
+
+
+# ── risk_by_group tests ──────────────────────────────────────────────────
+
+test_that("risk_by_group produces expected columns", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  rg <- risk_by_group(res, group = d$x$region)
+  expect_true(all(c("mean_risk", "max_risk", "n", "n_high", "pct_high") %in%
+                    names(rg)))
+})
+
+test_that("risk_by_group with column name works", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  rg <- risk_by_group(res, group = "region", data = d$x)
+  expect_true("region" %in% names(rg))
+  expect_equal(nrow(rg), length(unique(d$x$region)))
+})
+
+test_that("risk_by_group sorted by mean_risk descending", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  rg <- risk_by_group(res, group = d$x$region)
+  expect_true(all(diff(rg$mean_risk) <= 0))
+})
+
+
+# ── merge_per_record tests ───────────────────────────────────────────────
+
+test_that("merge_per_record produces correct dimensions", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  merged <- merge_per_record(res, data = d$x)
+  expect_equal(nrow(merged), nrow(d$x))
+  expect_true(all(c("age", "sex", "region", "risk", "d_rank", "risk_band") %in%
+                    names(merged)))
+})
+
+test_that("merge_per_record errors on dimension mismatch", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_error(merge_per_record(res, data = d$x[1:5, ]))
+})
+
+
+# ── inspect_record tests ─────────────────────────────────────────────────
+
+test_that("inspect_record errors without return_matches", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_error(inspect_record(res, i = 1), "return_matches")
+})
+
+test_that("inspect_record works with return_matches", {
+  d <- .make_test_data(20)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       return_matches = TRUE)
+  ir <- inspect_record(res, i = 1)
+  expect_s3_class(ir, "inspect_record")
+  expect_equal(ir$record_id, 1)
+  expect_true(is.numeric(ir$risk))
+})
+
+test_that("inspect_record prints without error", {
+  d <- .make_test_data(20)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       return_matches = TRUE)
+  ir <- inspect_record(res, i = 1, data_orig = d$x, data_anon = d$x_anon)
+  expect_output(print(ir), "Record Linkage Inspection")
+  expect_true(!is.null(ir$query_record))
+  expect_true(!is.null(ir$candidate_records) || ir$n_candidates == 0)
+})
+
+
+# ── plot which=3 for non-probabilistic methods ───────────────────────────
+
+test_that("plot which=3 works for deterministic method", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_no_error(plot(res, which = 3))
+})
+
+test_that("plot which=3 works for PRAM method", {
+  x <- data.frame(a = factor(c("x", "y", "x")), b = factor(c("1", "2", "1")))
+  pram_m <- list(
+    a = matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
+               dimnames = list(c("x", "y"), c("x", "y"))),
+    b = matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2,
+               dimnames = list(c("1", "2"), c("1", "2")))
+  )
+  res <- recordLinkage(x, x, key = c("a", "b"),
+                       method = "pram", pram_matrix = pram_m)
+  expect_no_error(plot(res, which = 3))
+})
+
+test_that("plot which=2 works for PRAM method with d_true populated", {
+  x <- data.frame(a = factor(c("x", "y")), b = factor(c("1", "2")))
+  pram_m <- list(
+    a = matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
+               dimnames = list(c("x", "y"), c("x", "y"))),
+    b = matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2,
+               dimnames = list(c("1", "2"), c("1", "2")))
+  )
+  res <- recordLinkage(x, x, key = c("a", "b"),
+                       method = "pram", pram_matrix = pram_m)
+  # d_true should now be populated for PRAM
+  expect_no_error(plot(res, which = 2))
+})
+
+
+# ── summary uses per_record$risk_band ────────────────────────────────────
+
+test_that("summary uses risk_band from per_record", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  s <- summary(res)
+  # Verify bands are consistent: sum should equal n_query
+  expect_equal(sum(s$risk_bands), res$n_query)
+})
+
+test_that("summary includes var_importance", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  s <- summary(res)
+  expect_true(!is.null(s$var_importance))
+  expect_output(print(s), "Variable Importance")
+})
+
+
+# ── New plot types (which = 5:8) ─────────────────────────────────────────
+
+test_that("plot which=5 (risk band barplot) works", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_no_error(plot(res, which = 5))
+})
+
+test_that("plot which=6 (rank distribution) works", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_no_error(plot(res, which = 6))
+})
+
+test_that("plot which=6 handles no valid ranks gracefully", {
+  # All records in different blocks -> no true matches found
+  x <- data.frame(a = c(1, 2), b = factor(c("x", "y")),
+                   region = factor(c("A", "B")))
+  x_anon <- data.frame(a = c(3, 4), b = factor(c("z", "w")),
+                         region = factor(c("C", "D")))
+  res <- recordLinkage(x, x_anon, key = c("a", "b", "region"),
+                       block = "region")
+  expect_no_error(plot(res, which = 6))
+})
+
+test_that("plot which=7 (risk by group) works with group vector", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_no_error(plot(res, which = 7, group = d$x$region))
+})
+
+test_that("plot which=7 works with column name and data", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_no_error(plot(res, which = 7, group = "region", data = d$x))
+})
+
+test_that("plot which=7 shows placeholder without group", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_no_error(plot(res, which = 7))
+})
+
+test_that("plot which=8 (Lorenz curve) works", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_no_error(plot(res, which = 8))
+})
+
+test_that("plot which=8 works for uniform risk (Gini=0)", {
+  x <- data.frame(a = 1:5, b = factor(c("x", "y", "z", "w", "v")))
+  res <- recordLinkage(x, x, key = c("a", "b"), strategy = "nearest")
+  expect_no_error(plot(res, which = 8))
+})
+
+test_that("plot which=1:8 all together works", {
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  expect_no_error(plot(res, which = 1:8, group = d$x$region))
+})
+
+
+# ── Bijective matching (GDBRL) tests ────────────────────────────────────
+
+test_that("bijective: exact copy yields all risk = 1", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data(30)
+  res <- recordLinkage(d$x, d$x, key = c("age", "sex", "region"),
+                       matching = "bijective")
+  expect_true(all(res$per_record$risk == 1))
+})
+
+test_that("bijective: risk is binary {0, 1}", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       matching = "bijective")
+  expect_true(all(res$per_record$risk %in% c(0, 1)))
+})
+
+test_that("bijective: assignments are unique within blocks", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       matching = "bijective")
+  assigned <- res$per_record$bijective_assigned
+  nonzero <- assigned[assigned > 0]
+  expect_equal(length(nonzero), length(unique(nonzero)))
+})
+
+test_that("bijective: bijective_assigned column exists", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data(30)
+  res_bij <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                           matching = "bijective")
+  expect_true("bijective_assigned" %in% names(res_bij$per_record))
+})
+
+test_that("independent: bijective_assigned column absent", {
+  d <- .make_test_data(30)
+  res_ind <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                           matching = "independent")
+  expect_false("bijective_assigned" %in% names(res_ind$per_record))
+})
+
+test_that("bijective: cand_n is 0 or 1", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       matching = "bijective")
+  expect_true(all(res$per_record$cand_n %in% c(0L, 1L)))
+})
+
+test_that("bijective: works with probabilistic method", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data(30)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "probabilistic", matching = "bijective")
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_true(all(res$per_record$risk %in% c(0, 1)))
+})
+
+test_that("bijective: works with pram method", {
+  skip_if_not_installed("clue")
+  n <- 20
+  set.seed(42)
+  x <- data.frame(
+    sex    = factor(sample(c("m", "f"), n, TRUE)),
+    region = factor(sample(c("N", "S", "E"), n, TRUE)),
+    stringsAsFactors = FALSE
+  )
+  # Simple PRAM perturbation
+  pm_sex <- matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2,
+                   dimnames = list(c("f", "m"), c("f", "m")))
+  pm_reg <- matrix(c(0.7, 0.15, 0.15, 0.15, 0.7, 0.15, 0.15, 0.15, 0.7),
+                   3, 3,
+                   dimnames = list(c("E", "N", "S"), c("E", "N", "S")))
+  x_anon <- x
+  for (i in seq_len(n)) {
+    x_anon$sex[i] <- sample(levels(x$sex), 1, prob = pm_sex[x$sex[i], ])
+    x_anon$region[i] <- sample(levels(x$region), 1,
+                               prob = pm_reg[x$region[i], ])
+  }
+  res <- recordLinkage(x, x_anon, key = c("sex", "region"),
+                       method = "pram",
+                       pram_matrix = list(sex = pm_sex, region = pm_reg),
+                       matching = "bijective")
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_true(all(res$per_record$risk %in% c(0, 1)))
+})
+
+test_that("bijective: works with predictive method", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "predictive", matching = "bijective")
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_true(all(res$per_record$risk %in% c(0, 1)))
+})
+
+test_that("bijective: works with blocking", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       block = "region", matching = "bijective")
+  expect_s3_class(res, "recordLinkageRisk")
+  # Assignments should be unique within each block
+  assigned <- res$per_record$bijective_assigned
+  for (blk in unique(d$x$region)) {
+    idx <- which(d$x$region == blk)
+    blk_assigned <- assigned[idx]
+    nonzero <- blk_assigned[blk_assigned > 0]
+    expect_equal(length(nonzero), length(unique(nonzero)))
+  }
+})
+
+test_that("bijective: works with reverse direction", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data(50)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       direction = "reverse", matching = "bijective")
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_equal(nrow(res$per_record), nrow(d$x_anon))
+  expect_true(all(res$per_record$risk %in% c(0, 1)))
+})
+
+test_that("bijective: return_matches gives single-element lists", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data(30)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       matching = "bijective", return_matches = TRUE)
+  lens <- vapply(res$matches, length, integer(1))
+  expect_true(all(lens %in% c(0L, 1L)))
+})
+
+test_that("bijective: print shows 'bijective'", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data(30)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       matching = "bijective")
+  out <- capture.output(print(res))
+  expect_true(any(grepl("bijective", out, ignore.case = TRUE)))
+})
+
+test_that("bijective: summary includes matching field", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data(30)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       matching = "bijective")
+  s <- summary(res)
+  expect_equal(s$matching, "bijective")
+  out <- capture.output(print(s))
+  expect_true(any(grepl("bijective", out, ignore.case = TRUE)))
+})
+
+test_that("bijective: settings stores matching", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data(30)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       matching = "bijective")
+  expect_equal(res$settings$matching, "bijective")
+})
+
+test_that("bijective: handles rectangular blocks via blocking (nq > ns in block)", {
+  skip_if_not_installed("clue")
+  # Create data where blocking produces unequal-size blocks
+  set.seed(99)
+  n <- 40
+  x <- data.frame(
+    age = sample(20:60, n, TRUE),
+    sex = factor(c(rep("f", 30), rep("m", 10))),
+    stringsAsFactors = FALSE
+  )
+  x_anon <- x
+  x_anon$age <- x_anon$age + sample(-3:3, n, TRUE)
+  # Blocking on sex gives blocks of size 30 and 10
+  res <- recordLinkage(x, x_anon, key = c("age", "sex"),
+                       block = "sex", matching = "bijective")
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_true(all(res$per_record$risk %in% c(0, 1)))
+})
+
+test_that("independent matching is default and unchanged", {
+  d <- .make_test_data(30)
+  res1 <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  res2 <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                        matching = "independent")
+  expect_equal(res1$per_record$risk, res2$per_record$risk)
+  expect_equal(res1$settings$matching, "independent")
+})

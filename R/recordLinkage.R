@@ -197,19 +197,50 @@
 #'   use the Fisher-information prediction SE as kernel bandwidth (default TRUE).
 #'   Ignored for \code{"rf"} or when \code{bandwidth} is user-supplied.
 #' @param return_matches logical. If TRUE, returns candidate indices per record (may be memory-heavy).
+#' @param matching character. Matching mode: \code{"independent"} (default) scores
+#'   each record independently (classical DBRL), \code{"bijective"} enforces
+#'   one-to-one assignment via the Hungarian algorithm (GDBRL). Bijective
+#'   matching models a stronger attacker who optimizes a global assignment and
+#'   typically yields higher risk estimates. Requires the \pkg{clue} package.
+#'   See Domingo-Ferrer & Muralidhar (2016).
 #' @param risk_threshold numeric. Threshold for classifying records as "high risk"
 #'   and for the \code{privacy_pass} flag (default 0.1). Records with risk above
 #'   this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
 #'   The \code{privacy_pass} flag is TRUE when \code{mean_risk <= risk_threshold}.
 #' @param ... additional arguments passed to methods.
+#' @author Roman Mueller and Matthias Templ
 #'
 #' @return An object of class \code{"recordLinkageRisk"}: a list with components
-#'   \code{per_record} (data.frame with \code{n_query} rows), \code{overall} (list),
-#'   \code{direction} (character), \code{n_query} (integer), \code{settings} (list),
-#'   and optionally \code{matches} (list of integer vectors with row indices into
-#'   the search dataset: \code{x_anon} for forward, \code{X} for reverse).
+#'   \describe{
+#'     \item{per_record}{data.frame with \code{n_query} rows and columns:
+#'       \code{risk} (numeric, re-identification risk),
+#'       \code{cand_n} (integer, candidate set size),
+#'       \code{true_in_set} (logical),
+#'       \code{d_true} (numeric, distance/score to true match),
+#'       \code{d_min} (numeric, minimum distance),
+#'       \code{d_rank} (integer, rank of true match among candidates),
+#'       \code{risk_band} (factor with levels \code{"very_low"}, \code{"low"},
+#'         \code{"moderate"}, \code{"high"}, \code{"very_high"},
+#'         \code{"unique_match"}).
+#'       When \code{matching = "bijective"}, an additional column
+#'       \code{bijective_assigned} gives the search-side row index
+#'       assigned by the Hungarian algorithm. In bijective mode,
+#'       \code{risk} and \code{bijective_assigned} reflect the global
+#'       one-to-one assignment, while \code{d_true}, \code{d_min}, and
+#'       \code{d_rank} retain their per-record independent-scoring values
+#'       from the main loop (useful for diagnostics).}
+#'     \item{overall}{list with aggregate statistics including \code{risk_gini}
+#'       (Gini coefficient of risk concentration).}
+#'     \item{var_importance}{named numeric vector of per-variable importance.}
+#'     \item{direction}{character, \code{"forward"} or \code{"reverse"}.}
+#'     \item{matches}{(optional) list of integer vectors with candidate indices.}
+#'   }
 #'   When \code{direction = "forward"}, \code{per_record} has one row per
 #'   original record; when \code{"reverse"}, one row per anonymized record.
+#'
+#'   Use \code{\link{top_at_risk}}, \code{\link{risk_by_group}},
+#'   \code{\link{merge_per_record}}, and \code{\link{inspect_record}} for
+#'   post-hoc per-record analysis.
 #'
 #' @examples
 #' set.seed(1)
@@ -294,6 +325,9 @@
 #' method on the system of enterprise accounts annual survey (Esprit SDC Project,
 #' Deliverable MI-3/D2). Unpublished technical report.
 #'
+#' Domingo-Ferrer, J. & Muralidhar, K. (2016). On the privacy of distance-based
+#' record linkage risk assessment. Data & Knowledge Engineering, 100, 17-35.
+#'
 #' @seealso \code{\link{individual_risk}}, \code{\link{dcr}},
 #'   \code{\link{nndr}}
 #' @family privacy-models
@@ -347,6 +381,7 @@ recordLinkage.default <- function(X,
                                   pred_model = c("logit", "rf"),
                                   pred_se = TRUE,
                                   return_matches = FALSE,
+                                  matching = c("independent", "bijective"),
                                   risk_threshold = 0.1,
                                   ...) {
 
@@ -358,6 +393,19 @@ recordLinkage.default <- function(X,
     truth <- match.arg(truth)
     na_anon <- match.arg(na_anon)
     strategy <- match.arg(strategy)
+    matching <- match.arg(matching)
+
+    if (matching == "bijective") {
+        if (!requireNamespace("clue", quietly = TRUE))
+            stop("Package 'clue' is required for bijective matching. ",
+                 "Install it with install.packages('clue').", call. = FALSE)
+        if (strategy != "nearest")
+            message("Note: bijective matching uses the full candidate set; ",
+                    "'strategy' applies only to independent-scoring diagnostics.")
+        if (risk_weighting != "uniform")
+            message("Note: bijective matching produces binary risk (0/1); ",
+                    "'risk_weighting' applies only to independent-scoring diagnostics.")
+    }
 
     stopifnot(is.data.frame(X), is.data.frame(x_anon))
     stopifnot(is.character(key), length(key) >= 1L)
@@ -511,7 +559,16 @@ recordLinkage.default <- function(X,
     true_in_set <- logical(n_query)
     d_true <- rep(NA_real_, n_query)
     d_min <- rep(NA_real_, n_query)
+    d_rank <- rep(NA_integer_, n_query)
     matches <- if (isTRUE(return_matches)) vector("list", n_query) else NULL
+    # Bijective matching: cache full score vectors per record
+    score_cache <- if (matching == "bijective") vector("list", n_query) else NULL
+    # Per-variable distance accumulator (deterministic only)
+    var_dist_acc <- if (method == "deterministic") {
+        setNames(numeric(length(key)), key)
+    } else {
+        NULL
+    }
 
     # main loop ----
     for (i in seq_len(n_query)) {
@@ -548,6 +605,14 @@ recordLinkage.default <- function(X,
             cand_n[i] <- length(guess)
             true_in_set[i] <- (tpos %in% guess)
 
+            # d_true for PRAM: raw transition probability of true match
+            j_in <- match(tpos, cand)
+            if (!is.na(j_in)) {
+                d_true[i] <- pram_probs[j_in]
+                # Rank by descending probability (rank 1 = highest prob)
+                d_rank[i] <- as.integer(rank(-pram_probs, ties.method = "min")[j_in])
+            }
+
             if (!true_in_set[i]) {
                 risk[i] <- 0
             } else {
@@ -558,6 +623,9 @@ recordLinkage.default <- function(X,
             }
 
             if (isTRUE(return_matches)) matches[[i]] <- guess
+            if (!is.null(score_cache))
+                score_cache[[i]] <- list(cand = cand, scores = pram_probs,
+                                          maximize = TRUE)
             next
         }
 
@@ -575,7 +643,11 @@ recordLinkage.default <- function(X,
             d_min[i] <- min(di)
             tpos <- true_idx[i]
             j_in <- match(tpos, cand)
-            if (!is.na(j_in)) d_true[i] <- di[j_in]
+            if (!is.na(j_in)) {
+                d_true[i] <- di[j_in]
+                # Rank by ascending distance (rank 1 = closest)
+                d_rank[i] <- as.integer(rank(di, ties.method = "min")[j_in])
+            }
 
             # Use strategy to select guess set
             guess <- .choose_guess_set(
@@ -624,6 +696,9 @@ recordLinkage.default <- function(X,
             }
 
             if (isTRUE(return_matches)) matches[[i]] <- guess
+            if (!is.null(score_cache))
+                score_cache[[i]] <- list(cand = cand, scores = di,
+                                          maximize = FALSE)
             next
         }
 
@@ -640,7 +715,11 @@ recordLinkage.default <- function(X,
             d_min[i] <- NA_real_
             tpos <- true_idx[i]
             j_in <- match(tpos, cand)
-            if (!is.na(j_in)) d_true[i] <- lr[j_in]
+            if (!is.na(j_in)) {
+                d_true[i] <- lr[j_in]
+                # Rank by descending LR (rank 1 = best match)
+                d_rank[i] <- as.integer(rank(-lr, ties.method = "min")[j_in])
+            }
 
             # Candidate set: records above threshold
             above <- which(lr >= fs_threshold)
@@ -679,6 +758,9 @@ recordLinkage.default <- function(X,
             }
 
             if (isTRUE(return_matches)) matches[[i]] <- guess
+            if (!is.null(score_cache))
+                score_cache[[i]] <- list(cand = cand, scores = lr,
+                                          maximize = TRUE)
             next
         }
 
@@ -695,7 +777,20 @@ recordLinkage.default <- function(X,
         # distance to true (only if true is inside candidate set)
         tpos <- true_idx[i]
         j_in <- match(tpos, cand)
-        if (!is.na(j_in)) d_true[i] <- di[j_in]
+        if (!is.na(j_in)) {
+            d_true[i] <- di[j_in]
+            # Rank by ascending distance (rank 1 = closest)
+            d_rank[i] <- as.integer(rank(di, ties.method = "min")[j_in])
+        }
+
+        # Accumulate per-variable distances for variable importance
+        di_var <- .dist_per_variable(
+            x_row = query_data[i, key, drop = FALSE],
+            anon_block = search_data[cand, key, drop = FALSE],
+            key = key, type = type, weights = weights, rng = rng,
+            na_anon = na_anon
+        )
+        var_dist_acc <- var_dist_acc + di_var
 
         # attacker guess set
         guess <- .choose_guess_set(
@@ -732,6 +827,63 @@ recordLinkage.default <- function(X,
         }
 
         if (isTRUE(return_matches)) matches[[i]] <- guess
+        if (!is.null(score_cache))
+            score_cache[[i]] <- list(cand = cand, scores = di,
+                                      maximize = FALSE)
+    }
+
+    # bijective matching override ----
+    bijective_assigned <- NULL
+    if (matching == "bijective") {
+        bij <- .solve_bijective(score_cache, true_idx, n_query,
+                                 split_search, blk_query)
+        bijective_assigned <- bij$assigned_search
+        risk <- bij$risk
+        cand_n <- ifelse(bijective_assigned > 0L, 1L, 0L)
+        true_in_set <- (bijective_assigned == true_idx)
+        if (isTRUE(return_matches)) {
+            matches <- lapply(bijective_assigned, function(a) {
+                if (a > 0L) a else integer(0)
+            })
+        }
+    }
+
+    # risk_band ----
+    risk_band <- cut(risk,
+        breaks = c(-Inf, 0.05, 0.1, 0.2, 0.5, 1 - .Machine$double.eps, Inf),
+        labels = c("very_low", "low", "moderate", "high", "very_high",
+                    "unique_match"),
+        right = TRUE)
+
+    # var_importance ----
+    if (method == "deterministic") {
+        var_importance <- var_dist_acc / n_query
+    } else if (method == "probabilistic" && !is.null(fs_params)) {
+        var_importance <- log(fs_params$m_probs / fs_params$u_probs)
+        names(var_importance) <- key
+    } else if (method == "predictive" && !is.null(prop_fit)) {
+        if (pred_model == "logit" && !is.null(prop_fit$model)) {
+            # Use absolute model coefficients (excluding intercept)
+            coefs <- stats::coef(prop_fit$model)[-1]
+            var_importance <- .map_coefs_to_vars(names(coefs), key,
+                                                  abs(coefs))
+        } else if (pred_model == "rf" && !is.null(prop_fit$model) &&
+                   !is.null(prop_fit$model$variable.importance)) {
+            vi_raw <- prop_fit$model$variable.importance
+            var_importance <- .map_coefs_to_vars(names(vi_raw), key,
+                                                  vi_raw)
+        } else {
+            var_importance <- setNames(rep(NA_real_, length(key)), key)
+        }
+    } else if (method == "pram") {
+        # Perturbation strength: mean off-diagonal probability
+        var_importance <- setNames(numeric(length(key)), key)
+        for (v in key) {
+            tm <- pram_matrix[[v]]
+            var_importance[v] <- 1 - mean(diag(tm))
+        }
+    } else {
+        var_importance <- setNames(rep(NA_real_, length(key)), key)
     }
 
     overall <- list(
@@ -747,20 +899,27 @@ recordLinkage.default <- function(X,
         mean_candidate_size = mean(cand_n),
         candidate_size_quantiles = as.numeric(
             stats::quantile(cand_n, probs = c(0, .25, .5, .75, 1))
-        )
+        ),
+        risk_gini = .gini(risk)
     )
     names(overall$risk_quantiles) <- c("min", "q25", "median", "q75", "max")
     names(overall$candidate_size_quantiles) <- c("min", "q25", "median",
                                                   "q75", "max")
 
+    per_rec <- data.frame(
+        risk = risk,
+        cand_n = cand_n,
+        true_in_set = true_in_set,
+        d_true = d_true,
+        d_min = d_min,
+        d_rank = d_rank,
+        risk_band = risk_band
+    )
+    if (!is.null(bijective_assigned))
+        per_rec$bijective_assigned <- bijective_assigned
+
     out <- list(
-        per_record = data.frame(
-            risk = risk,
-            cand_n = cand_n,
-            true_in_set = true_in_set,
-            d_true = d_true,
-            d_min = d_min
-        ),
+        per_record = per_rec,
         overall = overall,
         privacy_pass = overall$mean_risk <= risk_threshold,
         n_original = nrow(X),
@@ -787,6 +946,7 @@ recordLinkage.default <- function(X,
             kernel = kernel,
             pred_model = pred_model,
             pred_se = pred_se,
+            matching = matching,
             risk_threshold = risk_threshold
         )
     )
@@ -810,13 +970,306 @@ recordLinkage.default <- function(X,
             }, numeric(1)))
         )
     }
+    out$var_importance <- var_importance
 
     class(out) <- "recordLinkageRisk"
     out
 }
 
 
+# ---------- per-record risk helpers ----------
+
+#' Return Highest-Risk Records
+#'
+#' Returns the top-n riskiest records from a \code{recordLinkageRisk} object
+#' with their per-record diagnostics.
+#'
+#' @param x object of class \code{"recordLinkageRisk"}.
+#' @param n integer, number of records to return (default 10).
+#' @param data optional data frame (original or synthetic depending on
+#'   direction) whose key-variable columns are appended.
+#' @param ... ignored.
+#' @return A data frame with per-record diagnostics for the top-n riskiest
+#'   records, including a \code{record_id} column.
+#' @family privacy-models
+#' @author Matthias Templ, Oscar Thees
+#' @export
+top_at_risk <- function(x, ...) UseMethod("top_at_risk")
+
+#' @rdname top_at_risk
+#' @export
+top_at_risk.recordLinkageRisk <- function(x, n = 10, data = NULL, ...) {
+    pr <- x$per_record
+    n <- min(n, nrow(pr))
+    idx <- order(pr$risk, decreasing = TRUE)[seq_len(n)]
+    out <- pr[idx, , drop = FALSE]
+    out$record_id <- idx
+    if (!is.null(data)) {
+        out <- cbind(out, data[idx, x$key_vars, drop = FALSE])
+    }
+    rownames(out) <- NULL
+    out
+}
+
+
+#' Aggregate Risk by Group
+#'
+#' Computes per-group risk statistics from a \code{recordLinkageRisk} object.
+#'
+#' @param x object of class \code{"recordLinkageRisk"}.
+#' @param group a vector of group labels (same length as number of records),
+#'   or a single column name if \code{data} is provided.
+#' @param data optional data frame from which to extract the grouping column.
+#' @param ... ignored.
+#' @return A data frame with columns \code{mean_risk}, \code{max_risk},
+#'   \code{n}, \code{n_high}, \code{pct_high}, and the grouping variable,
+#'   sorted by \code{mean_risk} descending.
+#' @family privacy-models
+#' @author Matthias Templ, Oscar Thees
+#' @export
+risk_by_group <- function(x, ...) UseMethod("risk_by_group")
+
+#' @rdname risk_by_group
+#' @export
+risk_by_group.recordLinkageRisk <- function(x, group, data = NULL, ...) {
+    if (is.character(group) && length(group) == 1L && !is.null(data)) {
+        g <- data[[group]]
+        gname <- group
+    } else {
+        g <- group
+        gname <- "group"
+    }
+    stopifnot(length(g) == nrow(x$per_record))
+    thresh <- x$settings$risk_threshold
+    risk <- x$per_record$risk
+    res <- tapply(risk, g, function(r) {
+        c(mean_risk = mean(r), max_risk = max(r), n = length(r),
+          n_high = sum(r > thresh), pct_high = 100 * mean(r > thresh))
+    })
+    out <- as.data.frame(do.call(rbind, res))
+    out[[gname]] <- rownames(out)
+    rownames(out) <- NULL
+    out[order(out$mean_risk, decreasing = TRUE), ]
+}
+
+
+#' Merge Per-Record Risks Back to Data
+#'
+#' Joins per-record risk diagnostics back to the original (or synthetic)
+#' data frame.
+#'
+#' @param x object of class \code{"recordLinkageRisk"}.
+#' @param data data frame with the same number of rows as \code{x$per_record}.
+#' @param ... ignored.
+#' @return A data frame combining \code{data} and \code{x$per_record}.
+#' @family privacy-models
+#' @author Matthias Templ, Oscar Thees
+#' @export
+merge_per_record <- function(x, ...) UseMethod("merge_per_record")
+
+#' @rdname merge_per_record
+#' @export
+merge_per_record.recordLinkageRisk <- function(x, data, ...) {
+    stopifnot(nrow(data) == nrow(x$per_record))
+    cbind(data, x$per_record)
+}
+
+
+#' Inspect a Single Record's Linkage Detail
+#'
+#' Returns detailed linkage diagnostics for a single record, including
+#' candidate IDs and (optionally) the data for the query record and its
+#' candidates. Requires \code{recordLinkage(..., return_matches = TRUE)}.
+#'
+#' @param x object of class \code{"recordLinkageRisk"}.
+#' @param i integer, the record index to inspect.
+#' @param data_orig optional data frame of the original records (query side).
+#' @param data_anon optional data frame of the anonymized records (search side).
+#' @param ... ignored.
+#' @return An object of class \code{"inspect_record"} containing:
+#'   \describe{
+#'     \item{record_id}{the record index}
+#'     \item{risk}{re-identification risk}
+#'     \item{d_rank}{rank of the true match among candidates}
+#'     \item{risk_band}{categorical risk band}
+#'     \item{d_true, d_min}{distances for the true match and closest candidate}
+#'     \item{n_candidates}{number of candidates}
+#'     \item{true_in_set}{whether the true match is in the candidate set}
+#'     \item{candidate_ids}{vector of candidate indices}
+#'     \item{query_record}{optional: data for the query record}
+#'     \item{candidate_records}{optional: data for the candidate records}
+#'   }
+#' @family privacy-models
+#' @author Matthias Templ, Oscar Thees
+#' @export
+inspect_record <- function(x, ...) UseMethod("inspect_record")
+
+#' @rdname inspect_record
+#' @export
+inspect_record.recordLinkageRisk <- function(x, i, data_orig = NULL,
+                                              data_anon = NULL, ...) {
+    if (is.null(x$matches))
+        stop("'inspect_record()' requires recordLinkage(..., return_matches = TRUE)")
+    if (!is.numeric(i) || length(i) != 1L || i < 1L || i > nrow(x$per_record))
+        stop("'i' must be an integer between 1 and ", nrow(x$per_record))
+    pr <- x$per_record[i, ]
+    candidates <- x$matches[[i]]
+    out <- list(
+        record_id = i,
+        risk = pr$risk,
+        d_rank = pr$d_rank,
+        risk_band = as.character(pr$risk_band),
+        d_true = pr$d_true,
+        d_min = pr$d_min,
+        n_candidates = pr$cand_n,
+        true_in_set = pr$true_in_set,
+        candidate_ids = candidates
+    )
+    if (!is.null(pr$bijective_assigned))
+        out$bijective_assigned <- pr$bijective_assigned
+    if (!is.null(data_orig))
+        out$query_record <- data_orig[i, , drop = FALSE]
+    if (!is.null(data_anon) && length(candidates) > 0)
+        out$candidate_records <- data_anon[candidates, , drop = FALSE]
+    class(out) <- "inspect_record"
+    out
+}
+
+#' @rdname inspect_record
+#' @param x object of class \code{"inspect_record"}.
+#' @export
+print.inspect_record <- function(x, ...) {
+    cat("Record Linkage Inspection: Record", x$record_id, "\n")
+    cat(strrep("=", 45), "\n\n")
+    cat(sprintf("  Risk:        %.4f (%s)\n", x$risk, x$risk_band))
+    cat(sprintf("  True rank:   %s\n",
+                if (is.na(x$d_rank)) "N/A" else as.character(x$d_rank)))
+    cat(sprintf("  d_true:      %s\n",
+                if (is.na(x$d_true)) "N/A" else sprintf("%.4f", x$d_true)))
+    cat(sprintf("  d_min:       %s\n",
+                if (is.na(x$d_min)) "N/A" else sprintf("%.4f", x$d_min)))
+    cat(sprintf("  Candidates:  %d\n", x$n_candidates))
+    cat(sprintf("  True in set: %s\n", x$true_in_set))
+    if (!is.null(x$query_record)) {
+        cat("\nQuery record:\n")
+        print(x$query_record)
+    }
+    if (!is.null(x$candidate_records)) {
+        cat("\nCandidate records:\n")
+        print(x$candidate_records)
+    }
+    invisible(x)
+}
+
+
 # ---------- internal helpers ----------
+
+#' Solve bijective (one-to-one) assignment via the Hungarian algorithm
+#'
+#' Builds a cost matrix per blocking group and solves the LSAP so that each
+#' query record is assigned to at most one search record. Risk is binary:
+#' 1 if assigned to the true match, 0 otherwise.
+#'
+#' @param score_cache list of length n_query.
+#'   Each element is \code{list(cand, scores, maximize)}.
+#' @param true_idx integer vector of true search-side indices.
+#' @param n_query integer, number of query records.
+#' @param split_search named list of search-side indices per block.
+#' @param blk_query character vector of block labels per query record.
+#' @return list with \code{assigned_search} (integer) and \code{risk} (numeric).
+#' @keywords internal
+.solve_bijective <- function(score_cache, true_idx, n_query,
+                              split_search, blk_query) {
+    assigned <- integer(n_query)
+    risk_out <- numeric(n_query)
+
+    blocks <- unique(blk_query)
+    for (blk in blocks) {
+        q_idx <- which(blk_query == blk)
+        s_idx <- split_search[[blk]]
+        if (is.null(s_idx) || length(s_idx) == 0L || length(q_idx) == 0L)
+            next
+
+        nq <- length(q_idx)
+        ns <- length(s_idx)
+
+        # Determine direction from first non-NULL cache entry in block
+        maximize <- FALSE
+        for (qi in q_idx) {
+            if (!is.null(score_cache[[qi]])) {
+                maximize <- score_cache[[qi]]$maximize
+                break
+            }
+        }
+
+        # Build cost matrix: rows = query records, cols = search records
+        BIG <- 1e12
+        dim_n <- max(nq, ns)
+        cost <- matrix(BIG, nrow = dim_n, ncol = dim_n)
+
+        for (r in seq_along(q_idx)) {
+            qi <- q_idx[r]
+            sc <- score_cache[[qi]]
+            if (is.null(sc)) next
+
+            # Map cached candidate indices to column positions
+            col_pos <- match(sc$cand, s_idx)
+            valid <- !is.na(col_pos)
+            if (!any(valid)) next
+
+            if (maximize) {
+                # Transform to minimization: cost = max_score - score
+                max_s <- max(sc$scores[valid])
+                cost[r, col_pos[valid]] <- max_s - sc$scores[valid]
+            } else {
+                cost[r, col_pos[valid]] <- sc$scores[valid]
+            }
+        }
+
+        # Solve LSAP (linear sum assignment problem)
+        sol <- clue::solve_LSAP(cost)
+
+        # Map solution back
+        for (r in seq_along(q_idx)) {
+            qi <- q_idx[r]
+            assigned_col <- sol[r]
+            if (assigned_col <= ns && cost[r, assigned_col] < BIG) {
+                assigned[qi] <- s_idx[assigned_col]
+                risk_out[qi] <- if (assigned[qi] == true_idx[qi]) 1 else 0
+            }
+            # else: assigned to dummy column -> remains 0
+        }
+    }
+
+    list(assigned_search = assigned, risk = risk_out)
+}
+
+
+#' @keywords internal
+.gini <- function(x) {
+    x <- sort(x)
+    n <- length(x)
+    if (n == 0L || sum(x) == 0) return(0)
+    2 * sum(x * seq_len(n)) / (n * sum(x)) - (n + 1) / n
+}
+
+#' @keywords internal
+# Map model coefficient names to key variables (handles prefix collisions)
+.map_coefs_to_vars <- function(coef_names, key, values) {
+    out <- setNames(numeric(length(key)), key)
+    # Sort key vars longest-first to avoid prefix collisions
+    # (e.g. "age_group" before "age")
+    key_sorted <- key[order(nchar(key), decreasing = TRUE)]
+    claimed <- logical(length(coef_names))
+    for (v in key_sorted) {
+        idx <- which(!claimed & startsWith(coef_names, v))
+        if (length(idx) > 0L) {
+            out[v] <- mean(values[idx])
+            claimed[idx] <- TRUE
+        }
+    }
+    out
+}
 
 #' @keywords internal
 .make_block_id <- function(df, vars) {
@@ -867,6 +1320,43 @@ recordLinkage.default <- function(X,
 
     denom[denom <= 0] <- 1
     acc / denom
+}
+
+#' @keywords internal
+.dist_per_variable <- function(x_row, anon_block, key, type, weights,
+                               rng, na_anon) {
+    # Returns named numeric: mean weighted distance per variable across candidates
+    m <- nrow(anon_block)
+    out <- setNames(numeric(length(key)), key)
+
+    for (v in key) {
+        w <- weights[[v]]
+        xv <- x_row[[v]]
+        av <- anon_block[[v]]
+
+        dv <- rep(if (na_anon == "mismatch") 1 else 0, m)
+        ok <- !is.na(av) & !is.na(xv)
+
+        if (type[[v]] %in% c("numeric", "ordinal")) {
+            r <- rng[[v]]
+            span <- (r[2] - r[1])
+            if (span <= 0) span <- 1
+            xv_num <- if (is.factor(xv)) as.integer(xv) else xv
+            av_num <- if (is.factor(av)) as.integer(av) else av
+            dv[ok] <- abs(av_num[ok] - xv_num) / span
+        } else {
+            dv[ok] <- ifelse(as.character(av[ok]) == as.character(xv), 0, 1)
+        }
+
+        # When na_anon="ignore", average only over non-NA pairs
+        if (na_anon == "ignore") {
+            ok_count <- sum(ok)
+            out[v] <- if (ok_count > 0L) w * mean(dv[ok]) else 0
+        } else {
+            out[v] <- w * mean(dv)
+        }
+    }
+    out
 }
 
 #' @keywords internal
@@ -1031,7 +1521,8 @@ recordLinkage.default <- function(X,
             p_original = unname(p_all[seq_len(n_orig)]),
             p_synthetic = unname(p_all[n_orig + seq_len(n_anon)]),
             se_original = unname(se_all[seq_len(n_orig)]),
-            se_synthetic = unname(se_all[n_orig + seq_len(n_anon)])
+            se_synthetic = unname(se_all[n_orig + seq_len(n_anon)]),
+            model = fit
         )
 
     } else if (pred_model == "rf") {
@@ -1042,7 +1533,8 @@ recordLinkage.default <- function(X,
         stacked$.label <- factor(stacked$.label, levels = c("0", "1"))
         user_args <- list(...)
         default_args <- list(formula = formula, data = stacked,
-                             probability = TRUE, num.trees = 500)
+                             probability = TRUE, num.trees = 500,
+                             importance = "impurity")
         args <- modifyList(default_args, user_args)
         fit <- do.call(ranger::ranger, args)
         p_all <- stats::predict(fit, data = stacked)$predictions[, "1"]
@@ -1051,7 +1543,8 @@ recordLinkage.default <- function(X,
             p_original = p_all[seq_len(n_orig)],
             p_synthetic = p_all[n_orig + seq_len(n_anon)],
             se_original = NULL,
-            se_synthetic = NULL
+            se_synthetic = NULL,
+            model = fit
         )
     } else {
         stop("pred_model must be 'logit' or 'rf'.", call. = FALSE)
@@ -1255,6 +1748,9 @@ print.recordLinkageRisk <- function(x, ...) {
 
     cat("Method:      ", meth, "\n", sep = "")
     cat("Direction:   ", dir, "\n", sep = "")
+    mtch <- if (!is.null(s$matching)) s$matching else "independent"
+    if (mtch == "bijective")
+        cat("Matching:    bijective (Hungarian algorithm)\n")
     wt_label <- s$risk_weighting
     if (s$risk_weighting == "kernel")
         wt_label <- paste0(wt_label, " (", s$kernel, " kernel)")
@@ -1316,15 +1812,28 @@ summary.recordLinkageRisk <- function(object, ...) {
     risk_quantiles <- stats::quantile(risk,
         probs = c(0, 0.05, 0.25, 0.5, 0.75, 0.95, 1))
 
-    # Risk bands
-    risk_bands <- c(
-        unique_match = sum(risk == 1),
-        very_high    = sum(risk > 0.5 & risk < 1),
-        high         = sum(risk > 0.2 & risk <= 0.5),
-        moderate     = sum(risk > 0.1 & risk <= 0.2),
-        low          = sum(risk > 0.05 & risk <= 0.1),
-        very_low     = sum(risk <= 0.05)
-    )
+    # Risk bands (from per_record if available, else recompute)
+    if (!is.null(object$per_record$risk_band)) {
+        tb <- table(object$per_record$risk_band)
+        risk_bands <- c(
+            unique_match = unname(tb["unique_match"]),
+            very_high    = unname(tb["very_high"]),
+            high         = unname(tb["high"]),
+            moderate     = unname(tb["moderate"]),
+            low          = unname(tb["low"]),
+            very_low     = unname(tb["very_low"])
+        )
+        risk_bands[is.na(risk_bands)] <- 0L
+    } else {
+        risk_bands <- c(
+            unique_match = sum(risk == 1),
+            very_high    = sum(risk > 0.5 & risk < 1),
+            high         = sum(risk > 0.2 & risk <= 0.5),
+            moderate     = sum(risk > 0.1 & risk <= 0.2),
+            low          = sum(risk > 0.05 & risk <= 0.1),
+            very_low     = sum(risk <= 0.05)
+        )
+    }
 
     # Distance-to-true-match statistics
     d_true <- object$per_record$d_true
@@ -1342,6 +1851,8 @@ summary.recordLinkageRisk <- function(object, ...) {
     summ <- list(
         method = object$method,
         direction = if (is.null(object$direction)) "forward" else object$direction,
+        matching = if (!is.null(object$settings$matching)) object$settings$matching
+                   else "independent",
         risk_weighting = object$settings$risk_weighting,
         kernel = object$settings$kernel,
         bandwidth = object$settings$bandwidth,
@@ -1355,6 +1866,8 @@ summary.recordLinkageRisk <- function(object, ...) {
         d_true_stats = d_true_stats,
         pct_true_in_set = object$overall$pct_true_in_set,
         mean_candidate_size = object$overall$mean_candidate_size,
+        risk_gini = object$overall$risk_gini,
+        var_importance = object$var_importance,
         privacy_pass = object$privacy_pass,
         fs_params = object$fs_params,
         propensity_info = object$propensity_info
@@ -1379,8 +1892,11 @@ print.summary.recordLinkageRisk <- function(x, ...) {
     wt_label <- x$risk_weighting
     if (x$risk_weighting == "kernel")
         wt_label <- paste0(wt_label, " (", x$kernel, " kernel)")
+    mtch <- if (!is.null(x$matching)) x$matching else "independent"
     cat("Method:", x$method, "| Direction:", dir,
         "| Weighting:", wt_label, "\n")
+    if (mtch == "bijective")
+        cat("Matching: bijective (Hungarian algorithm)\n")
     cat("Key variables:", paste(x$key_vars, collapse = ", "), "\n")
     cat("Records:", x$n_original, "original,", x$n_synthetic, "synthetic\n\n")
 
@@ -1428,9 +1944,25 @@ print.summary.recordLinkageRisk <- function(x, ...) {
                     x$propensity_info$mean_propensity_synthetic))
     }
 
+    if (!is.null(x$var_importance) && !all(is.na(x$var_importance))) {
+        vi_label <- switch(x$method,
+            deterministic = "Variable Importance (mean weighted distance):",
+            probabilistic = "Variable Importance (log-LR on agreement):",
+            predictive    = "Variable Importance (model coefficients):",
+            pram          = "Variable Importance (perturbation strength):",
+            "Variable Importance:")
+        cat("\n", vi_label, "\n", sep = "")
+        for (v in names(x$var_importance)) {
+            cat(sprintf("  %-12s %7.4f\n", v, x$var_importance[v]))
+        }
+    }
+
     cat(sprintf("\nMean candidate size: %.1f\n", x$mean_candidate_size))
     cat(sprintf("True match in candidate set: %.1f%%\n",
                 100 * x$pct_true_in_set))
+    if (!is.null(x$risk_gini)) {
+        cat(sprintf("Risk concentration (Gini): %.4f\n", x$risk_gini))
+    }
     cat("Privacy:", ifelse(x$privacy_pass, "PASS", "WARNING"), "\n")
 
     invisible(x)
@@ -1444,17 +1976,28 @@ print.summary.recordLinkageRisk <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions.
 #' @param which integer, which plot(s) to show:
 #'   1 = Risk distribution histogram,
-#'   2 = Distance vs risk scatterplot,
-#'   3 = Per-variable discriminative power (probabilistic method only),
-#'   4 = Propensity score distributions (predictive method only)
-#' @importFrom graphics hist abline legend par plot plot.new points text barplot lines
+#'   2 = Distance/score vs risk scatterplot,
+#'   3 = Per-variable importance (all methods),
+#'   4 = Propensity score distributions (predictive method only),
+#'   5 = Risk band barplot,
+#'   6 = True-match rank distribution,
+#'   7 = Risk by group barplot (requires \code{group}),
+#'   8 = Lorenz curve of risk concentration
+#' @param group optional grouping vector or column name (with \code{data})
+#'   for \code{which = 7}.
+#' @param data optional data frame for extracting \code{group} column.
+#' @importFrom graphics hist abline legend par plot plot.new points text barplot lines polygon segments axis box
 #' @export
-plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1) {
-    show <- rep(FALSE, 4)
+plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1,
+                                    group = NULL, data = NULL) {
+    n_types <- 8L
+    show <- rep(FALSE, n_types)
     show[which] <- TRUE
 
     dir <- if (is.null(x$direction)) "forward" else x$direction
     dir_suffix <- if (dir == "reverse") " (reverse)" else ""
+    thresh <- if (!is.null(x$settings$risk_threshold))
+        x$settings$risk_threshold else 0.1
 
     n_plots <- sum(show)
     if (n_plots > 1) {
@@ -1472,10 +2015,10 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1) {
              xlab = "Re-identification Risk",
              ylab = "Number of Records",
              col = "steelblue", border = "white", ...)
-        abline(v = 0.1, col = "red", lty = 2, lwd = 2)
+        abline(v = thresh, col = "red", lty = 2, lwd = 2)
         abline(v = mean(risk), col = "darkblue", lty = 3, lwd = 1.5)
         legend("topright",
-               legend = c("threshold = 0.1",
+               legend = c(paste0("threshold = ", thresh),
                            paste0("mean = ", round(mean(risk), 3))),
                col = c("red", "darkblue"),
                lty = c(2, 3), lwd = c(2, 1.5), cex = 0.8)
@@ -1487,37 +2030,39 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1) {
         risk <- x$per_record$risk
         valid <- !is.na(d)
         if (sum(valid) > 0) {
+            xlab2 <- if (x$method == "pram") "Transition Probability"
+                     else if (x$method == "probabilistic") "Log-LR (True Match)"
+                     else "Distance to True Match"
             plot(d[valid], risk[valid],
-                 main = paste0("Distance to True Match vs Risk", dir_suffix),
-                 xlab = "Distance to True Match",
+                 main = paste0(xlab2, " vs Risk", dir_suffix),
+                 xlab = xlab2,
                  ylab = "Re-identification Risk",
                  pch = 16, col = adjustcolor("steelblue", 0.5),
                  ...)
-            abline(h = 0.1, col = "red", lty = 2, lwd = 2)
+            abline(h = thresh, col = "red", lty = 2, lwd = 2)
         } else {
             plot.new()
-            text(0.5, 0.5, "No distance data available\n(PRAM method)",
+            text(0.5, 0.5, "No distance data available",
                  cex = 1.2)
         }
     }
 
     if (show[3]) {
-        # Per-variable discriminative power (probabilistic only)
+        # Per-variable importance / discriminative power
         if (!is.null(x$fs_params)) {
+            # Probabilistic: grouped agree/disagree barplot
             m <- x$fs_params$m_probs
             u <- x$fs_params$u_probs
             log_lr_agree <- log(m / u)
             log_lr_disagree <- log((1 - m) / (1 - u))
 
             vars <- names(m)
-            nv <- length(vars)
-
-            # Grouped barplot
             mat <- rbind(agree = log_lr_agree, disagree = log_lr_disagree)
             colnames(mat) <- vars
 
             barplot(mat, beside = TRUE,
-                    main = paste0("Per-Variable Log-Likelihood Ratios", dir_suffix),
+                    main = paste0("Per-Variable Log-Likelihood Ratios",
+                                  dir_suffix),
                     ylab = "log(LR)",
                     col = c("steelblue", "coral"),
                     las = 2, ...)
@@ -1526,10 +2071,22 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1) {
                    legend = c("Agree", "Disagree"),
                    fill = c("steelblue", "coral"),
                    cex = 0.8)
+        } else if (!is.null(x$var_importance) &&
+                   !all(is.na(x$var_importance))) {
+            vi <- x$var_importance
+            vi_label <- switch(x$method,
+                deterministic = "Mean Weighted Distance",
+                predictive    = "Absolute Model Coefficient",
+                pram          = "Perturbation Strength (1 - diag)",
+                "Importance")
+            barplot(vi[order(vi, decreasing = TRUE)],
+                    main = paste0("Variable Importance", dir_suffix),
+                    ylab = vi_label,
+                    col = "steelblue", las = 2, ...)
         } else {
             plot.new()
             text(0.5, 0.5,
-                 "Plot 3 requires method='probabilistic'",
+                 "No variable importance available",
                  cex = 1.2)
         }
     }
@@ -1555,6 +2112,121 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1) {
             text(0.5, 0.5,
                  "Plot 4 requires method='predictive'",
                  cex = 1.2)
+        }
+    }
+
+    if (show[5]) {
+        # Risk band barplot
+        if (!is.null(x$per_record$risk_band)) {
+            tb <- table(x$per_record$risk_band)
+            # Reverse so unique_match is on top
+            tb_rev <- rev(tb)
+            cols <- rev(c("#2166ac", "#67a9cf", "#d1e5f0",
+                          "#fddbc7", "#ef8a62", "#b2182b"))
+            bp <- barplot(tb_rev,
+                    main = paste0("Risk Band Distribution", dir_suffix),
+                    ylab = "Number of Records",
+                    col = cols, las = 2,
+                    names.arg = gsub("_", " ", names(tb_rev)),
+                    ...)
+            # Add count labels on bars
+            nonzero <- tb_rev > 0
+            if (any(nonzero)) {
+                text(bp[nonzero], tb_rev[nonzero],
+                     labels = tb_rev[nonzero],
+                     pos = 3, cex = 0.8)
+            }
+        } else {
+            plot.new()
+            text(0.5, 0.5, "No risk_band data available", cex = 1.2)
+        }
+    }
+
+    if (show[6]) {
+        # True-match rank distribution
+        dr <- x$per_record$d_rank
+        valid <- !is.na(dr)
+        if (sum(valid) > 0) {
+            dr_valid <- dr[valid]
+            max_rank <- max(dr_valid)
+            brks <- seq(0.5, max_rank + 0.5, by = 1)
+            hist(dr_valid, breaks = brks,
+                 main = paste0("True-Match Rank Distribution", dir_suffix),
+                 xlab = "Rank of True Match Among Candidates",
+                 ylab = "Number of Records",
+                 col = "steelblue", border = "white", ...)
+            abline(v = 1, col = "red", lty = 2, lwd = 2)
+            pct_rank1 <- 100 * mean(dr_valid == 1L)
+            legend("topright",
+                   legend = paste0("Rank 1: ", round(pct_rank1, 1), "%"),
+                   col = "red", lty = 2, lwd = 2, cex = 0.8)
+        } else {
+            plot.new()
+            text(0.5, 0.5, "No rank data available\n(no true matches found)",
+                 cex = 1.2)
+        }
+    }
+
+    if (show[7]) {
+        # Risk by group barplot
+        if (!is.null(group)) {
+            rg <- risk_by_group(x, group = group, data = data)
+            # Find the group column name (last column that isn't a stat)
+            gcol <- setdiff(names(rg),
+                            c("mean_risk", "max_risk", "n", "n_high",
+                              "pct_high"))
+            labels <- rg[[gcol[1]]]
+            bp <- barplot(rg$mean_risk,
+                    names.arg = labels,
+                    main = paste0("Mean Risk by Group", dir_suffix),
+                    ylab = "Mean Re-identification Risk",
+                    col = "steelblue", las = 2, ...)
+            abline(h = thresh, col = "red", lty = 2, lwd = 2)
+            # Add error bars showing max_risk
+            segments(bp, rg$mean_risk, bp, rg$max_risk,
+                     col = "gray30", lwd = 1.5)
+            points(bp, rg$max_risk, pch = 4, col = "gray30", cex = 0.8)
+            legend("topright",
+                   legend = c(paste0("threshold = ", thresh), "max risk"),
+                   col = c("red", "gray30"),
+                   lty = c(2, NA), pch = c(NA, 4),
+                   lwd = c(2, NA), cex = 0.8)
+        } else {
+            plot.new()
+            text(0.5, 0.5,
+                 "Plot 7 requires 'group' argument",
+                 cex = 1.2)
+        }
+    }
+
+    if (show[8]) {
+        # Lorenz curve of risk concentration
+        risk <- sort(x$per_record$risk)
+        n <- length(risk)
+        cum_risk <- cumsum(risk) / sum(risk)
+        cum_pop <- seq_len(n) / n
+        gini_val <- x$overall$risk_gini
+
+        plot(c(0, cum_pop), c(0, cum_risk),
+             type = "l", lwd = 2, col = "steelblue",
+             main = paste0("Lorenz Curve of Risk", dir_suffix),
+             xlab = "Cumulative Share of Records",
+             ylab = "Cumulative Share of Risk",
+             xlim = c(0, 1), ylim = c(0, 1), ...)
+        # Diagonal (perfect equality)
+        lines(c(0, 1), c(0, 1), lty = 2, col = "gray50", lwd = 1.5)
+        # Shade area between diagonal and Lorenz curve
+        polygon(c(0, cum_pop, 1, 0),
+                c(0, cum_risk, 1, 0),
+                col = adjustcolor("steelblue", 0.15), border = NA)
+        if (!is.null(gini_val)) {
+            legend("topleft",
+                   legend = c("Lorenz curve",
+                              "Perfect equality",
+                              paste0("Gini = ", round(gini_val, 3))),
+                   col = c("steelblue", "gray50", NA),
+                   lty = c(1, 2, NA), lwd = c(2, 1.5, NA),
+                   cex = 0.8)
         }
     }
 }

@@ -4,7 +4,7 @@
 \alias{plot.recordLinkageRisk}
 \title{Plot method for recordLinkageRisk}
 \usage{
-\method{plot}{recordLinkageRisk}(x, y = NULL, ..., which = 1)
+\method{plot}{recordLinkageRisk}(x, y = NULL, ..., which = 1, group = NULL, data = NULL)
 }
 \arguments{
 \item{x}{object of class \code{"recordLinkageRisk"}.}
@@ -15,9 +15,18 @@
 
 \item{which}{integer, which plot(s) to show:
 1 = Risk distribution histogram,
-2 = Distance vs risk scatterplot,
-3 = Per-variable discriminative power (probabilistic method only),
-4 = Propensity score distributions (predictive method only)}
+2 = Distance/score vs risk scatterplot,
+3 = Per-variable importance (all methods),
+4 = Propensity score distributions (predictive method only),
+5 = Risk band barplot,
+6 = True-match rank distribution,
+7 = Risk by group barplot (requires \code{group}),
+8 = Lorenz curve of risk concentration}
+
+\item{group}{optional grouping vector or column name (with \code{data})
+for \code{which = 7}.}
+
+\item{data}{optional data frame for extracting \code{group} column.}
 }
 \description{
 Plot method for recordLinkageRisk
