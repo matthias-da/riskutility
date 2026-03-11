@@ -115,3 +115,56 @@
     oob_error = forest$prediction.error
   )
 }
+
+#' Compute proximity submatrix from terminal nodes
+#'
+#' Uses a tree-by-tree accumulator: for each tree, groups records by
+#' terminal node ID, then increments the proximity counter only for
+#' pairs that share a node. This is efficient when trees have many
+#' terminal nodes (each with few records), avoiding the full
+#' O(n2 * n1 * n_trees) scan.
+#'
+#' @param terminal_nodes integer matrix (n x n_trees) from .rf_proximity()
+#' @param idx1 integer vector, row indices for reference set
+#' @param idx2 integer vector, row indices for query set
+#' @param progress logical, show progress
+#' @return numeric matrix of dim length(idx2) x length(idx1)
+#' @keywords internal
+.proximity_from_nodes <- function(terminal_nodes, idx1, idx2,
+                                  progress = FALSE) {
+  n1 <- length(idx1)
+  n2 <- length(idx2)
+  n_trees <- ncol(terminal_nodes)
+
+  nodes1 <- terminal_nodes[idx1, , drop = FALSE]  # n1 x n_trees
+  nodes2 <- terminal_nodes[idx2, , drop = FALSE]  # n2 x n_trees
+
+  # prox[i, j] = fraction of trees where idx2[i] and idx1[j] share a node
+  prox <- matrix(0L, nrow = n2, ncol = n1)
+
+  if (progress && n_trees > 10) {
+    pb <- utils::txtProgressBar(min = 0, max = n_trees, style = 3)
+  } else {
+    pb <- NULL
+  }
+
+  # Tree-by-tree accumulator
+  for (t in seq_len(n_trees)) {
+    tn1 <- nodes1[, t]  # terminal node IDs for idx1 in tree t
+    tn2 <- nodes2[, t]  # terminal node IDs for idx2 in tree t
+
+    # Group idx1 positions by their terminal node in this tree
+    node_ids <- unique(tn1)
+    for (nid in node_ids) {
+      j_in <- which(tn1 == nid)  # positions in idx1 with this node
+      i_in <- which(tn2 == nid)  # positions in idx2 with this node
+      if (length(i_in) > 0 && length(j_in) > 0) {
+        prox[i_in, j_in] <- prox[i_in, j_in] + 1L
+      }
+    }
+    if (!is.null(pb)) utils::setTxtProgressBar(pb, t)
+  }
+
+  if (!is.null(pb)) close(pb)
+  prox / n_trees
+}

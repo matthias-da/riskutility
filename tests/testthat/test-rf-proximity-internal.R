@@ -107,3 +107,73 @@ test_that(".rf_proximity is reproducible with seed", {
   r2 <- riskutility:::.rf_proximity(d1, d2, n_trees = 50, seed = 42)
   expect_identical(r1$terminal_nodes, r2$terminal_nodes)
 })
+
+# ── Task 3: .proximity_from_nodes ─────────────────────────────────────────────
+
+test_that(".proximity_from_nodes returns correct dimensions", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  d1 <- data.frame(x = rnorm(20), y = rnorm(20))
+  d2 <- data.frame(x = rnorm(30), y = rnorm(30))
+  res <- riskutility:::.rf_proximity(d1, d2, n_trees = 50, seed = 1)
+
+  idx1 <- 1:20     # data1 indices
+  idx2 <- 21:50    # data2 indices
+  prox <- riskutility:::.proximity_from_nodes(res$terminal_nodes, idx1, idx2)
+
+  expect_true(is.matrix(prox))
+  expect_equal(nrow(prox), 30)  # length(idx2)
+  expect_equal(ncol(prox), 20)  # length(idx1)
+})
+
+test_that(".proximity_from_nodes values are in [0, 1]", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  d1 <- data.frame(x = rnorm(20))
+  d2 <- data.frame(x = rnorm(20))
+  res <- riskutility:::.rf_proximity(d1, d2, n_trees = 100, seed = 1)
+
+  prox <- riskutility:::.proximity_from_nodes(res$terminal_nodes, 1:20, 21:40)
+  expect_true(all(prox >= 0 & prox <= 1))
+})
+
+test_that(".proximity_from_nodes: identical data has high self-proximity", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  d <- data.frame(x = rnorm(30), y = rnorm(30))
+  # data2 = copy of data1 (memorized)
+  res <- riskutility:::.rf_proximity(d, d, n_trees = 200, seed = 1)
+
+  # Self-proximity (record i in d1 vs record i in d2)
+  prox <- riskutility:::.proximity_from_nodes(res$terminal_nodes, 1:30, 31:60)
+  self_prox <- diag(prox)
+  other_prox <- prox[row(prox) != col(prox)]
+
+  # Self-proximity should generally be higher than cross-proximity
+  expect_true(mean(self_prox) > mean(other_prox))
+})
+
+test_that(".proximity_from_nodes is symmetric", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  d1 <- data.frame(x = rnorm(15), y = rnorm(15))
+  d2 <- data.frame(x = rnorm(15), y = rnorm(15))
+  res <- riskutility:::.rf_proximity(d1, d2, n_trees = 50, seed = 1)
+
+  # prox(idx1->idx2) should be transpose of prox(idx2->idx1)
+  prox_ab <- riskutility:::.proximity_from_nodes(res$terminal_nodes, 1:15, 16:30)
+  prox_ba <- riskutility:::.proximity_from_nodes(res$terminal_nodes, 16:30, 1:15)
+  expect_equal(prox_ab, t(prox_ba))
+})
+
+test_that(".proximity_from_nodes: tie correction produces rational values", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  d1 <- data.frame(x = rnorm(10))
+  d2 <- data.frame(x = rnorm(10))
+  res <- riskutility:::.rf_proximity(d1, d2, n_trees = 50, seed = 1)
+
+  prox <- riskutility:::.proximity_from_nodes(res$terminal_nodes, 1:10, 11:20)
+  # Values should be multiples of 1/n_trees (allow for floating-point tolerance)
+  expect_true(all(abs(prox * 50 - round(prox * 50)) < 1e-9))
+})
