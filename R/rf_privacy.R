@@ -353,7 +353,9 @@ print.rf_privacy <- function(x, ...) {
   cat("  Max proximity share: ", sprintf("%.2f", x$max_prox_share),
       if (x$max_prox_share <= 0.55) " (training not preferred)"
       else " (training preferred -- memorization signal)", "\n")
-  cat("  Max proximity ratio: ", sprintf("%.2f", x$max_prox_ratio), "\n")
+  cat("  Max proximity ratio: ",
+      if (is.na(x$max_prox_ratio)) "NA (degenerate holdout)"
+      else sprintf("%.2f", x$max_prox_ratio), "\n")
   cat("  OOB error:           ", sprintf("%.2f", x$oob_error), "\n")
   if (!is.null(x$null_distribution)) {
     cat("  Null test:           ", pass_label,

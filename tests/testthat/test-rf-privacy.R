@@ -128,6 +128,18 @@ test_that("rf_privacy privacy_pass TRUE with null_test for random data", {
   expect_true(res$privacy_pass)
 })
 
+test_that("rf_privacy privacy_pass FALSE with null_test for memorized data", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  X_train <- data.frame(a = rnorm(100), b = rnorm(100), c = rnorm(100))
+  X_holdout <- data.frame(a = rnorm(100), b = rnorm(100), c = rnorm(100))
+  Y <- X_train[sample(100, 100, replace = TRUE), ]
+  Y <- Y + rnorm(nrow(Y) * ncol(Y), 0, 0.01)
+  res <- rf_privacy(X_train, Y, holdout = X_holdout, seed = 1,
+                    n_trees = 200, null_test = TRUE, n_null = 20)
+  expect_false(res$privacy_pass)
+})
+
 test_that("rf_privacy print/summary/plot methods work", {
   skip_if_not_installed("ranger")
   set.seed(1)
