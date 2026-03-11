@@ -187,17 +187,30 @@ rf_privacy.default <- function(X, Y,
   idx_ho    <- n_train + seq_len(n_ho)
   idx_syn   <- n_orig + seq_len(n_syn)
 
-  # Compute proximity: synthetic vs training subset
-  prox_syn_train <- .proximity_from_nodes(rf_res$terminal_nodes,
-                                          idx_train, idx_syn,
-                                          progress = progress)
-  # prox_syn_train is n_syn x n_train
+  # Compute proximity matrices.
 
-  # Compute proximity: synthetic vs holdout subset
-  prox_syn_ho <- .proximity_from_nodes(rf_res$terminal_nodes,
-                                       idx_ho, idx_syn,
-                                       progress = FALSE)
-  # prox_syn_ho is n_syn x n_ho
+  # When null_test = TRUE we need the full syn-vs-all-original matrix anyway
+
+  # for the permutation loop, so compute it once and slice. When null_test =
+  # FALSE, compute only the two subsets to save memory/time.
+  if (null_test) {
+    idx_all_orig <- seq_len(n_orig)
+    prox_syn_all <- .proximity_from_nodes(rf_res$terminal_nodes,
+                                          idx_all_orig, idx_syn,
+                                          progress = progress)
+    # prox_syn_all is n_syn x n_orig
+    prox_syn_train <- prox_syn_all[, seq_len(n_train), drop = FALSE]
+    prox_syn_ho    <- prox_syn_all[, (n_train + 1):n_orig, drop = FALSE]
+  } else {
+    prox_syn_train <- .proximity_from_nodes(rf_res$terminal_nodes,
+                                            idx_train, idx_syn,
+                                            progress = progress)
+    prox_syn_ho    <- .proximity_from_nodes(rf_res$terminal_nodes,
+                                            idx_ho, idx_syn,
+                                            progress = FALSE)
+  }
+  # prox_syn_train is n_syn x n_train
+  # prox_syn_ho    is n_syn x n_ho
 
   # Per-record max and mean proximity
   max_prox_train   <- apply(prox_syn_train, 1, max)
@@ -242,12 +255,7 @@ rf_privacy.default <- function(X, Y,
   # Null test: permute train/holdout labels
   null_dist <- NULL
   if (null_test) {
-    # Pre-compute full syn-vs-all-original proximity (n_syn x n_orig)
-    # All original records are already in the terminal_nodes matrix
-    idx_all_orig <- seq_len(n_orig)
-    prox_syn_all <- .proximity_from_nodes(rf_res$terminal_nodes,
-                                          idx_all_orig, idx_syn,
-                                          progress = progress)
+    # prox_syn_all (n_syn x n_orig) was already computed above
 
     null_shares <- numeric(n_null)
     null_ratios <- numeric(n_null)
@@ -283,8 +291,12 @@ rf_privacy.default <- function(X, Y,
     # Permutation p-values: (sum + 1) / (n_null + 1) [Phipson & Smyth]
     pval_share <- (sum(null_max_shares >= max_prox_share, na.rm = TRUE) + 1) /
       (n_null + 1)
-    pval_ratio <- (sum(null_max_ratios >= max_prox_ratio, na.rm = TRUE) + 1) /
-      (n_null + 1)
+    if (is.na(max_prox_ratio)) {
+      pval_ratio <- NA_real_
+    } else {
+      pval_ratio <- (sum(null_max_ratios >= max_prox_ratio,
+                         na.rm = TRUE) + 1) / (n_null + 1)
+    }
 
     null_dist <- list(
       null_max_shares = null_max_shares,

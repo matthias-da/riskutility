@@ -46,6 +46,8 @@ test_that("rf_privacy returns all expected fields", {
   expect_true("wilcox_test" %in% names(res))
   expect_true("oob_error" %in% names(res))
   expect_true("var_importance" %in% names(res))
+  expect_true("prox_train_mean" %in% names(res))
+  expect_true("prox_holdout_mean" %in% names(res))
   expect_true(is.logical(res$privacy_pass))
   expect_equal(length(res$max_prox_train), nrow(Y))
 })
@@ -114,6 +116,16 @@ test_that("rf_privacy prox_ratio zero-guard works", {
   expect_s3_class(res, "rf_privacy")
   # max_prox_ratio is either numeric or NA (both valid)
   expect_true(is.numeric(res$max_prox_ratio) || is.na(res$max_prox_ratio))
+})
+
+test_that("rf_privacy privacy_pass TRUE with null_test for random data", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  X <- data.frame(a = rnorm(100), b = rnorm(100))
+  Y <- data.frame(a = rnorm(100), b = rnorm(100))
+  res <- rf_privacy(X, Y, seed = 1, n_trees = 50,
+                    null_test = TRUE, n_null = 20)
+  expect_true(res$privacy_pass)
 })
 
 test_that("rf_privacy print/summary/plot methods work", {
