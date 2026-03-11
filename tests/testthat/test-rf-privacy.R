@@ -2,10 +2,12 @@
 test_that("rf_privacy detects memorized data", {
   skip_if_not_installed("ranger")
   set.seed(1)
-  X <- data.frame(a = rnorm(200), b = rnorm(200), c = rnorm(200))
-  # Y = copy of X (memorized)
-  Y <- X
-  res <- rf_privacy(X, Y, holdout_fraction = 0.5, seed = 1,
+  X_train <- data.frame(a = rnorm(100), b = rnorm(100), c = rnorm(100))
+  X_holdout <- data.frame(a = rnorm(100), b = rnorm(100), c = rnorm(100))
+  # Y = near-copies of training records (memorized)
+  Y <- X_train[sample(100, 200, replace = TRUE), ]
+  Y <- Y + rnorm(nrow(Y) * ncol(Y), 0, 0.01)
+  res <- rf_privacy(X_train, Y, holdout = X_holdout, seed = 1,
                     n_trees = 200, null_test = FALSE)
 
   expect_s3_class(res, "rf_privacy")
