@@ -168,3 +168,30 @@
   if (!is.null(pb)) close(pb)
   prox / n_trees
 }
+
+#' Compute proximity between new data and reference records
+#'
+#' Pushes newdata through a trained forest to get terminal nodes,
+#' then computes proximity to reference records.
+#'
+#' @param forest ranger object with write.forest = TRUE
+#' @param newdata data.frame to push through the forest
+#' @param terminal_nodes_ref terminal node matrix from training
+#' @param idx_ref integer vector, row indices in terminal_nodes_ref
+#' @param progress logical
+#' @return matrix of dim nrow(newdata) x length(idx_ref)
+#' @keywords internal
+.proximity_from_nodes_newdata <- function(forest, newdata,
+                                          terminal_nodes_ref, idx_ref,
+                                          progress = FALSE) {
+  # Predict terminal nodes for new data
+  tn_new <- predict(forest, newdata, type = "terminalNodes")$predictions
+
+  # Combine: ref nodes + new nodes, then call with appropriate indices
+  n_ref <- nrow(terminal_nodes_ref)
+  n_new <- nrow(tn_new)
+  combined_tn <- rbind(terminal_nodes_ref, tn_new)
+
+  idx_new <- (n_ref + 1):(n_ref + n_new)
+  .proximity_from_nodes(combined_tn, idx_ref, idx_new, progress = progress)
+}

@@ -177,3 +177,36 @@ test_that(".proximity_from_nodes: tie correction produces rational values", {
   # Values should be multiples of 1/n_trees (allow for floating-point tolerance)
   expect_true(all(abs(prox * 50 - round(prox * 50)) < 1e-9))
 })
+
+# ── Task 4: .proximity_from_nodes_newdata ──────────────────────────────────────
+
+test_that(".proximity_from_nodes_newdata returns correct dimensions", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  d1 <- data.frame(x = rnorm(30), y = rnorm(30))
+  d2 <- data.frame(x = rnorm(30), y = rnorm(30))
+  holdout <- data.frame(x = rnorm(20), y = rnorm(20))
+  res <- riskutility:::.rf_proximity(d1, d2, n_trees = 50, seed = 1)
+
+  prox_ho <- riskutility:::.proximity_from_nodes_newdata(
+    res$forest, holdout, res$terminal_nodes, idx_ref = 21:60
+  )
+
+  expect_true(is.matrix(prox_ho))
+  expect_equal(nrow(prox_ho), 20)   # nrow(holdout)
+  expect_equal(ncol(prox_ho), 40)   # length(idx_ref) = d2 rows
+})
+
+test_that(".proximity_from_nodes_newdata values in [0, 1]", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  d1 <- data.frame(x = rnorm(20))
+  d2 <- data.frame(x = rnorm(20))
+  ho  <- data.frame(x = rnorm(10))
+  res <- riskutility:::.rf_proximity(d1, d2, n_trees = 50, seed = 1)
+
+  prox_ho <- riskutility:::.proximity_from_nodes_newdata(
+    res$forest, ho, res$terminal_nodes, idx_ref = 1:20
+  )
+  expect_true(all(prox_ho >= 0 & prox_ho <= 1))
+})
