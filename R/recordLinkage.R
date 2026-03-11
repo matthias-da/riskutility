@@ -465,6 +465,7 @@ recordLinkage.default <- function(X,
         type <- vapply(key, function(v) {
             xv <- X[[v]]
             if (is.numeric(xv)) "numeric"
+            else if (is.ordered(xv)) "ordinal"
             else "nominal"
         }, character(1))
         names(type) <- key

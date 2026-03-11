@@ -1608,3 +1608,323 @@ test_that("independent matching is default and unchanged", {
   expect_equal(res1$per_record$risk, res2$per_record$risk)
   expect_equal(res1$settings$matching, "independent")
 })
+
+
+## -- Hand-computed correctness tests ------------------------------------------
+
+test_that("deterministic: permuted anon gives correct risk and distances", {
+  # X=(20,40,60), X_anon=(41,19,61). Range=42.
+  # rec1: nearest=a2(1/42), true=a1(21/42). Risk=0.
+  # rec2: nearest=a1(1/42), true=a2(21/42). Risk=0.
+  # rec3: nearest=a3(1/42), true=a3. Risk=1.
+  x <- data.frame(age = c(20, 40, 60))
+  xa <- data.frame(age = c(41, 19, 61))
+  res <- recordLinkage(x, xa, key = "age")
+  expect_equal(res$per_record$risk, c(0, 0, 1))
+  expect_equal(res$per_record$d_true[1], 21/42, tolerance = 1e-10)
+  expect_equal(res$per_record$d_min[1], 1/42, tolerance = 1e-10)
+  expect_equal(res$per_record$d_min[3], 1/42, tolerance = 1e-10)
+})
+
+test_that("deterministic: mixed types give correct Gower distance", {
+  # d(r1,a1) = (|20-22|/10 + 0)/2 = 0.1
+  # d(r1,a2) = (|20-28|/10 + 1)/2 = 0.9
+  x <- data.frame(age = c(20, 30), sex = factor(c("M", "F")))
+  xa <- data.frame(age = c(22, 28), sex = factor(c("M", "F")))
+  res <- recordLinkage(x, xa, key = c("age", "sex"))
+  expect_equal(res$per_record$risk, c(1, 1))
+  expect_equal(res$per_record$d_true, c(0.1, 0.1), tolerance = 1e-10)
+})
+
+test_that("deterministic: tied distances give risk = 1/n_tied", {
+  # X=(20,40), X_anon=(30,30). All d=0.5. Both tied at min.
+  x <- data.frame(age = c(20, 40))
+  xa <- data.frame(age = c(30, 30))
+  res <- recordLinkage(x, xa, key = "age")
+  expect_equal(res$per_record$risk, c(0.5, 0.5))
+  expect_equal(res$per_record$cand_n, c(2L, 2L))
+  expect_true(all(res$per_record$true_in_set))
+})
+
+test_that("deterministic: threshold strategy excludes/includes candidates", {
+  # X=(20,80), X_anon=(21,79). Range=60. d≈0.017.
+  x <- data.frame(age = c(20, 80))
+  xa <- data.frame(age = c(21, 79))
+  # Strict threshold: no candidates
+  res1 <- recordLinkage(x, xa, key = "age", strategy = "threshold",
+                         threshold = 0.01)
+  expect_equal(res1$per_record$risk, c(0, 0))
+  expect_equal(res1$per_record$cand_n, c(0L, 0L))
+  # Generous threshold: includes true match
+  res2 <- recordLinkage(x, xa, key = "age", strategy = "threshold",
+                         threshold = 0.5)
+  expect_equal(res2$per_record$risk, c(1, 1))
+})
+
+test_that("deterministic: topk strategy controls candidate set size", {
+  # rec1(30): d=[0.2, 0.12, 0.8]. True=a1. Nearest=a2(0.12).
+  x <- data.frame(age = c(30, 30, 50))
+  xa <- data.frame(age = c(25, 33, 50))
+  res1 <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 1)
+  expect_equal(res1$per_record$risk[1], 0)  # true not in top-1
+  res2 <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 2)
+  expect_equal(res2$per_record$risk[1], 0.5)  # true in top-2
+})
+
+test_that("deterministic: nearest_threshold strategy", {
+  x <- data.frame(age = c(30, 50))
+  xa <- data.frame(age = c(29, 50))
+  # d(30,29)=1/21≈0.048 < 0.05 → include
+  res1 <- recordLinkage(x, xa, key = "age",
+                         strategy = "nearest_threshold", threshold = 0.05)
+  expect_equal(res1$per_record$risk[1], 1)
+  # d_min > 0.01 → empty set → risk=0
+  res2 <- recordLinkage(x, xa, key = "age",
+                         strategy = "nearest_threshold", threshold = 0.01)
+  expect_equal(res2$per_record$risk[1], 0)
+})
+
+test_that("deterministic: softmax weighting hand-computed", {
+  # rec1(25): d=[0.2, 0.32] within threshold. kappa=2/0.12=16.667.
+  # w_true = exp(-kappa*0.2) / (exp(-kappa*0.2) + exp(-kappa*0.32))
+  x <- data.frame(age = c(25, 33, 50))
+  xa <- data.frame(age = c(30, 33, 50))
+  res <- recordLinkage(x, xa, key = "age", strategy = "threshold",
+                        threshold = 0.5, risk_weighting = "softmax")
+  kappa <- 2 / (8/25 - 5/25)
+  neg_kd <- -kappa * c(5/25, 8/25)
+  neg_kd <- neg_kd - max(neg_kd)
+  w <- exp(neg_kd) / sum(exp(neg_kd))
+  expect_equal(res$per_record$risk[1], w[1], tolerance = 1e-4)
+})
+
+test_that("deterministic: kernel (gaussian) weighting hand-computed", {
+  x <- data.frame(age = c(25, 33, 50))
+  xa <- data.frame(age = c(30, 33, 50))
+  res <- recordLinkage(x, xa, key = "age", strategy = "threshold",
+                        threshold = 0.5, risk_weighting = "kernel",
+                        kernel = "gaussian", bandwidth = 0.1)
+  # rec1: d=[0.2, 0.32]. u=d/0.1=[2, 3.2]. K=exp(-u^2/2).
+  k1 <- exp(-2^2 / 2); k2 <- exp(-3.2^2 / 2)
+  expect_equal(res$per_record$risk[1], k1 / (k1 + k2), tolerance = 1e-4)
+})
+
+test_that("deterministic: epanechnikov kernel zero beyond bandwidth", {
+  # rec1(50): d to a1(10)=1, d to a2(49)=0.025. bw=0.1.
+  # K(1/0.1=10) = 0 (beyond bandwidth). True=a1 → risk=0.
+  x <- data.frame(age = c(50, 10))
+  xa <- data.frame(age = c(10, 49))
+  res <- recordLinkage(x, xa, key = "age",
+                        strategy = "threshold", threshold = 1.0,
+                        risk_weighting = "kernel", kernel = "epanechnikov",
+                        bandwidth = 0.1)
+  expect_equal(res$per_record$risk[1], 0)
+})
+
+test_that("PRAM: hand-computed risk with 2-level transition matrix", {
+  # T: M->M=0.9, M->F=0.1, F->M=0.2, F->F=0.8. Rows sum to 1.
+  pm <- matrix(c(0.8, 0.2, 0.1, 0.9), 2, 2, byrow = TRUE,
+               dimnames = list(c("F","M"), c("F","M")))
+  x <- data.frame(sex = factor(c("M", "F")))
+  res <- recordLinkage(x, x, key = "sex", method = "pram",
+                        pram_matrix = list(sex = pm))
+  # rec1(M): P(M|M)=0.9, P(F|M)=0.1. sum=1. risk=0.9.
+  # rec2(F): P(M|F)=0.2, P(F|F)=0.8. sum=1. risk=0.8.
+  expect_equal(res$per_record$risk, c(0.9, 0.8), tolerance = 1e-10)
+})
+
+test_that("PRAM: 3-level hand-computed risk", {
+  pm3 <- matrix(c(0.7, 0.2, 0.1,
+                   0.1, 0.6, 0.3,
+                   0.1, 0.1, 0.8), 3, 3, byrow = TRUE,
+                dimnames = list(c("A","B","C"), c("A","B","C")))
+  x <- data.frame(grp = factor(c("A","B","C"), levels = c("A","B","C")))
+  res <- recordLinkage(x, x, key = "grp", method = "pram",
+                        pram_matrix = list(grp = pm3))
+  expect_equal(res$per_record$risk, c(0.7, 0.6, 0.8), tolerance = 1e-10)
+})
+
+test_that("PRAM: forward vs reverse asymmetry with hand-computed values", {
+  pm <- matrix(c(0.8, 0.2, 0.1, 0.9), 2, 2, byrow = TRUE,
+               dimnames = list(c("F","M"), c("F","M")))
+  x <- data.frame(sex = factor(c("M", "F", "M")))
+  xa <- data.frame(sex = factor(c("M", "M", "F")))
+  rf <- recordLinkage(x, xa, key = "sex", method = "pram",
+                       pram_matrix = list(sex = pm))
+  rr <- recordLinkage(x, xa, key = "sex", method = "pram",
+                       pram_matrix = list(sex = pm), direction = "reverse")
+  # Forward: [9/19, 2/12, 1/19]
+  expect_equal(rf$per_record$risk, c(9/19, 2/12, 1/19), tolerance = 1e-4)
+  # Reverse: [0.45, 0.1, 0.1]
+  expect_equal(rr$per_record$risk, c(0.45, 0.1, 0.1), tolerance = 1e-4)
+  # They must differ
+
+  expect_false(isTRUE(all.equal(rf$per_record$risk, rr$per_record$risk)))
+})
+
+test_that("PRAM: identity matrix gives expected indistinguishable-level risk", {
+  pm_id <- matrix(c(1, 0, 0, 1), 2, 2, dimnames = list(c("F","M"), c("F","M")))
+  x <- data.frame(sex = factor(c("M","F","M")))
+  res <- recordLinkage(x, x, key = "sex", method = "pram",
+                        pram_matrix = list(sex = pm_id))
+  # rec2(F) is unique → risk=1. rec1,3(M) are indistinguishable → risk=0.5.
+  expect_equal(res$per_record$risk[2], 1)
+  expect_equal(res$per_record$risk[c(1, 3)], c(0.5, 0.5))
+})
+
+test_that("PRAM: impossible transition gives risk = 0", {
+  pm_id <- matrix(c(1, 0, 0, 1), 2, 2, dimnames = list(c("F","M"), c("F","M")))
+  x <- data.frame(sex = factor(c("M", "F")))
+  xa <- data.frame(sex = factor(c("F", "M")))  # swapped
+  res <- recordLinkage(x, xa, key = "sex", method = "pram",
+                        pram_matrix = list(sex = pm_id))
+  expect_equal(res$per_record$risk, c(0, 0))
+})
+
+test_that("PRAM: 2-variable product of transition probabilities", {
+  pm_sex <- matrix(c(0.8, 0.2, 0.1, 0.9), 2, 2, byrow = TRUE,
+                   dimnames = list(c("F","M"), c("F","M")))
+  pm_job <- matrix(c(1, 0, 0, 1), 2, 2,
+                   dimnames = list(c("A","B"), c("A","B")))
+  x <- data.frame(sex = factor(c("M", "F")), job = factor(c("A", "B")))
+  # With identity T_job, cross-variable combos get zero prob.
+  # rec1(M,A): P(M,A|M,A)=0.9*1=0.9, P(F,B|M,A)=0.1*0=0. Risk=1.
+  res <- recordLinkage(x, x, key = c("sex", "job"), method = "pram",
+                        pram_matrix = list(sex = pm_sex, job = pm_job))
+  expect_equal(res$per_record$risk, c(1, 1))
+})
+
+test_that("probabilistic: hand-computed risk with user m/u (categorical)", {
+  # LR_agree = log(0.9/0.3) = log(3). LR_disagree = log(0.1/0.7).
+  x <- data.frame(sex = factor(c("M", "F", "M")))
+  xa <- data.frame(sex = factor(c("M", "F", "F")))
+  res <- recordLinkage(x, xa, key = "sex", method = "probabilistic",
+                        m_probs = c(sex = 0.9), u_probs = c(sex = 0.3),
+                        fs_threshold = 0)
+  # rec1(M): above 0 = {a1}. True=a1. Risk=1.
+  # rec2(F): above 0 = {a2,a3}. True=a2. Risk=0.5.
+  # rec3(M): above 0 = {a1}. True=a3. Risk=0.
+  expect_equal(res$per_record$risk, c(1, 0.5, 0))
+})
+
+test_that("probabilistic: 2-var all-agree and all-disagree patterns", {
+  x <- data.frame(sex = factor(c("M","F","M")), job = factor(c("A","B","A")))
+  xa <- data.frame(sex = factor(c("M","M","F")), job = factor(c("A","B","A")))
+  res <- recordLinkage(x, xa, key = c("sex","job"), method = "probabilistic",
+                        m_probs = c(sex = 0.9, job = 0.9),
+                        u_probs = c(sex = 0.3, job = 0.3),
+                        fs_threshold = 0)
+  # rec1(M,A) vs a1(M,A): both agree. LR >> 0. Only a1 above 0. True=a1. Risk=1.
+  # rec2(F,B): no candidates with both agree. All LR < 0. Risk=0.
+  expect_equal(res$per_record$risk, c(1, 0, 0))
+})
+
+test_that("probabilistic: numeric variable with MAD-based tolerance", {
+  x <- data.frame(age = c(20, 40, 60))
+  xa <- data.frame(age = c(21, 39, 62))
+  # MAD(c(20,40,60)) = 1.4826 * 20 ≈ 29.65
+  res <- recordLinkage(x, xa, key = "age", method = "probabilistic",
+                        m_probs = c(age = 0.95), u_probs = c(age = 0.2),
+                        fs_threshold = 0)
+  # rec1: {a1,a2} agree (within tol 29.65). Risk=1/2.
+  # rec2: all 3 agree. Risk=1/3.
+  # rec3: {a2,a3} agree. Risk=1/2.
+  expect_equal(res$per_record$risk, c(0.5, 1/3, 0.5), tolerance = 1e-4)
+})
+
+
+## -- Edge case tests ----------------------------------------------------------
+
+test_that("zero-range numeric variable: all distances = 0", {
+  x <- data.frame(age = c(50, 50, 50))
+  res <- recordLinkage(x, x, key = "age")
+  expect_equal(res$per_record$risk, rep(1/3, 3), tolerance = 1e-10)
+  expect_true(all(res$per_record$d_min == 0))
+})
+
+test_that("single candidate in block: forced match risk = 1", {
+  x <- data.frame(age = c(20, 40), grp = factor(c("A", "B")))
+  xa <- data.frame(age = c(25, 35), grp = factor(c("A", "B")))
+  res <- recordLinkage(x, xa, key = c("age", "grp"), block = "grp")
+  expect_equal(res$per_record$risk, c(1, 1))
+  expect_equal(res$per_record$cand_n, c(1L, 1L))
+})
+
+test_that("all records identical: risk = 1/n", {
+  x <- data.frame(age = rep(30, 5), sex = factor(rep("M", 5)))
+  res <- recordLinkage(x, x, key = c("age", "sex"))
+  expect_equal(res$per_record$risk, rep(0.2, 5), tolerance = 1e-10)
+  expect_true(all(res$per_record$cand_n == 5L))
+})
+
+test_that("only categorical variables: correct Gower distances", {
+  x <- data.frame(sex = factor(c("M","F","M")), job = factor(c("A","B","B")))
+  xa <- data.frame(sex = factor(c("M","F","M")), job = factor(c("A","A","B")))
+  # rec2(F,B): d to a2(F,A)=0.5, d to a3(M,B)=0.5. Tied → risk=0.5.
+  res <- recordLinkage(x, xa, key = c("sex", "job"))
+  expect_equal(res$per_record$risk, c(1, 0.5, 1))
+})
+
+test_that("NA handling: na_anon modes give correct distances", {
+  x <- data.frame(age = c(20, 30), sex = factor(c("M", "F")))
+  xa <- data.frame(age = c(NA_real_, NA_real_), sex = factor(c("M", "F")))
+
+  # match: NA → d=0
+  r1 <- recordLinkage(x, xa, key = c("age", "sex"), na_anon = "match")
+  expect_equal(r1$per_record$d_true, c(0, 0))
+  expect_equal(r1$per_record$risk, c(1, 1))
+
+  # mismatch: NA → d=1 for that variable
+  r2 <- recordLinkage(x, xa, key = c("age", "sex"), na_anon = "mismatch")
+  expect_equal(r2$per_record$d_true, c(0.5, 0.5))
+  expect_equal(r2$per_record$risk, c(1, 1))
+
+  # ignore: NA variable excluded from distance
+  r3 <- recordLinkage(x, xa, key = c("age", "sex"), na_anon = "ignore")
+  expect_equal(r3$per_record$d_true, c(0, 0))
+  expect_equal(r3$per_record$risk, c(1, 1))
+})
+
+test_that("ordinal factors auto-detected and scaled by range", {
+  x <- data.frame(edu = ordered(c("low","high"), levels = c("low","mid","high")))
+  xa <- data.frame(edu = ordered(c("low","mid"), levels = c("low","mid","high")))
+  res <- recordLinkage(x, xa, key = "edu")
+  # Ordinal: low=1, mid=2, high=3. Range=2.
+  # rec2(high=3): d(a2=mid=2) = 1/2 = 0.5. Nearest=a2=true. Risk=1.
+  expect_equal(res$per_record$d_true, c(0, 0.5), tolerance = 1e-10)
+  expect_equal(res$per_record$risk, c(1, 1))
+})
+
+test_that("custom variable weights change distances correctly", {
+  x <- data.frame(age = c(20, 20), sex = factor(c("M", "M")))
+  xa <- data.frame(age = c(25, 20), sex = factor(c("F", "M")))
+  # weights=(3,1): rec1 d(a1)=(3*1+1*1)/4=1, d(a2)=0. nearest=a2. true=a1. risk=0.
+  res <- recordLinkage(x, xa, key = c("age", "sex"),
+                        weights = c(age = 3, sex = 1))
+  expect_equal(res$per_record$risk, c(0, 1))
+})
+
+test_that("truth='id' maps records by ID column", {
+  x <- data.frame(id = c(1, 2), age = c(20, 40))
+  xa <- data.frame(id = c(2, 1), age = c(38, 22))
+  res <- recordLinkage(x, xa, key = "age", truth = "id", id = "id")
+  # rec1(20) true=a2(22,id=1). Range=20. d_true=2/20=0.1. Nearest=a2. Risk=1.
+  expect_equal(res$per_record$risk, c(1, 1))
+  expect_equal(res$per_record$d_true, c(0.1, 0.1), tolerance = 1e-10)
+})
+
+test_that("bijective PRAM: hand-computed cost matrix", {
+  skip_if_not_installed("clue")
+  pm <- matrix(c(0.8, 0.2, 0.1, 0.9), 2, 2, byrow = TRUE,
+               dimnames = list(c("F","M"), c("F","M")))
+  x <- data.frame(sex = factor(c("M", "F", "M")))
+  xa <- data.frame(sex = factor(c("M", "M", "F")))
+  res <- recordLinkage(x, xa, key = "sex", method = "pram",
+                        pram_matrix = list(sex = pm), matching = "bijective")
+  ba <- res$per_record$bijective_assigned
+  # r2(F) must go to a3(F): highest probability match
+  expect_equal(ba[2], 3L)
+  expect_true(setequal(ba[c(1, 3)], c(1L, 2L)))
+  # r2 true=a2, assigned=a3 → risk=0
+  expect_equal(res$per_record$risk[2], 0)
+})
