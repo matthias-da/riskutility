@@ -35,6 +35,14 @@
   d1 <- data1[, vars, drop = FALSE]
   d2 <- data2[, vars, drop = FALSE]
 
+  if (length(vars) == 0L) {
+    stop("No common variables found between data1 and data2.", call. = FALSE)
+  }
+
+  if (nrow(data1) < 1L || nrow(data2) < 1L) {
+    stop("data1 and data2 must have at least 1 row each.", call. = FALSE)
+  }
+
   # Check column name collision
   if (".rf_label" %in% names(d1) || ".rf_label" %in% names(d2)) {
     stop("Column '.rf_label' already exists in data. Please rename it.",

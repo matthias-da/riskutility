@@ -62,7 +62,7 @@ test_that(".rf_proximity uses vars subset", {
 test_that(".rf_proximity handles high-cardinality factors", {
   skip_if_not_installed("ranger")
   set.seed(1)
-  # Create factor with > 53 levels to trigger partition mode
+  # Create factor with > 53 levels to trigger order mode
   d1 <- data.frame(x = factor(sample(paste0("cat", 1:60), 100, TRUE)),
                    y = rnorm(100))
   d2 <- data.frame(x = factor(sample(paste0("cat", 1:60), 100, TRUE)),
@@ -97,4 +97,13 @@ test_that(".rf_proximity uses modifyList for user overrides", {
                                       importance = TRUE,
                                       min.node.size = 5)
   expect_s3_class(res$forest, "ranger")
+})
+
+test_that(".rf_proximity is reproducible with seed", {
+  skip_if_not_installed("ranger")
+  d1 <- data.frame(x = rnorm(50), y = rnorm(50))
+  d2 <- data.frame(x = rnorm(50), y = rnorm(50))
+  r1 <- riskutility:::.rf_proximity(d1, d2, n_trees = 50, seed = 42)
+  r2 <- riskutility:::.rf_proximity(d1, d2, n_trees = 50, seed = 42)
+  expect_identical(r1$terminal_nodes, r2$terminal_nodes)
 })
