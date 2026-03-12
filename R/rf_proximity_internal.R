@@ -195,3 +195,42 @@
   idx_new <- (n_ref + 1):(n_ref + n_new)
   .proximity_from_nodes(combined_tn, idx_ref, idx_new, progress = progress)
 }
+
+
+#' RF linkage matching for one block
+#'
+#' Trains RF on query + candidate records, computes cross-proximity,
+#' returns per-record matches.
+#'
+#' @param query data.frame (records being matched)
+#' @param candidate data.frame (records to match against)
+#' @param key character vector of key variables
+#' @param n_trees integer
+#' @param ... additional args to .rf_proximity
+#' @return list with risk, match_idx, cross_prox, var_importance
+#' @keywords internal
+.rf_linkage_block <- function(query, candidate, key,
+                              n_trees = 500L, ...) {
+  n_q <- nrow(query)
+  n_c <- nrow(candidate)
+
+  rf_res <- .rf_proximity(query[, key, drop = FALSE],
+                          candidate[, key, drop = FALSE],
+                          n_trees = n_trees, importance = TRUE, ...)
+
+  idx_query <- seq_len(n_q)
+  idx_cand  <- n_q + seq_len(n_c)
+  cross_prox <- .proximity_from_nodes(rf_res$terminal_nodes,
+                                      idx_cand, idx_query)
+  # cross_prox is n_q x n_c
+
+  match_idx <- apply(cross_prox, 1, which.max)
+  risk <- apply(cross_prox, 1, max)
+
+  list(
+    risk = risk,
+    match_idx = match_idx,
+    cross_prox = cross_prox,
+    var_importance = rf_res$importance
+  )
+}

@@ -31,7 +31,7 @@ test_that("recordLinkage(method = 'rf') with blocking works", {
   set.seed(1)
   X <- data.frame(a = rnorm(100), b = rep(c("A", "B"), 50))
   Y <- data.frame(a = rnorm(100), b = rep(c("A", "B"), 50))
-  res <- recordLinkage(X, Y, key = "a", block = "b", method = "rf",
+  res <- recordLinkage(X, Y, key = c("a", "b"), block = "b", method = "rf",
                        n_trees = 50)
 
   expect_s3_class(res, "recordLinkageRisk")
@@ -42,7 +42,7 @@ test_that("recordLinkage(method = 'rf') rf_global = TRUE works", {
   set.seed(1)
   X <- data.frame(a = rnorm(100), b = rep(c("A", "B"), 50))
   Y <- data.frame(a = rnorm(100), b = rep(c("A", "B"), 50))
-  res <- recordLinkage(X, Y, key = "a", block = "b", method = "rf",
+  res <- recordLinkage(X, Y, key = c("a", "b"), block = "b", method = "rf",
                        n_trees = 50, rf_global = TRUE)
 
   expect_s3_class(res, "recordLinkageRisk")
@@ -81,7 +81,7 @@ test_that("recordLinkage(method = 'rf') small block fallback", {
   X <- data.frame(a = rnorm(31), b = c(rep("A", 15), rep("B", 15), "C"))
   Y <- data.frame(a = rnorm(31), b = c(rep("A", 15), rep("B", 15), "C"))
   expect_message(
-    res <- recordLinkage(X, Y, key = "a", block = "b",
+    res <- recordLinkage(X, Y, key = c("a", "b"), block = "b",
                          method = "rf", n_trees = 50),
     "blocks"
   )

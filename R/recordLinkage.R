@@ -135,7 +135,11 @@
 #' @param key character. Names of quasi-identifier variables used for linkage.
 #' @param method character. Linkage method: \code{"deterministic"} (default),
 #'   \code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
-#'   or \code{"predictive"} (propensity-score-based).
+#'   \code{"predictive"} (propensity-score-based), or \code{"rf"}
+#'   (random forest proximity-based). The RF method trains a supervised
+#'   random forest to distinguish original from anonymized records and
+#'   uses tree co-occurrence (proximity) as a similarity measure for
+#'   record linkage. Requires the \pkg{ranger} package.
 #' @param direction character. Direction of the linkage attack:
 #'   \code{"forward"} (default) loops over original records and searches in the
 #'   anonymized data, answering "how safe is each original individual?";
@@ -207,6 +211,13 @@
 #'   and for the \code{privacy_pass} flag (default 0.1). Records with risk above
 #'   this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
 #'   The \code{privacy_pass} flag is TRUE when \code{mean_risk <= risk_threshold}.
+#' @param n_trees integer. Number of trees for \code{method = "rf"} (default 500).
+#'   Must be at least 10.
+#' @param rf_global logical. For \code{method = "rf"} with blocking: if
+#'   \code{TRUE}, train a single global forest on all data and restrict
+#'   proximity computation within blocks. If \code{FALSE} (default), train
+#'   a separate forest per block (with automatic global fallback for blocks
+#'   that are too small).
 #' @param ... additional arguments passed to methods.
 #' @author Roman Mueller and Matthias Templ
 #'
@@ -356,7 +367,7 @@ recordLinkage.default <- function(X,
                                   x_anon,
                                   key,
                                   method = c("deterministic", "probabilistic",
-                                             "pram", "predictive"),
+                                             "pram", "predictive", "rf"),
                                   direction = c("forward", "reverse"),
                                   risk_weighting = c("uniform", "softmax",
                                                      "kernel"),
@@ -384,6 +395,8 @@ recordLinkage.default <- function(X,
                                   return_matches = FALSE,
                                   matching = c("independent", "bijective"),
                                   risk_threshold = 0.1,
+                                  n_trees = 500L,
+                                  rf_global = FALSE,
                                   ...) {
 
     method <- match.arg(method)
@@ -406,6 +419,17 @@ recordLinkage.default <- function(X,
         if (risk_weighting != "uniform")
             message("Note: bijective matching produces binary risk (0/1); ",
                     "'risk_weighting' applies only to independent-scoring diagnostics.")
+    }
+
+    if (method == "rf") {
+        if (!requireNamespace("ranger", quietly = TRUE)) {
+            stop("Package 'ranger' required for recordLinkage(method = 'rf'). ",
+                 "Install with install.packages('ranger')", call. = FALSE)
+        }
+        if (!missing(weights)) {
+            message("method = 'rf': weights ignored. ",
+                    "RF uses data-driven variable importance instead.")
+        }
     }
 
     stopifnot(is.data.frame(X), is.data.frame(x_anon))
@@ -573,6 +597,7 @@ recordLinkage.default <- function(X,
     }
 
     # main loop ----
+    if (method != "rf") {
     for (i in seq_len(n_query)) {
         cand <- split_search[[blk_query[i]]]
         if (is.null(cand) || length(cand) == 0L) {
@@ -833,6 +858,142 @@ recordLinkage.default <- function(X,
             score_cache[[i]] <- list(cand = cand, scores = di,
                                       maximize = FALSE)
     }
+    } else if (method == "rf") {
+
+    # RF method: proximity-based record linkage ----
+    .rf_process_block <- function(q_idx, s_idx, cross_prox) {
+        for (r in seq_along(q_idx)) {
+            qi <- q_idx[r]
+            prox_vec <- cross_prox[r, ]
+            cand_n[qi] <<- length(s_idx)
+            best_col <- which.max(prox_vec)
+            risk[qi] <<- prox_vec[best_col]
+
+            # Truth evaluation
+            tpos <- true_idx[qi]
+            if (!is.na(tpos) && tpos > 0L) {
+                t_col <- match(tpos, s_idx)
+                if (!is.na(t_col)) {
+                    true_in_set[qi] <<- TRUE
+                    d_true[qi] <<- prox_vec[t_col]
+                    d_min[qi] <<- max(prox_vec)
+                    d_rank[qi] <<- sum(prox_vec >= prox_vec[t_col])
+                }
+            }
+
+            if (!is.null(score_cache)) {
+                score_cache[[qi]] <<- list(cand = s_idx, scores = prox_vec,
+                                           maximize = TRUE)
+            }
+
+            if (isTRUE(return_matches)) {
+                matches[[qi]] <<- s_idx[best_col]
+            }
+        }
+    }
+
+    if (is.null(block) || length(split_search) == 1) {
+        # No blocking: single RF
+        block_res <- .rf_linkage_block(query_data, search_data, key,
+                                       n_trees = n_trees, ...)
+        s_idx <- seq_len(nrow(search_data))
+        .rf_process_block(seq_len(n_query), s_idx, block_res$cross_prox)
+        rf_var_importance <- block_res$var_importance
+
+    } else {
+        # Blocked matching
+        all_blocks <- names(split_search)
+        rf_var_importance <- NULL
+        small_blocks <- 0L
+        total_blocks <- length(all_blocks)
+        fallback_blocks <- character(0)
+        importance_list <- list()
+        block_sizes <- integer(0)
+
+        if (rf_global) {
+            # Global RF: train once, restrict proximity within blocks
+            global_rf <- .rf_proximity(query_data[, key, drop = FALSE],
+                                       search_data[, key, drop = FALSE],
+                                       n_trees = n_trees, importance = TRUE,
+                                       ...)
+            rf_var_importance <- global_rf$importance
+            n_q_all <- nrow(query_data)
+
+            for (blk in all_blocks) {
+                s_idx <- split_search[[blk]]
+                q_idx <- which(blk_query == blk)
+                if (length(q_idx) == 0 || length(s_idx) == 0) next
+
+                tn_q <- q_idx
+                tn_s <- n_q_all + s_idx
+                cross_prox <- .proximity_from_nodes(
+                    global_rf$terminal_nodes, tn_s, tn_q
+                )
+                .rf_process_block(q_idx, s_idx, cross_prox)
+            }
+
+        } else {
+            # Per-block RF
+            for (blk in all_blocks) {
+                s_idx <- split_search[[blk]]
+                q_idx <- which(blk_query == blk)
+                if (length(q_idx) == 0 || length(s_idx) == 0) next
+
+                min_per_class <- min(length(q_idx), length(s_idx))
+
+                if (min_per_class < 2) {
+                    small_blocks <- small_blocks + 1L
+                    fallback_blocks <- c(fallback_blocks, blk)
+                    next
+                }
+
+                block_res <- .rf_linkage_block(
+                    query_data[q_idx, , drop = FALSE],
+                    search_data[s_idx, , drop = FALSE],
+                    key, n_trees = n_trees, ...
+                )
+                .rf_process_block(q_idx, s_idx, block_res$cross_prox)
+                importance_list[[blk]] <- block_res$var_importance
+                block_sizes <- c(block_sizes, length(q_idx) + length(s_idx))
+            }
+
+            # Second pass: global RF fallback for blocks with < 2 per class
+            if (length(fallback_blocks) > 0) {
+                global_rf_fb <- .rf_proximity(
+                    query_data[, key, drop = FALSE],
+                    search_data[, key, drop = FALSE],
+                    n_trees = n_trees, importance = TRUE, ...
+                )
+                n_q_all <- nrow(query_data)
+
+                for (blk in fallback_blocks) {
+                    s_idx <- split_search[[blk]]
+                    q_idx <- which(blk_query == blk)
+                    if (length(q_idx) == 0 || length(s_idx) == 0) next
+
+                    cross_prox <- .proximity_from_nodes(
+                        global_rf_fb$terminal_nodes,
+                        n_q_all + s_idx, q_idx
+                    )
+                    .rf_process_block(q_idx, s_idx, cross_prox)
+                }
+            }
+
+            # Aggregate variable importance (weighted by block size)
+            if (length(importance_list) > 0) {
+                imp_mat <- do.call(rbind, importance_list)
+                rf_var_importance <- colSums(imp_mat * block_sizes) /
+                    sum(block_sizes)
+            }
+
+            if (small_blocks > 0) {
+                message(small_blocks, " of ", total_blocks,
+                        " blocks have < 2 records per class. ",
+                        "Consider rf_global = TRUE or coarser blocking.")
+            }
+        }
+    }
+    }
 
     # bijective matching override ----
     bijective_assigned <- NULL
@@ -883,6 +1044,13 @@ recordLinkage.default <- function(X,
         for (v in key) {
             tm <- pram_matrix[[v]]
             var_importance[v] <- 1 - mean(diag(tm))
+        }
+    } else if (method == "rf") {
+        var_importance <- if (exists("rf_var_importance") &&
+                             !is.null(rf_var_importance)) {
+            rf_var_importance
+        } else {
+            setNames(rep(NA_real_, length(key)), key)
         }
     } else {
         var_importance <- setNames(rep(NA_real_, length(key)), key)
@@ -949,7 +1117,9 @@ recordLinkage.default <- function(X,
             pred_model = pred_model,
             pred_se = pred_se,
             matching = matching,
-            risk_threshold = risk_threshold
+            risk_threshold = risk_threshold,
+            n_trees = if (method == "rf") n_trees else NULL,
+            rf_global = if (method == "rf") rf_global else NULL
         )
     )
     if (isTRUE(return_matches)) out$matches <- matches
@@ -2080,6 +2250,7 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1,
                 deterministic = "Mean Weighted Distance",
                 predictive    = "Absolute Model Coefficient",
                 pram          = "Perturbation Strength (1 - diag)",
+                rf            = "RF Impurity Importance",
                 "Importance")
             barplot(vi[order(vi, decreasing = TRUE)],
                     main = paste0("Variable Importance", dir_suffix),

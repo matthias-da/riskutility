@@ -14,7 +14,7 @@ recordLinkage(X, ...)
   X,
   x_anon,
   key,
-  method = c("deterministic", "probabilistic", "pram", "predictive"),
+  method = c("deterministic", "probabilistic", "pram", "predictive", "rf"),
   direction = c("forward", "reverse"),
   risk_weighting = c("uniform", "softmax", "kernel"),
   kappa = NULL,
@@ -38,6 +38,8 @@ recordLinkage(X, ...)
   return_matches = FALSE,
   matching = c("independent", "bijective"),
   risk_threshold = 0.1,
+  n_trees = 500L,
+  rf_global = FALSE,
   ...
 )
 }
@@ -52,7 +54,11 @@ recordLinkage(X, ...)
 
 \item{method}{character. Linkage method: \code{"deterministic"} (default),
 \code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
-or \code{"predictive"} (propensity-score-based).}
+\code{"predictive"} (propensity-score-based), or \code{"rf"}
+(random forest proximity-based). The RF method trains a supervised
+random forest to distinguish original from anonymized records and
+uses tree co-occurrence (proximity) as a similarity measure for
+record linkage. Requires the \pkg{ranger} package.}
 
 \item{direction}{character. Direction of the linkage attack:
 \code{"forward"} (default) loops over original records and searches in the
@@ -147,6 +153,15 @@ See Herranz, Nin, Rodriguez & Tassa (2016).}
 and for the \code{privacy_pass} flag (default 0.1). Records with risk above
 this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
 The \code{privacy_pass} flag is TRUE when \code{mean_risk <= risk_threshold}.}
+
+\item{n_trees}{integer. Number of trees for \code{method = "rf"} (default 500).
+Must be at least 10.}
+
+\item{rf_global}{logical. For \code{method = "rf"} with blocking: if
+\code{TRUE}, train a single global forest on all data and restrict
+proximity computation within blocks. If \code{FALSE} (default), train
+a separate forest per block (with automatic global fallback for blocks
+that are too small).}
 }
 \value{
 An object of class \code{"recordLinkageRisk"}: a list with components
