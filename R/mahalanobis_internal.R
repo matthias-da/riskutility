@@ -120,3 +120,68 @@
     p = p
   )
 }
+
+
+#' Compute Mahalanobis-Based Distance from One Record to Candidates
+#'
+#' For numeric/ordinal variables, computes Mahalanobis distance using the
+#' pre-computed inverse covariance from \code{.mahal_prepare()}, normalized
+#' by the chi-squared threshold to produce values in approximately [0,1].
+#' For nominal variables, computes Gower-style exact match (0/1).
+#' Combined as weighted average based on proportion of each type.
+#'
+#' @param x_row data.frame with 1 row. Query record.
+#' @param candidates data.frame. Search records (multiple rows).
+#' @param prep list. Output from \code{.mahal_prepare()}.
+#' @param type named character. Per-key type.
+#' @return numeric vector of distances (one per candidate row).
+#' @keywords internal
+.mahal_dist <- function(x_row, candidates, prep, type) {
+  nc <- nrow(candidates)
+
+  # --- Numeric part: Mahalanobis distance ---
+  d_maha <- rep(0, nc)
+  if (length(prep$numeric_keys) > 0) {
+    x_num <- numeric(prep$p)
+    for (j in seq_along(prep$numeric_keys)) {
+      v <- prep$numeric_keys[j]
+      val <- x_row[[v]]
+      if (is.factor(val)) val <- as.integer(val)
+      x_num[j] <- as.numeric(val)
+    }
+
+    cand_mat <- candidates[, prep$numeric_keys, drop = FALSE]
+    for (v in prep$numeric_keys) {
+      if (is.factor(cand_mat[[v]])) cand_mat[[v]] <- as.integer(cand_mat[[v]])
+      cand_mat[[v]] <- as.numeric(cand_mat[[v]])
+    }
+    cand_mat <- as.matrix(cand_mat)
+
+    # diff_mat: nc x p
+    diff_mat <- sweep(cand_mat, 2, x_num)
+    # Mahalanobis: sqrt(diff %*% Sigma^{-1} %*% diff')
+    rmd_sq <- rowSums((diff_mat %*% prep$cov_inv) * diff_mat)
+    rmd_sq <- pmax(rmd_sq, 0)
+    d_maha <- sqrt(rmd_sq)
+
+    # Normalize by chi-squared threshold
+    d_maha <- d_maha / prep$chi_sq_threshold
+  }
+
+  # --- Nominal part: exact match (Gower) ---
+  d_nom <- rep(0, nc)
+  if (length(prep$nominal_keys) > 0) {
+    n_nom <- length(prep$nominal_keys)
+    for (v in prep$nominal_keys) {
+      d_nom <- d_nom + as.numeric(x_row[[v]] != candidates[[v]])
+    }
+    d_nom <- d_nom / n_nom
+  }
+
+  # --- Combine ---
+  if (length(prep$nominal_keys) == 0) {
+    d_maha
+  } else {
+    prep$alpha * d_maha + (1 - prep$alpha) * d_nom
+  }
+}

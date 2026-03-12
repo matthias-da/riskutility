@@ -111,3 +111,86 @@ test_that(".mahal_prepare computes chi-squared threshold", {
   expected <- sqrt(qchisq(0.975, df = 3))
   expect_equal(res$chi_sq_threshold, expected)
 })
+
+# --- .mahal_dist() tests ---
+
+test_that(".mahal_dist computes correct distances for pure numeric", {
+  set.seed(1)
+  X <- data.frame(a = rnorm(30), b = rnorm(30))
+  type <- c(a = "numeric", b = "numeric")
+  prep <- .mahal_prepare(X, names(X), type, robust = FALSE)
+
+  x_row <- X[1, , drop = FALSE]
+  candidates <- X[1:5, , drop = FALSE]
+  di <- .mahal_dist(x_row, candidates, prep, type)
+
+  expect_equal(length(di), 5)
+  expect_true(all(di >= 0))
+  expect_true(di[1] < 1e-10)  # distance to self should be ~0
+})
+
+test_that(".mahal_dist with mixed data combines Mahalanobis and nominal", {
+  set.seed(1)
+  X <- data.frame(
+    num = rnorm(30),
+    cat = sample(c("a", "b"), 30, TRUE),
+    stringsAsFactors = FALSE
+  )
+  type <- c(num = "numeric", cat = "nominal")
+  prep <- .mahal_prepare(X, names(X), type, robust = FALSE)
+
+  x_row <- X[1, , drop = FALSE]
+  candidates <- X[1:5, , drop = FALSE]
+  di <- .mahal_dist(x_row, candidates, prep, type)
+
+  expect_equal(length(di), 5)
+  expect_true(all(di >= 0))
+  expect_true(di[1] < 1e-10)  # self-distance = 0
+})
+
+test_that(".mahal_dist accounts for correlation structure", {
+  set.seed(42)
+  n <- 100
+  a <- rnorm(n)
+  b <- a + rnorm(n, 0, 0.1)  # b ~= a (highly correlated)
+  X <- data.frame(a = a, b = b)
+  type <- c(a = "numeric", b = "numeric")
+  prep <- .mahal_prepare(X, names(X), type, robust = FALSE)
+
+  x_base <- data.frame(a = 0, b = 0)
+  cand_along <- data.frame(a = 1, b = 1)     # along correlation
+  cand_against <- data.frame(a = 1, b = -1)  # against correlation
+
+  d_along <- .mahal_dist(x_base, cand_along, prep, type)
+  d_against <- .mahal_dist(x_base, cand_against, prep, type)
+
+  # Against-correlation should be larger (more unusual)
+  expect_true(d_against > d_along)
+})
+
+test_that(".mahal_dist normalizes to reasonable range", {
+  set.seed(1)
+  X <- data.frame(a = rnorm(50), b = rnorm(50))
+  type <- c(a = "numeric", b = "numeric")
+  prep <- .mahal_prepare(X, names(X), type, robust = FALSE)
+
+  all_dists <- numeric(0)
+  for (i in 1:10) {
+    di <- .mahal_dist(X[i, , drop = FALSE], X, prep, type)
+    all_dists <- c(all_dists, di)
+  }
+  expect_true(all(all_dists >= 0))
+  # Most in-distribution distances should be <= 1 after chi-sq normalization
+  expect_true(median(all_dists) < 2)
+})
+
+test_that(".mahal_dist handles single numeric key", {
+  set.seed(1)
+  X <- data.frame(a = rnorm(30))
+  type <- c(a = "numeric")
+  prep <- .mahal_prepare(X, names(X), type, robust = FALSE)
+
+  di <- .mahal_dist(X[1, , drop = FALSE], X[1:5, , drop = FALSE], prep, type)
+  expect_equal(length(di), 5)
+  expect_true(di[1] < 1e-10)
+})
