@@ -398,7 +398,7 @@ recordLinkage.default <- function(X,
                                   key,
                                   method = c("deterministic", "probabilistic",
                                              "pram", "predictive", "rf",
-                                             "rbrl"),
+                                             "rbrl", "mahalanobis"),
                                   direction = c("forward", "reverse"),
                                   risk_weighting = c("uniform", "softmax",
                                                      "kernel"),
@@ -428,6 +428,7 @@ recordLinkage.default <- function(X,
                                   risk_threshold = 0.1,
                                   n_trees = 500L,
                                   rf_global = FALSE,
+                                  robust = TRUE,
                                   ...) {
 
     method <- match.arg(method)
@@ -624,6 +625,13 @@ recordLinkage.default <- function(X,
             # Nominal: leave as-is (exact match in distance computation)
         }
         rbrl_var_dist_acc <- setNames(numeric(length(key)), key)
+    }
+
+    # Mahalanobis: prepare covariance ----
+    mahal_prep <- NULL
+    if (method == "mahalanobis") {
+        mahal_prep <- .mahal_prepare(search_data, key, type,
+                                      robust = robust)
     }
 
     # blocking ----
@@ -884,6 +892,61 @@ recordLinkage.default <- function(X,
                     rbrl_var_dist_acc[v] <- rbrl_var_dist_acc[v] +
                         min(abs(rbrl_query[[v]][i] - rbrl_search[[v]][cand]))
                 }
+            }
+
+            guess <- .choose_guess_set(
+                d = di, cand = cand, strategy = strategy,
+                k = k, threshold = threshold
+            )
+
+            cand_n[i] <- length(guess)
+            if (cand_n[i] == 0L) {
+                risk[i] <- 0
+                true_in_set[i] <- FALSE
+                if (isTRUE(return_matches)) matches[[i]] <- integer(0)
+                next
+            }
+
+            true_in_set[i] <- (true_idx[i] %in% guess)
+
+            if (!true_in_set[i]) {
+                risk[i] <- 0
+            } else if (risk_weighting == "softmax") {
+                guess_local_idx <- match(guess, cand)
+                w <- .softmax_risk(di[guess_local_idx], kappa)
+                true_local <- match(true_idx[i], guess)
+                risk[i] <- w[true_local]
+            } else if (risk_weighting == "kernel") {
+                guess_local_idx <- match(guess, cand)
+                w <- .kernel_risk(di[guess_local_idx], bandwidth, kernel)
+                true_local <- match(true_idx[i], guess)
+                risk[i] <- w[true_local]
+            } else {
+                risk[i] <- 1 / cand_n[i]
+            }
+
+            if (isTRUE(return_matches)) matches[[i]] <- guess
+            if (!is.null(score_cache))
+                score_cache[[i]] <- list(cand = cand, scores = di,
+                                          maximize = FALSE)
+            next
+        }
+
+        if (method == "mahalanobis") {
+            # Mahalanobis distance
+            di <- .mahal_dist(
+                x_row = query_data[i, key, drop = FALSE],
+                candidates = search_data[cand, key, drop = FALSE],
+                prep = mahal_prep, type = type
+            )
+
+            d_min[i] <- min(di)
+
+            tpos <- true_idx[i]
+            j_in <- match(tpos, cand)
+            if (!is.na(j_in)) {
+                d_true[i] <- di[j_in]
+                d_rank[i] <- as.integer(rank(di, ties.method = "min")[j_in])
             }
 
             guess <- .choose_guess_set(
@@ -1192,6 +1255,16 @@ recordLinkage.default <- function(X,
     } else if (method == "rbrl") {
         # Mean per-variable rank distance to best match
         var_importance <- rbrl_var_dist_acc / n_query
+    } else if (method == "mahalanobis") {
+        # Diagonal of inverse covariance: larger = more discriminating
+        vi <- setNames(rep(NA_real_, length(key)), key)
+        if (!is.null(mahal_prep) && length(mahal_prep$numeric_keys) > 0) {
+            diag_inv <- diag(mahal_prep$cov_inv)
+            for (j in seq_along(mahal_prep$numeric_keys)) {
+                vi[mahal_prep$numeric_keys[j]] <- diag_inv[j]
+            }
+        }
+        var_importance <- vi
     } else {
         var_importance <- setNames(rep(NA_real_, length(key)), key)
     }
@@ -1259,7 +1332,8 @@ recordLinkage.default <- function(X,
             matching = matching,
             risk_threshold = risk_threshold,
             n_trees = if (method == "rf") n_trees else NULL,
-            rf_global = if (method == "rf") rf_global else NULL
+            rf_global = if (method == "rf") rf_global else NULL,
+            robust = if (method == "mahalanobis") robust else NULL
         )
     )
     if (isTRUE(return_matches)) out$matches <- matches
