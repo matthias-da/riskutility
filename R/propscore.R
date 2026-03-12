@@ -382,6 +382,9 @@ propscore.default <- function(X, Y,
     }
 
     oob_error <- rf_res$oob_error
+    if (oob_error > 0.45) {
+      message("OOB error > 0.45: forest has little discriminative power.")
+    }
 
     # Build result — ranger bypasses KDE and returns directly
     p <- data.frame(

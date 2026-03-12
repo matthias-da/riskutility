@@ -430,6 +430,11 @@ recordLinkage.default <- function(X,
             message("method = 'rf': weights ignored. ",
                     "RF uses data-driven variable importance instead.")
         }
+        if (!missing(strategy) && strategy != "nearest") {
+            message("method = 'rf': strategy '", strategy,
+                    "' uses proximity-based scores [0,1], ",
+                    "not distance-based thresholds.")
+        }
     }
 
     stopifnot(is.data.frame(X), is.data.frame(x_anon))
@@ -861,6 +866,8 @@ recordLinkage.default <- function(X,
     } else if (method == "rf") {
 
     # RF method: proximity-based record linkage ----
+    rf_var_importance <- NULL
+
     .rf_process_block <- function(q_idx, s_idx, cross_prox) {
         for (r in seq_along(q_idx)) {
             qi <- q_idx[r]
@@ -1046,8 +1053,7 @@ recordLinkage.default <- function(X,
             var_importance[v] <- 1 - mean(diag(tm))
         }
     } else if (method == "rf") {
-        var_importance <- if (exists("rf_var_importance") &&
-                             !is.null(rf_var_importance)) {
+        var_importance <- if (!is.null(rf_var_importance)) {
             rf_var_importance
         } else {
             setNames(rep(NA_real_, length(key)), key)
