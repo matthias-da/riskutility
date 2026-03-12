@@ -141,9 +141,9 @@ domias <- function(X, ...) {
 #' @export
 domias.synth_pair <- function(X, ...) {
   if (!is.null(X$source) && X$source == "sdcMicro") {
-    stop("domias is designed for synthetic data evaluation (generative model ",
-         "overfitting detection) and is not applicable to traditionally anonymized ",
-         "data (sdcMicro objects). Use dcr, nndr, or ims instead.",
+    stop("domias is designed for synthetic data evaluation and is not applicable to ",
+         "traditionally anonymized data (sdcMicro objects). ",
+         "Use dcr, nndr, or ims for distance-based privacy evaluation instead.",
          call. = FALSE)
   }
   domias.default(
@@ -470,7 +470,6 @@ plot.domias <- function(x, y = NULL, ..., which = 1) {
   if (show[1]) {
     # Overlaid histograms of density ratios
     all_ratios <- c(x$density_ratios_train, x$density_ratios_holdout)
-    max_ratio <- quantile(all_ratios, 0.95, na.rm = TRUE)
     breaks <- seq(0, max(all_ratios, na.rm = TRUE) * 1.1, length.out = 31)
 
     hist(x$density_ratios_train, breaks = breaks,

@@ -19,6 +19,7 @@
 #' for each level.
 #' @importFrom stats princomp
 #' @importFrom stats runif
+#' @family comparison
 #' @export
 #' @examples
 #' # Simple example with multivariate numeric data

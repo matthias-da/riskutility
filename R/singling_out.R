@@ -235,7 +235,6 @@ singling_out.default <- function(X, Y,
   }
 
   # Create or validate holdout
-  has_holdout <- TRUE
   if (is.null(holdout)) {
     if (!is.null(seed)) set.seed(seed)
     n_holdout <- max(1, floor(nrow(X) * holdout_fraction))
@@ -305,44 +304,22 @@ singling_out.default <- function(X, Y,
   n_success <- sum(match_counts == 1L)
   n_control_success <- sum(match_counts_control == 1L)
 
-  # Compute risk scores with Wilson CIs
-  attack_wilson <- .wilson_score(n_success, n_attacks, confidence_level)
-  control_wilson <- .wilson_score(n_control_success, n_attacks, confidence_level)
-
-  risk_attack <- attack_wilson$estimate
-  risk_control <- control_wilson$estimate
-
-  # Residual risk: (attack - control) / (1 - control), bounded [0, 1]
-  if (risk_control < 1) {
-    risk <- max(0, (risk_attack - risk_control) / (1 - risk_control))
-  } else {
-    risk <- 0
-  }
-
-  # Propagate CI for residual risk using delta method approximation
-  risk_ci_lower <- max(0, (attack_wilson$ci_lower - control_wilson$ci_upper) /
-                          max(1e-10, 1 - control_wilson$ci_upper))
-  risk_ci_upper <- min(1, (attack_wilson$ci_upper - control_wilson$ci_lower) /
-                          max(1e-10, 1 - control_wilson$ci_lower))
-  risk_ci <- c(lower = risk_ci_lower, upper = risk_ci_upper)
-
-  privacy_pass <- risk <= 0.1
+  # Compute residual risk with Wilson CIs
+  rr <- .residual_risk(n_success, n_control_success, n_attacks, confidence_level)
 
   results <- list(
-    risk = risk,
-    risk_ci = risk_ci,
-    risk_attack = risk_attack,
-    risk_attack_ci = c(lower = attack_wilson$ci_lower,
-                       upper = attack_wilson$ci_upper),
-    risk_control = risk_control,
-    risk_control_ci = c(lower = control_wilson$ci_lower,
-                        upper = control_wilson$ci_upper),
+    risk = rr$risk,
+    risk_ci = rr$risk_ci,
+    risk_attack = rr$risk_attack,
+    risk_attack_ci = rr$risk_attack_ci,
+    risk_control = rr$risk_control,
+    risk_control_ci = rr$risk_control_ci,
     n_attacks = n_attacks,
     n_success = n_success,
     n_control_success = n_control_success,
     match_counts = match_counts,
     match_counts_control = match_counts_control,
-    privacy_pass = privacy_pass,
+    privacy_pass = rr$privacy_pass,
     n_original = n_train,
     n_synthetic = n_synthetic,
     n_holdout = n_holdout_final,
@@ -402,32 +379,7 @@ singling_out.default <- function(X, Y,
   sum(matches, na.rm = TRUE)
 }
 
-#' Wilson score confidence interval
-#'
-#' @param n_success integer number of successes
-#' @param n_total integer number of trials
-#' @param confidence_level numeric confidence level
-#' @return list with estimate, ci_lower, ci_upper
-#' @keywords internal
-.wilson_score <- function(n_success, n_total, confidence_level = 0.95) {
-  if (n_total == 0) {
-    return(list(estimate = 0, ci_lower = 0, ci_upper = 0))
-  }
-
-  p_hat <- n_success / n_total
-  z <- qnorm(1 - (1 - confidence_level) / 2)
-  z2 <- z^2
-
-  denom <- 1 + z2 / n_total
-  center <- (p_hat + z2 / (2 * n_total)) / denom
-  margin <- z * sqrt((p_hat * (1 - p_hat) + z2 / (4 * n_total)) / n_total) / denom
-
-  list(
-    estimate = p_hat,
-    ci_lower = max(0, center - margin),
-    ci_upper = min(1, center + margin)
-  )
-}
+# .wilson_score is defined in R/utils_internal.R
 
 # --- S3 methods ---
 

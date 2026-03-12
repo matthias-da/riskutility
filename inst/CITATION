@@ -3,14 +3,17 @@ citHeader("To cite riskutility in publications use:")
 bibentry(
   bibtype  = "Manual",
   title    = "riskutility: Disclosure Risk and Data Utility Metrics for Synthetic and Anonymized Data",
-  author   = person("Matthias", "Templ",
-                    email = "matthias.templ@gmail.com",
-                    comment = c(ORCID = "0000-0002-8638-5276")),
+  author   = c(
+    person("Matthias", "Templ",
+           email = "matthias.templ@gmail.com",
+           comment = c(ORCID = "0000-0002-8638-5276")),
+    person("Oscar", "Thees")
+  ),
   year     = "2024",
   note     = "R package version 0.1.0",
   url      = "https://github.com/matthias-da/riskutility",
   textVersion = paste(
-    "Templ, M. (2024).",
+    "Templ, M. & Thees, O. (2024).",
     "riskutility: Disclosure Risk and Data Utility Metrics for Synthetic and Anonymized Data.",
     "R package version 0.1.0.",
     "https://github.com/matthias-da/riskutility"
@@ -20,12 +23,12 @@ bibentry(
 bibentry(
   bibtype  = "Article",
   title    = "Measuring disclosure risk and data utility for privacy-preserving data synthesis",
-  author   = person("Matthias", "Templ"),
+  author   = c(person("Matthias", "Templ"), person("Oscar", "Thees")),
   journal  = "Journal of Statistical Software",
   year     = "2025",
   note     = "Submitted",
   textVersion = paste(
-    "Templ, M. (2025).",
+    "Templ, M. & Thees, O. (2025).",
     "Measuring disclosure risk and data utility for privacy-preserving data synthesis.",
     "Journal of Statistical Software. (Submitted)"
   )

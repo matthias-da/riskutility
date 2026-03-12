@@ -19,6 +19,7 @@
 #' @param X a numeric vector or a matrix or data frame with numeric entries.
 #' @param Y a numeric vector or a matrix or data frame with numeric entries.
 #' @param stepsize number of interval points where the density is evaluated.
+#' @family comparison
 #' @export
 #' @importFrom MASS kde2d
 #' @author Matthias Templ
@@ -103,7 +104,7 @@ densitydiff_kl_num <- function(X, Y, stepsize = 1000) {
   if(ncol(X) == 2){
     dX <- MASS::kde2d(x = X[, 1], y = X[, 2])
     dY <- MASS::kde2d(x = Y[, 1], y = Y[, 2])
-    return(dX$z * log(dX$z / dY$z))
+    return(sum(dX$z * log(dX$z / dY$z), na.rm = TRUE))
   }
 
   # tri-variate

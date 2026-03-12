@@ -192,12 +192,7 @@ hitting_rate.default <- function(X, Y,
   n_original <- nrow(X)
   n_synthetic <- nrow(Y)
 
-  # Min-max normalization helper (used by euclidean method)
-  normalize <- function(x) {
-    rng <- range(x, na.rm = TRUE)
-    if (rng[2] - rng[1] == 0) return(rep(0, length(x)))
-    (x - rng[1]) / (rng[2] - rng[1])
-  }
+  # .normalize_minmax is defined in R/utils_internal.R
 
   # Compute minimum distance from each synthetic record to closest original
   if (method == "gower") {
@@ -213,7 +208,7 @@ hitting_rate.default <- function(X, Y,
 
     # Combine all data for consistent normalization
     all_data <- rbind(X, Y)
-    all_data_norm <- as.data.frame(lapply(all_data, normalize))
+    all_data_norm <- as.data.frame(lapply(all_data, .normalize_minmax))
 
     X_norm <- all_data_norm[seq_len(n_original), , drop = FALSE]
     Y_norm <- all_data_norm[(n_original + 1):nrow(all_data_norm), , drop = FALSE]

@@ -149,7 +149,7 @@ test_that("weap stops when all cases have NA", {
 test_that("weap errors on non-data.frame input", {
   expect_error(
     weap(matrix(1:10, ncol = 2), key_vars = "V1", target_var = "V2"),
-    "Y must be a data frame"
+    "X must be a data frame"
   )
 })
 
@@ -158,12 +158,12 @@ test_that("weap errors when variables are missing", {
 
   expect_error(
     weap(Y, key_vars = c("a", "nonexistent"), target_var = "b"),
-    "Variables missing in Y"
+    "Variables missing in X"
   )
 
   expect_error(
     weap(Y, key_vars = "a", target_var = "nonexistent"),
-    "Variables missing in Y"
+    "Variables missing in X"
   )
 })
 

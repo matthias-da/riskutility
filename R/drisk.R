@@ -135,6 +135,7 @@ drisk <- function(X, ...) {
 #' @rdname drisk
 #' @export
 drisk.synth_pair <- function(X, ...) {
+  # Uses num_vars (not vars) because dRisk only works with numeric variables
   drisk.default(
     X = X$original,
     Y = X$synthetic,

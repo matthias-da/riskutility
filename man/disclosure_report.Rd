@@ -70,7 +70,7 @@ An object of class "disclosure_report" containing:
 \item summary: data frame with key metrics and pass/fail status
 \item overall_risk: character, overall risk assessment ("LOW", "MEDIUM", "HIGH")
 \item n_pass: number of metrics that passed
-\item n_fail: number of metrics that failed/warned
+\item n_warn: number of metrics that warned/failed
 \item parameters: list of input parameters used
 }
 }

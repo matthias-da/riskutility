@@ -199,7 +199,6 @@ nnaa.default <- function(X, Y,
   if (nrow(Y) == 0) stop("No complete cases in Y after removing NAs.")
 
   # Create or validate holdout
-  has_holdout <- TRUE
   if (is.null(holdout)) {
     if (!is.null(seed)) set.seed(seed)
     n_holdout <- max(1, floor(nrow(X) * holdout_fraction))
@@ -220,12 +219,7 @@ nnaa.default <- function(X, Y,
   n_train <- nrow(train)
   n_holdout <- nrow(holdout)
 
-  # Min-max normalization helper (for euclidean method)
-  normalize <- function(x) {
-    rng <- range(x, na.rm = TRUE)
-    if (rng[2] - rng[1] == 0) return(rep(0, length(x)))
-    (x - rng[1]) / (rng[2] - rng[1])
-  }
+  # .normalize_minmax is defined in R/utils_internal.R
 
   # Helper: get min distance per row from a distance matrix
   row_min <- function(mat) {
@@ -277,28 +271,19 @@ nnaa.default <- function(X, Y,
 
     # Combine all data for consistent normalization
     all_data <- rbind(train, holdout, Y)
-    all_data_norm <- as.data.frame(lapply(all_data, normalize))
+    all_data_norm <- as.data.frame(lapply(all_data, .normalize_minmax))
 
     train_norm <- as.matrix(all_data_norm[seq_len(n_train), , drop = FALSE])
     holdout_norm <- as.matrix(all_data_norm[n_train + seq_len(n_holdout), , drop = FALSE])
     Y_norm <- as.matrix(all_data_norm[(n_train + n_holdout + 1):nrow(all_data_norm), , drop = FALSE])
 
-    # Euclidean distance helper
-    euc_dist <- function(A, B) {
-      # Returns nrow(A) x nrow(B) distance matrix
-      A2 <- rowSums(A^2)
-      B2 <- rowSums(B^2)
-      cross <- tcrossprod(A, B)
-      d2 <- outer(A2, B2, "+") - 2 * cross
-      d2[d2 < 0] <- 0  # numerical protection
-      sqrt(d2)
-    }
+    # .euclidean_dist is defined in R/utils_internal.R
 
     # Training AA distances
-    dist_TS <- euc_dist(train_norm, Y_norm)
-    dist_TT <- euc_dist(train_norm, train_norm)
+    dist_TS <- .euclidean_dist(train_norm, Y_norm)
+    dist_TT <- .euclidean_dist(train_norm, train_norm)
     dist_ST <- t(dist_TS)
-    dist_SS <- euc_dist(Y_norm, Y_norm)
+    dist_SS <- .euclidean_dist(Y_norm, Y_norm)
 
     d_TS <- row_min(dist_TS)
     d_TT <- row_min_self_excluded(dist_TT)
@@ -306,8 +291,8 @@ nnaa.default <- function(X, Y,
     d_SS <- row_min_self_excluded(dist_SS)
 
     # Holdout AA distances
-    dist_HS <- euc_dist(holdout_norm, Y_norm)
-    dist_HH <- euc_dist(holdout_norm, holdout_norm)
+    dist_HS <- .euclidean_dist(holdout_norm, Y_norm)
+    dist_HH <- .euclidean_dist(holdout_norm, holdout_norm)
     dist_SH <- t(dist_HS)
 
     d_HS <- row_min(dist_HS)

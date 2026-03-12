@@ -5,10 +5,12 @@
 #' @param X data frame
 #' @param Y data frame
 #' @param ... additional arguments passed to methods
-#' @return A single numeric value: the average Gower distance between the
-#'   rows of \code{X} and the corresponding rows of \code{Y}, computed as
-#'   the sum of absolute pairwise Gower distances divided by the number of
-#'   observations in \code{X}.
+#' @return An object of class "gower" containing:
+#' \itemize{
+#'   \item gower_distance: the average Gower distance
+#'   \item n: number of observations
+#'   \item n_vars: number of variables
+#' }
 #'
 #' @references
 #' Gower, J.C. (1971). A General Coefficient of Similarity and Some of Its
@@ -49,5 +51,54 @@ gower.synth_pair <- function(X, ...) {
 #' @export
 gower.default <- function(X, Y, ...){
   gd <- VIM::gowerD(X, Y)
-  return(sum(abs(gd)) / nrow(X))
+  avg_distance <- sum(abs(gd)) / nrow(X)
+
+  result <- list(
+    gower_distance = avg_distance,
+    n = nrow(X),
+    n_vars = ncol(X)
+  )
+  class(result) <- "gower"
+  return(result)
+}
+
+#' Print method for gower objects
+#'
+#' @param x an object of class "gower"
+#' @param ... additional arguments (ignored)
+#' @export
+print.gower <- function(x, ...) {
+  cat("Average Gower Distance:", round(x$gower_distance, 6), "\n")
+  cat("  Observations:", x$n, "| Variables:", x$n_vars, "\n")
+  invisible(x)
+}
+
+#' Summary method for gower objects
+#'
+#' @param object an object of class "gower"
+#' @param ... additional arguments (ignored)
+#' @return An object of class "summary.gower"
+#' @export
+summary.gower <- function(object, ...) {
+  summ <- list(
+    gower_distance = object$gower_distance,
+    n = object$n,
+    n_vars = object$n_vars
+  )
+  class(summ) <- "summary.gower"
+  summ
+}
+
+#' Print method for summary.gower objects
+#'
+#' @param x an object of class "summary.gower"
+#' @param ... additional arguments (ignored)
+#' @export
+print.summary.gower <- function(x, ...) {
+  cat("Summary: Average Gower Distance\n")
+  cat("================================\n")
+  cat("Distance:", round(x$gower_distance, 6), "\n")
+  cat("Observations:", x$n, "\n")
+  cat("Variables:", x$n_vars, "\n")
+  invisible(x)
 }

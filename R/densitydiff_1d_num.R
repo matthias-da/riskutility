@@ -13,6 +13,7 @@
 #' to which strata. If not NULL, density estimation is applied on each strata.
 #' It must have the same levels than strata_x and there must be observed values
 #' for each level.
+#' @family comparison
 #' @export
 #' @importFrom stats density
 #' @importFrom stats approx

@@ -87,14 +87,18 @@ suda <- function(X, ...) {
 }
 
 #' @rdname suda
+#' @param data character, which dataset to assess: "synthetic" (default) or "original".
+#'   Only used by the synth_pair method.
 #' @export
-suda.synth_pair <- function(X, max_msu = NULL, ...) {
+suda.synth_pair <- function(X, max_msu = NULL, data = c("synthetic", "original"), ...) {
   if (is.null(X$key_vars)) {
     stop("synth_pair must have 'key_vars' set for suda()")
   }
+  data <- match.arg(data)
+  dataset <- if (data == "synthetic") X$synthetic else X$original
 
   suda.default(
-    X = X$synthetic,
+    X = dataset,
     key_vars = X$key_vars,
     max_msu = max_msu,
     ...

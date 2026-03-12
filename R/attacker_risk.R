@@ -121,14 +121,18 @@ attacker_risk <- function(X, ...) {
 }
 
 #' @rdname attacker_risk
+#' @param data character, which dataset to assess: "synthetic" (default) or "original".
+#'   Only used by the synth_pair method.
 #' @export
-attacker_risk.synth_pair <- function(X, ...) {
+attacker_risk.synth_pair <- function(X, data = c("synthetic", "original"), ...) {
   if (is.null(X$key_vars)) {
     stop("synth_pair must have 'key_vars' set for attacker_risk()")
   }
+  data <- match.arg(data)
+  dataset <- if (data == "synthetic") X$synthetic else X$original
 
   attacker_risk.default(
-    X = X$synthetic,
+    X = dataset,
     key_vars = X$key_vars,
     ...
   )

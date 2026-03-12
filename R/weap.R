@@ -5,7 +5,7 @@
 #' measuring the conditional probability of the target value given the key
 #' variables within the synthetic dataset.
 #'
-#' @param Y data frame of synthetic data
+#' @param X data frame of synthetic data
 #' @param key_vars character vector of quasi-identifier variable names
 #' @param target_var character, name of the sensitive target variable
 #' @param na.rm logical, remove records with NA in key or target (default: TRUE)
@@ -57,7 +57,7 @@
 #' @examples
 #' # Create synthetic data
 #' set.seed(123)
-#' Y <- data.frame(
+#' X <- data.frame(
 #'   age = sample(c("young", "middle", "old"), 200, replace = TRUE),
 #'   gender = sample(c("M", "F"), 200, replace = TRUE),
 #'   region = sample(c("N", "S"), 200, replace = TRUE),
@@ -65,7 +65,7 @@
 #' )
 #'
 #' # Compute WEAP
-#' result <- weap(Y,
+#' result <- weap(X,
 #'                key_vars = c("age", "gender", "region"),
 #'                target_var = "income")
 #' print(result)
@@ -75,76 +75,76 @@
 #' # Identify disclosive records
 #' disclosive_idx <- which(result$weap_scores == 1)
 #' if (length(disclosive_idx) > 0) {
-#'   head(Y[disclosive_idx, ])
+#'   head(X[disclosive_idx, ])
 #' }
-weap <- function(Y, ...) {
+weap <- function(X, ...) {
   UseMethod("weap")
 }
 
 #' @rdname weap
 #' @export
-weap.synth_pair <- function(Y, ...) {
-  if (is.null(Y$key_vars)) {
+weap.synth_pair <- function(X, ...) {
+  if (is.null(X$key_vars)) {
     stop("synth_pair must have 'key_vars' set for weap()")
   }
-  if (is.null(Y$target_var)) {
+  if (is.null(X$target_var)) {
     stop("synth_pair must have 'target_var' set for weap()")
   }
 
   weap.default(
-    Y = Y$synthetic,
-    key_vars = Y$key_vars,
-    target_var = Y$target_var,
+    X = X$synthetic,
+    key_vars = X$key_vars,
+    target_var = X$target_var,
     ...
   )
 }
 
 #' @rdname weap
 #' @export
-weap.default <- function(Y,
+weap.default <- function(X,
                          key_vars,
                          target_var,
                          na.rm = TRUE,
                          ...) {
 
   # Input validation
-  if (!is.data.frame(Y)) stop("Y must be a data frame.")
+  if (!is.data.frame(X)) stop("X must be a data frame.")
 
   # Check variables exist
   all_vars <- c(key_vars, target_var)
-  missing_Y <- setdiff(all_vars, names(Y))
-  if (length(missing_Y) > 0) {
-    stop(paste("Variables missing in Y:", paste(missing_Y, collapse = ", ")))
+  missing_vars <- setdiff(all_vars, names(X))
+  if (length(missing_vars) > 0) {
+    stop(paste("Variables missing in X:", paste(missing_vars, collapse = ", ")))
   }
 
   # Handle missing values
   if (na.rm) {
-    complete_Y <- complete.cases(Y[, all_vars, drop = FALSE])
-    Y <- Y[complete_Y, , drop = FALSE]
+    complete_X <- complete.cases(X[, all_vars, drop = FALSE])
+    X <- X[complete_X, , drop = FALSE]
   }
 
-  if (nrow(Y) == 0) stop("No complete cases in Y after removing NAs.")
+  if (nrow(X) == 0) stop("No complete cases in X after removing NAs.")
 
-  n <- nrow(Y)
-  target_Y <- Y[[target_var]]
+  n <- nrow(X)
+  target_X <- X[[target_var]]
 
   # Create key signature for each record
   make_key <- function(df, vars) {
     apply(df[, vars, drop = FALSE], 1, paste, collapse = "|")
   }
-  keys_Y <- make_key(Y, key_vars)
+  keys_X <- make_key(X, key_vars)
 
   # Create combined key-target signature
-  key_target <- paste(keys_Y, target_Y, sep = "||")
+  key_target <- paste(keys_X, target_X, sep = "||")
 
   # Count occurrences of each key and each key-target combination
-  key_counts <- table(keys_Y)
+  key_counts <- table(keys_X)
   key_target_counts <- table(key_target)
 
   # Compute WEAP for each record
   weap_scores <- numeric(n)
   for (i in seq_len(n)) {
-    key_i <- keys_Y[i]
+    key_i <- keys_X[i]
     key_target_i <- key_target[i]
     weap_scores[i] <- as.numeric(key_target_counts[key_target_i]) /
                       as.numeric(key_counts[key_i])
@@ -159,7 +159,7 @@ weap.default <- function(Y,
 
   # For each equivalence class, count unique target values
   eq_classes$n_unique_targets <- sapply(eq_classes$key, function(k) {
-    length(unique(target_Y[keys_Y == k]))
+    length(unique(target_X[keys_X == k]))
   })
   eq_classes$is_disclosive <- eq_classes$n_unique_targets == 1
 

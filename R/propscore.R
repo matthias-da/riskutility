@@ -610,7 +610,7 @@ print.summary.propscore <- function(x, ...) {
 #' 3 for proximity structure (ranger only), 4 for variable importance
 #' (ranger only)
 #' @export
-plot.propscore <- function(x, y, ..., which = 1){
+plot.propscore <- function(x, y = NULL, ..., which = 1){
 
   is_list_of_lists <- function(obj) {
     # Check if obj is a list

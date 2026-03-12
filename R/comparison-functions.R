@@ -29,6 +29,13 @@
 #' \code{\link{kanonymity}}, \code{\link{ldiversity}},
 #' \code{\link{individual_risk}}, and \code{\link{suda}}.
 #'
+#' \strong{Extended privacy risk:} Additional risk models including
+#' \code{\link{tcloseness}}, \code{\link{nnaa}}, \code{\link{singling_out}},
+#' \code{\link{linkability}}, \code{\link{population_uniqueness}},
+#' \code{\link{epsilon_identifiability}}, \code{\link{delta_presence}},
+#' \code{\link{hitting_rate}}, \code{\link{attacker_risk}},
+#' \code{\link{drisk}}, \code{\link{domias}}, and \code{\link{mia_classifier}}.
+#'
 #' \strong{Information-theoretic measures:} Entropy and divergence measures
 #' (\code{\link{KLDiv}}, \code{\link{JSDiv}}, \code{\link{RenyiEntropy}},
 #' \code{\link{mutualInformation}}, \code{\link{information_surprisal}},
@@ -62,8 +69,8 @@
 #' @section Summary Statistics:
 #' \describe{
 #'   \item{\code{compare_means_frequencies()}}{Compare means, medians, robust statistics, skewness, kurtosis for numeric data, and frequencies for categorical data.}
-#'   \item{\code{compare_correlation()}}{Compare correlations: Pearson, Spearman, robust correlations for numeric, categorical, and mixed data types.}
-#'   \item{\code{multivariate_summary()}}{Calculate joint summary statistics for numeric and categorical data.}
+#'   \item{\code{compare_correlation_matrices()}}{Compare correlations: Pearson, Spearman, robust correlations for numeric, categorical, and mixed data types.}
+#'   \item{\code{compare_multivariate_summary_statistics()}}{Calculate joint summary statistics for numeric and categorical data.}
 #' }
 #'
 #' @section Dimensionality Reduction:
