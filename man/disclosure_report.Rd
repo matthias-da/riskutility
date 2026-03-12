@@ -78,9 +78,9 @@ An object of class "disclosure_report" containing:
 Computes multiple disclosure risk metrics and produces a comprehensive report
 for data privacy assessment. Combines attribution-based measures
 (DCAP, TCAP, WEAP, DiSCO, RAPID), distance-based measures (DCR, NNDR, IMS,
-dRisk, hitting rate), privacy models (k-anonymity, l-diversity, t-closeness),
-and membership inference attacks (singling out, linkability, NNAA, DOMIAS).
-Works for both synthetic and traditionally anonymized data.
+dRisk, hitting rate, RF Privacy), privacy models (k-anonymity, l-diversity,
+t-closeness), and membership inference attacks (singling out, linkability,
+NNAA, DOMIAS). Works for both synthetic and traditionally anonymized data.
 }
 \details{
 This function provides a one-stop assessment of disclosure risk
@@ -102,6 +102,7 @@ by computing multiple complementary metrics across four families:
 \item ims: Identical match share (exact copies)
 \item drisk: Disclosure risk for continuous variables
 \item hitting_rate: Fraction of records within threshold distance
+\item rf_privacy: Random forest proximity-based memorization test (requires ranger)
 }
 
 \strong{Privacy Models} (single-dataset, require key_vars):
@@ -162,6 +163,7 @@ plot(report)
 \code{\link{dcap}}, \code{\link{tcap}}, \code{\link{weap}},
 \code{\link{disco}}, \code{\link{rapid}}, \code{\link{dcr}}, \code{\link{nndr}},
 \code{\link{ims}}, \code{\link{drisk}}, \code{\link{hitting_rate}},
+\code{\link{rf_privacy}},
 \code{\link{kanonymity}}, \code{\link{ldiversity}}, \code{\link{tcloseness}},
 \code{\link{individual_risk}}, \code{\link{singling_out}},
 \code{\link{linkability}}, \code{\link{nnaa}}, \code{\link{domias}}
@@ -173,15 +175,19 @@ Other privacy-models:
 \code{\link{drisk}()},
 \code{\link{epsilon_identifiability}()},
 \code{\link{individual_risk}()},
+\code{\link{inspect_record}()},
 \code{\link{kanonymity}()},
 \code{\link{ldiversity}()},
 \code{\link{linkability}()},
+\code{\link{merge_per_record}()},
 \code{\link{mia_classifier}()},
 \code{\link{population_uniqueness}()},
 \code{\link{recordLinkage}()},
+\code{\link{risk_by_group}()},
 \code{\link{singling_out}()},
 \code{\link{suda}()},
-\code{\link{tcloseness}()}
+\code{\link{tcloseness}()},
+\code{\link{top_at_risk}()}
 }
 \author{
 Matthias Templ

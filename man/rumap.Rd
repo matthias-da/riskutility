@@ -37,7 +37,8 @@ rumap(X, ...)
 If a named list, each element is treated as a different synthetic data generator (SDG).}
 
 \item{risk_measures}{Character vector of risk measures to compute. Options:
-"dcap", "tcap", "disco", "ims", "repu", "dcr", "nndr", "rapid". Default includes all.}
+"dcap", "tcap", "disco", "ims", "repu", "dcr", "nndr", "rapid", "rf_privacy".
+Default includes all except distance-based measures.}
 
 \item{utility_measures}{Character vector of utility measures to compute. Options:
 "pmse", "wasserstein", "hellinger", "energy", "ci_proximity". Default includes all.}
@@ -101,6 +102,7 @@ by computing multiple risk and utility measures simultaneously. It supports:
 \item repu: Replicated Uniques
 \item dcr: Distance to Closest Record ratio
 \item nndr: Nearest Neighbor Distance Ratio
+\item rf_privacy: Random forest proximity-based memorization test (requires ranger)
 }
 
 \strong{Utility Measures:}

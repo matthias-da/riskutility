@@ -8,7 +8,8 @@
 #' @param synthetic A data.frame or named list of data.frames containing synthetic dataset(s).
 #'   If a named list, each element is treated as a different synthetic data generator (SDG).
 #' @param risk_measures Character vector of risk measures to compute. Options:
-#'   "dcap", "tcap", "disco", "ims", "repu", "dcr", "nndr", "rapid". Default includes all.
+#'   "dcap", "tcap", "disco", "ims", "repu", "dcr", "nndr", "rapid", "rf_privacy".
+#'   Default includes all except distance-based measures.
 #' @param utility_measures Character vector of utility measures to compute. Options:
 #'   "pmse", "wasserstein", "hellinger", "energy", "ci_proximity". Default includes all.
 #' @param key_vars Character vector of quasi-identifier variables (for attribution-based risk).
@@ -56,6 +57,7 @@
 #'   \item repu: Replicated Uniques
 #'   \item dcr: Distance to Closest Record ratio
 #'   \item nndr: Nearest Neighbor Distance Ratio
+#'   \item rf_privacy: Random forest proximity-based memorization test (requires ranger)
 #' }
 #'
 #' \strong{Utility Measures:}
@@ -199,7 +201,7 @@ rumap.default <- function(X,
   n_sdgs <- length(synthetic)
 
   # Validate risk measures
-  valid_risk <- c("dcap", "tcap", "disco", "rapid", "ims", "repu", "dcr", "nndr")
+  valid_risk <- c("dcap", "tcap", "disco", "rapid", "ims", "repu", "dcr", "nndr", "rf_privacy")
   invalid_risk <- setdiff(risk_measures, valid_risk)
   if (length(invalid_risk) > 0) {
     warning(paste("Unknown risk measures ignored:", paste(invalid_risk, collapse = ", ")))
@@ -247,7 +249,7 @@ rumap.default <- function(X,
   }
 
   # Create holdout if needed for distance-based measures
-  dist_risk <- intersect(risk_measures, c("dcr", "nndr"))
+  dist_risk <- intersect(risk_measures, c("dcr", "nndr", "rf_privacy"))
   if (length(dist_risk) > 0 && is.null(holdout)) {
     n_holdout <- floor(nrow(original) * holdout_fraction)
     holdout_idx <- sample(nrow(original), n_holdout)
@@ -356,6 +358,22 @@ rumap.default <- function(X,
         warning(paste("nndr failed for", sdg_name, ":", e$message))
         risk_results[i, "nndr"] <<- NA
       })
+    }
+
+    # RF Privacy
+    if ("rf_privacy" %in% risk_measures) {
+      if (requireNamespace("ranger", quietly = TRUE)) {
+        tryCatch({
+          res <- rf_privacy(train, Y, holdout = holdout, vars = vars,
+                            na.rm = na.rm, null_test = FALSE)
+          risk_results[i, "rf_privacy"] <- res$max_prox_share
+        }, error = function(e) {
+          warning(paste("rf_privacy failed for", sdg_name, ":", e$message))
+          risk_results[i, "rf_privacy"] <<- NA
+        })
+      } else {
+        risk_results[i, "rf_privacy"] <- NA
+      }
     }
 
     # ---- UTILITY MEASURES ----

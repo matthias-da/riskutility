@@ -3,9 +3,9 @@
 #' Computes multiple disclosure risk metrics and produces a comprehensive report
 #' for data privacy assessment. Combines attribution-based measures
 #' (DCAP, TCAP, WEAP, DiSCO, RAPID), distance-based measures (DCR, NNDR, IMS,
-#' dRisk, hitting rate), privacy models (k-anonymity, l-diversity, t-closeness),
-#' and membership inference attacks (singling out, linkability, NNAA, DOMIAS).
-#' Works for both synthetic and traditionally anonymized data.
+#' dRisk, hitting rate, RF Privacy), privacy models (k-anonymity, l-diversity,
+#' t-closeness), and membership inference attacks (singling out, linkability,
+#' NNAA, DOMIAS). Works for both synthetic and traditionally anonymized data.
 #'
 #' @param X data frame of original data
 #' @param Y data frame of synthetic/anonymized data
@@ -59,6 +59,7 @@
 #'   \item ims: Identical match share (exact copies)
 #'   \item drisk: Disclosure risk for continuous variables
 #'   \item hitting_rate: Fraction of records within threshold distance
+#'   \item rf_privacy: Random forest proximity-based memorization test (requires ranger)
 #' }
 #'
 #' \strong{Privacy Models} (single-dataset, require key_vars):
@@ -87,6 +88,7 @@
 #' @seealso \code{\link{dcap}}, \code{\link{tcap}}, \code{\link{weap}},
 #'   \code{\link{disco}}, \code{\link{rapid}}, \code{\link{dcr}}, \code{\link{nndr}},
 #'   \code{\link{ims}}, \code{\link{drisk}}, \code{\link{hitting_rate}},
+#'   \code{\link{rf_privacy}},
 #'   \code{\link{kanonymity}}, \code{\link{ldiversity}}, \code{\link{tcloseness}},
 #'   \code{\link{individual_risk}}, \code{\link{singling_out}},
 #'   \code{\link{linkability}}, \code{\link{nnaa}}, \code{\link{domias}}
@@ -164,7 +166,7 @@ disclosure_report.default <- function(X, Y,
 
   # Determine which metrics to compute
   attribution_metrics <- c("dcap", "tcap", "weap", "disco", "rapid")
-  distance_metrics <- c("dcr", "nndr", "ims", "drisk", "hitting_rate")
+  distance_metrics <- c("dcr", "nndr", "ims", "drisk", "hitting_rate", "rf_privacy")
   privacy_metrics <- c("kanonymity", "ldiversity", "tcloseness", "individual_risk")
   membership_metrics <- c("singling_out", "linkability", "nnaa", "domias")
   all_metrics <- c(attribution_metrics, distance_metrics,
@@ -233,7 +235,7 @@ disclosure_report.default <- function(X, Y,
   if (!is.null(seed)) set.seed(seed)
 
   # Create holdout if needed for distance or membership metrics
-  needs_holdout <- c("dcr", "nndr", "singling_out", "linkability", "nnaa", "domias")
+  needs_holdout <- c("dcr", "nndr", "rf_privacy", "singling_out", "linkability", "nnaa", "domias")
   if (any(needs_holdout %in% metrics_to_compute)) {
     if (is.null(holdout)) {
       n_holdout <- max(2, floor(nrow(X) * holdout_fraction))
@@ -501,6 +503,38 @@ disclosure_report.default <- function(X, Y,
         status = "ERROR", stringsAsFactors = FALSE
       )
     })
+  }
+
+  if ("rf_privacy" %in% metrics_to_compute) {
+    if (verbose) message("Computing RF Privacy...")
+    if (requireNamespace("ranger", quietly = TRUE)) {
+      tryCatch({
+        results$rf_privacy <- rf_privacy(train_data, Y,
+                                          holdout = holdout_data,
+                                          vars = distance_vars,
+                                          na.rm = na.rm)
+        summary_rows$rf_privacy <- data.frame(
+          metric = "RF Privacy",
+          value = round(results$rf_privacy$max_prox_share, 4),
+          reference = paste0("ratio: ", round(results$rf_privacy$max_prox_ratio, 2)),
+          ratio = round(results$rf_privacy$max_prox_ratio, 2),
+          status = ifelse(results$rf_privacy$privacy_pass, "PASS", "WARNING"),
+          stringsAsFactors = FALSE
+        )
+      }, error = function(e) {
+        if (verbose) message("  RF Privacy failed: ", e$message)
+        summary_rows$rf_privacy <<- data.frame(
+          metric = "RF Privacy", value = NA, reference = NA, ratio = NA,
+          status = "ERROR", stringsAsFactors = FALSE
+        )
+      })
+    } else {
+      if (verbose) message("  Skipping RF Privacy (ranger not installed)")
+      summary_rows$rf_privacy <- data.frame(
+        metric = "RF Privacy", value = NA, reference = NA, ratio = NA,
+        status = "SKIPPED", stringsAsFactors = FALSE
+      )
+    }
   }
 
   # ============================================
@@ -902,6 +936,14 @@ summary.disclosure_report <- function(object, ...) {
     )
   }
 
+  if (!is.null(object$results$rf_privacy)) {
+    summ$distance_results$rf_privacy <- list(
+      max_prox_share = object$results$rf_privacy$max_prox_share,
+      max_prox_ratio = object$results$rf_privacy$max_prox_ratio,
+      pass = object$results$rf_privacy$privacy_pass
+    )
+  }
+
   if (!is.null(object$results$drisk)) {
     summ$distance_results$drisk <- list(
       interval = object$results$drisk$drisk_interval,
@@ -1022,6 +1064,11 @@ print.summary.disclosure_report <- function(x, ...) {
       cat("  IMS:", sprintf("%.2f%%", x$distance_results$ims$pct),
           ", copies:", x$distance_results$ims$n_identical,
           ifelse(x$distance_results$ims$pass, "(PASS)", "(WARNING)"), "\n")
+    }
+    if (!is.null(x$distance_results$rf_privacy)) {
+      cat("  RF Privacy share:", round(x$distance_results$rf_privacy$max_prox_share, 4),
+          ", ratio:", round(x$distance_results$rf_privacy$max_prox_ratio, 2),
+          ifelse(x$distance_results$rf_privacy$pass, "(PASS)", "(WARNING)"), "\n")
     }
     if (!is.null(x$distance_results$drisk)) {
       cat("  dRisk interval:", round(x$distance_results$drisk$interval, 4),
