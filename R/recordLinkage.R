@@ -97,7 +97,7 @@
 #' @section RF method:
 #' When \code{method = "rf"}, a random forest (ranger) is trained on the
 #' stacked original + anonymized records to learn a supervised similarity.
-#' Terminal-node co-occurrence across trees yields a proximity matrix in [0,1].
+#' Terminal-node co-occurrence across trees yields a proximity matrix in \eqn{[0, 1]}.
 #' Each original record is linked to the anonymized record with highest
 #' proximity.  Per-block RF is used by default; set \code{rf_global = TRUE}
 #' to train a single global forest and restrict proximity lookups within blocks.
@@ -106,7 +106,7 @@
 #' \code{matching = "bijective"} mechanism with \code{maximize = TRUE}.
 #'
 #' Note: for the RF method, \code{risk} is the maximum proximity (similarity
-#' in [0,1]) to any candidate, not a re-identification probability.
+#' in \eqn{[0, 1]}) to any candidate, not a re-identification probability.
 #' The \code{d_min} and \code{d_true} fields store proximity values (higher
 #' = more similar), which is inverted from the distance convention used by
 #' other methods (lower = closer).
@@ -115,7 +115,7 @@
 #' When \code{method = "rbrl"}, rank-based record linkage is used following
 #' Muralidhar & Domingo-Ferrer (2016). Each numeric/ordinal variable is
 #' replaced by its normalized rank (within each dataset independently),
-#' yielding values in [0,1]. Linkage distance is the weighted mean absolute
+#' yielding values in \eqn{[0, 1]}. Linkage distance is the weighted mean absolute
 #' rank difference across variables. Nominal variables use exact matching
 #' (0 if equal, 1 if not), consistent with Gower distance.
 #'
@@ -248,6 +248,12 @@
 #'   proximity computation within blocks. If \code{FALSE} (default), train
 #'   a separate forest per block (with automatic global fallback for blocks
 #'   that are too small).
+#' @param robust logical. For \code{method = "mahalanobis"}: if \code{TRUE}
+#'   (default), use the Minimum Covariance Determinant (MCD) estimator
+#'   via \code{robustbase::covMcd()} for robust covariance estimation,
+#'   with automatic fallback to \code{MASS::cov.rob()} or classical
+#'   \code{cov()} if MCD fails. If \code{FALSE}, use classical covariance.
+#'   Ignored for other methods.
 #' @param ... additional arguments passed to methods.
 #' @author Roman Mueller and Matthias Templ
 #'
@@ -398,7 +404,7 @@ recordLinkage.default <- function(X,
                                   key,
                                   method = c("deterministic", "probabilistic",
                                              "pram", "predictive", "rf",
-                                             "rbrl"),
+                                             "rbrl", "mahalanobis"),
                                   direction = c("forward", "reverse"),
                                   risk_weighting = c("uniform", "softmax",
                                                      "kernel"),
@@ -428,6 +434,7 @@ recordLinkage.default <- function(X,
                                   risk_threshold = 0.1,
                                   n_trees = 500L,
                                   rf_global = FALSE,
+                                  robust = TRUE,
                                   ...) {
 
     method <- match.arg(method)
