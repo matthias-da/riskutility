@@ -14,7 +14,7 @@ recordLinkage(X, ...)
   X,
   x_anon,
   key,
-  method = c("deterministic", "probabilistic", "pram", "predictive", "rf"),
+  method = c("deterministic", "probabilistic", "pram", "predictive", "rf", "rbrl"),
   direction = c("forward", "reverse"),
   risk_weighting = c("uniform", "softmax", "kernel"),
   kappa = NULL,
@@ -54,11 +54,9 @@ recordLinkage(X, ...)
 
 \item{method}{character. Linkage method: \code{"deterministic"} (default),
 \code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
-\code{"predictive"} (propensity-score-based), or \code{"rf"}
-(random forest proximity-based). The RF method trains a supervised
-random forest to distinguish original from anonymized records and
-uses tree co-occurrence (proximity) as a similarity measure for
-record linkage. Requires the \pkg{ranger} package.}
+\code{"predictive"} (propensity-score-based), \code{"rf"}
+(random forest proximity-based; requires \pkg{ranger}), or
+\code{"rbrl"} (rank-based record linkage).}
 
 \item{direction}{character. Direction of the linkage attack:
 \code{"forward"} (default) loops over original records and searches in the
@@ -318,6 +316,23 @@ in \link{0,1}) to any candidate, not a re-identification probability.
 The \code{d_min} and \code{d_true} fields store proximity values (higher
 = more similar), which is inverted from the distance convention used by
 other methods (lower = closer).
+}
+
+\section{RBRL method}{
+
+When \code{method = "rbrl"}, rank-based record linkage is used following
+Muralidhar & Domingo-Ferrer (2016). Each numeric/ordinal variable is
+replaced by its normalized rank (within each dataset independently),
+yielding values in \link{0,1}. Linkage distance is the weighted mean absolute
+rank difference across variables. Nominal variables use exact matching
+(0 if equal, 1 if not), consistent with Gower distance.
+
+RBRL is robust to monotone perturbations (additive noise, rounding,
+top/bottom coding) because rank order is preserved under such
+transformations. This makes it particularly useful for assessing risk
+when the anonymization method preserves variable ordering.
+All \code{strategy}, \code{risk_weighting}, \code{matching},
+and \code{block} parameters work with RBRL.
 }
 
 \section{Softmax risk weighting}{

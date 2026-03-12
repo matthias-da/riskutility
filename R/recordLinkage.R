@@ -111,6 +111,21 @@
 #' = more similar), which is inverted from the distance convention used by
 #' other methods (lower = closer).
 #'
+#' @section RBRL method:
+#' When \code{method = "rbrl"}, rank-based record linkage is used following
+#' Muralidhar & Domingo-Ferrer (2016). Each numeric/ordinal variable is
+#' replaced by its normalized rank (within each dataset independently),
+#' yielding values in [0,1]. Linkage distance is the weighted mean absolute
+#' rank difference across variables. Nominal variables use exact matching
+#' (0 if equal, 1 if not), consistent with Gower distance.
+#'
+#' RBRL is robust to monotone perturbations (additive noise, rounding,
+#' top/bottom coding) because rank order is preserved under such
+#' transformations. This makes it particularly useful for assessing risk
+#' when the anonymization method preserves variable ordering.
+#' All \code{strategy}, \code{risk_weighting}, \code{matching},
+#' and \code{block} parameters work with RBRL.
+#'
 #' @section Softmax risk weighting:
 #' When \code{risk_weighting = "softmax"}, closer candidates receive higher
 #' attribution probability via:
@@ -152,11 +167,9 @@
 #' @param key character. Names of quasi-identifier variables used for linkage.
 #' @param method character. Linkage method: \code{"deterministic"} (default),
 #'   \code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
-#'   \code{"predictive"} (propensity-score-based), or \code{"rf"}
-#'   (random forest proximity-based). The RF method trains a supervised
-#'   random forest to distinguish original from anonymized records and
-#'   uses tree co-occurrence (proximity) as a similarity measure for
-#'   record linkage. Requires the \pkg{ranger} package.
+#'   \code{"predictive"} (propensity-score-based), \code{"rf"}
+#'   (random forest proximity-based; requires \pkg{ranger}), or
+#'   \code{"rbrl"} (rank-based record linkage).
 #' @param direction character. Direction of the linkage attack:
 #'   \code{"forward"} (default) loops over original records and searches in the
 #'   anonymized data, answering "how safe is each original individual?";
@@ -384,7 +397,8 @@ recordLinkage.default <- function(X,
                                   x_anon,
                                   key,
                                   method = c("deterministic", "probabilistic",
-                                             "pram", "predictive", "rf"),
+                                             "pram", "predictive", "rf",
+                                             "rbrl"),
                                   direction = c("forward", "reverse"),
                                   risk_weighting = c("uniform", "softmax",
                                                      "kernel"),
@@ -585,6 +599,31 @@ recordLinkage.default <- function(X,
                 tol_v
             } else NA_real_
         }, numeric(1))
+    }
+
+    # RBRL: rank-transform numeric/ordinal variables ----
+    rbrl_query <- NULL
+    rbrl_search <- NULL
+    rbrl_var_dist_acc <- NULL
+    if (method == "rbrl") {
+        rbrl_query <- query_data[, key, drop = FALSE]
+        rbrl_search <- search_data[, key, drop = FALSE]
+        for (v in key) {
+            if (type[v] %in% c("numeric", "ordinal")) {
+                qv <- rbrl_query[[v]]
+                sv <- rbrl_search[[v]]
+                if (is.factor(qv)) qv <- as.integer(qv)
+                if (is.factor(sv)) sv <- as.integer(sv)
+                rq <- rank(qv, ties.method = "average", na.last = "keep")
+                rs <- rank(sv, ties.method = "average", na.last = "keep")
+                nq <- sum(!is.na(rq))
+                ns <- sum(!is.na(rs))
+                rbrl_query[[v]] <- if (nq > 0) rq / nq else rq
+                rbrl_search[[v]] <- if (ns > 0) rs / ns else rs
+            }
+            # Nominal: leave as-is (exact match in distance computation)
+        }
+        rbrl_var_dist_acc <- setNames(numeric(length(key)), key)
     }
 
     # blocking ----
@@ -810,6 +849,78 @@ recordLinkage.default <- function(X,
             if (!is.null(score_cache))
                 score_cache[[i]] <- list(cand = cand, scores = lr,
                                           maximize = TRUE)
+            next
+        }
+
+        if (method == "rbrl") {
+            # RBRL: weighted mean absolute rank difference
+            di <- numeric(length(cand))
+            for (v in key) {
+                wv <- weights[v]
+                if (type[v] == "nominal") {
+                    di <- di + wv * (rbrl_query[[v]][i] != rbrl_search[[v]][cand])
+                } else {
+                    di <- di + wv * abs(rbrl_query[[v]][i] -
+                                        rbrl_search[[v]][cand])
+                }
+            }
+            di <- di / wsum
+
+            d_min[i] <- min(di)
+            tpos <- true_idx[i]
+            j_in <- match(tpos, cand)
+            if (!is.na(j_in)) {
+                d_true[i] <- di[j_in]
+                d_rank[i] <- as.integer(rank(di, ties.method = "min")[j_in])
+            }
+
+            # Per-variable rank distance accumulation
+            for (v in key) {
+                if (type[v] == "nominal") {
+                    rbrl_var_dist_acc[v] <- rbrl_var_dist_acc[v] +
+                        min(as.numeric(rbrl_query[[v]][i] !=
+                                       rbrl_search[[v]][cand]))
+                } else {
+                    rbrl_var_dist_acc[v] <- rbrl_var_dist_acc[v] +
+                        min(abs(rbrl_query[[v]][i] - rbrl_search[[v]][cand]))
+                }
+            }
+
+            guess <- .choose_guess_set(
+                d = di, cand = cand, strategy = strategy,
+                k = k, threshold = threshold
+            )
+
+            cand_n[i] <- length(guess)
+            if (cand_n[i] == 0L) {
+                risk[i] <- 0
+                true_in_set[i] <- FALSE
+                if (isTRUE(return_matches)) matches[[i]] <- integer(0)
+                next
+            }
+
+            true_in_set[i] <- (true_idx[i] %in% guess)
+
+            if (!true_in_set[i]) {
+                risk[i] <- 0
+            } else if (risk_weighting == "softmax") {
+                guess_local_idx <- match(guess, cand)
+                w <- .softmax_risk(di[guess_local_idx], kappa)
+                true_local <- match(true_idx[i], guess)
+                risk[i] <- w[true_local]
+            } else if (risk_weighting == "kernel") {
+                guess_local_idx <- match(guess, cand)
+                w <- .kernel_risk(di[guess_local_idx], bandwidth, kernel)
+                true_local <- match(true_idx[i], guess)
+                risk[i] <- w[true_local]
+            } else {
+                risk[i] <- 1 / cand_n[i]
+            }
+
+            if (isTRUE(return_matches)) matches[[i]] <- guess
+            if (!is.null(score_cache))
+                score_cache[[i]] <- list(cand = cand, scores = di,
+                                          maximize = FALSE)
             next
         }
 
@@ -1078,6 +1189,9 @@ recordLinkage.default <- function(X,
         } else {
             setNames(rep(NA_real_, length(key)), key)
         }
+    } else if (method == "rbrl") {
+        # Mean per-variable rank distance to best match
+        var_importance <- rbrl_var_dist_acc / n_query
     } else {
         var_importance <- setNames(rep(NA_real_, length(key)), key)
     }
