@@ -144,20 +144,28 @@ test_that("recordLinkage(method = 'mahalanobis') var_importance", {
   expect_true(!is.null(res$var_importance))
   expect_equal(length(res$var_importance), 3)
   expect_true(all(res$var_importance >= 0))
+  # Normalized to proportions (sums to 1)
+  expect_equal(sum(res$var_importance), 1, tolerance = 1e-10)
 })
 
 test_that("recordLinkage(method = 'mahalanobis') risk_weighting works", {
   set.seed(1)
   X <- data.frame(a = rnorm(20), b = rnorm(20))
   Y <- data.frame(a = rnorm(20), b = rnorm(20))
+  # Use topk strategy so candidate sets have multiple records,
+  # allowing softmax to differ from uniform
   res_unif <- recordLinkage(X, Y, key = c("a", "b"),
                              method = "mahalanobis",
+                             strategy = "topk", k = 5,
                              risk_weighting = "uniform")
   res_sm <- recordLinkage(X, Y, key = c("a", "b"),
                            method = "mahalanobis",
+                           strategy = "topk", k = 5,
                            risk_weighting = "softmax")
   expect_s3_class(res_unif, "recordLinkageRisk")
   expect_s3_class(res_sm, "recordLinkageRisk")
+  # Softmax weighting should produce different risk values than uniform
+  expect_false(identical(res_unif$per_record$risk, res_sm$per_record$risk))
 })
 
 test_that("recordLinkage(method = 'mahalanobis') plot works", {

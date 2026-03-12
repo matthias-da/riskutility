@@ -344,6 +344,33 @@ All \code{strategy}, \code{risk_weighting}, \code{matching},
 and \code{block} parameters work with RBRL.
 }
 
+\section{Mahalanobis method}{
+
+When \code{method = "mahalanobis"}, distances are computed using the
+Mahalanobis metric, which accounts for correlations between variables.
+Records that appear 'close' in Gower distance may be 'far' in
+Mahalanobis distance if their difference goes against the data's
+correlation structure, and vice versa.
+
+By default (\code{robust = TRUE}), the covariance matrix is estimated
+using the Minimum Covariance Determinant (MCD) via
+\code{robustbase::covMcd()}, with fallback to \code{MASS::cov.rob()}
+then classical \code{cov()} if MCD fails. The covariance is always
+estimated from the original data regardless of \code{direction},
+modelling an attacker who knows the population covariance structure
+(Templ & Meindl, 2008).
+
+For mixed data, numeric/ordinal variables use Mahalanobis distance
+(normalized by a chi-squared threshold) while nominal variables use
+Gower-style exact matching. The two components are combined as a
+weighted average, where the weight is the proportion of each variable
+type. For purely nominal data, use \code{method = "deterministic"}
+instead.
+
+Ordinal factors are converted to integer codes (1, 2, 3, ...),
+assuming approximately equal spacing between levels.
+}
+
 \section{Softmax risk weighting}{
 
 When \code{risk_weighting = "softmax"}, closer candidates receive higher

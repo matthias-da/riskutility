@@ -126,6 +126,31 @@
 #' All \code{strategy}, \code{risk_weighting}, \code{matching},
 #' and \code{block} parameters work with RBRL.
 #'
+#' @section Mahalanobis method:
+#' When \code{method = "mahalanobis"}, distances are computed using the
+#' Mahalanobis metric, which accounts for correlations between variables.
+#' Records that appear 'close' in Gower distance may be 'far' in
+#' Mahalanobis distance if their difference goes against the data's
+#' correlation structure, and vice versa.
+#'
+#' By default (\code{robust = TRUE}), the covariance matrix is estimated
+#' using the Minimum Covariance Determinant (MCD) via
+#' \code{robustbase::covMcd()}, with fallback to \code{MASS::cov.rob()}
+#' then classical \code{cov()} if MCD fails. The covariance is always
+#' estimated from the original data regardless of \code{direction},
+#' modelling an attacker who knows the population covariance structure
+#' (Templ & Meindl, 2008).
+#'
+#' For mixed data, numeric/ordinal variables use Mahalanobis distance
+#' (normalized by a chi-squared threshold) while nominal variables use
+#' Gower-style exact matching. The two components are combined as a
+#' weighted average, where the weight is the proportion of each variable
+#' type. For purely nominal data, use \code{method = "deterministic"}
+#' instead.
+#'
+#' Ordinal factors are converted to integer codes (1, 2, 3, ...),
+#' assuming approximately equal spacing between levels.
+#'
 #' @section Softmax risk weighting:
 #' When \code{risk_weighting = "softmax"}, closer candidates receive higher
 #' attribution probability via:
@@ -633,11 +658,12 @@ recordLinkage.default <- function(X,
         rbrl_var_dist_acc <- setNames(numeric(length(key)), key)
     }
 
-    # Mahalanobis: prepare covariance ----
+    # Mahalanobis: prepare covariance from original data ----
+    # Always use X (original) regardless of direction, because the attacker
+    # model assumes knowledge of the population covariance (Templ & Meindl 2008).
     mahal_prep <- NULL
     if (method == "mahalanobis") {
-        mahal_prep <- .mahal_prepare(search_data, key, type,
-                                      robust = robust)
+        mahal_prep <- .mahal_prepare(X, key, type, robust = robust)
     }
 
     # blocking ----
@@ -1262,10 +1288,12 @@ recordLinkage.default <- function(X,
         # Mean per-variable rank distance to best match
         var_importance <- rbrl_var_dist_acc / n_query
     } else if (method == "mahalanobis") {
-        # Diagonal of inverse covariance: larger = more discriminating
+        # Diagonal of precision matrix, normalized to proportions (scale-free).
+        # diag(Sigma^{-1})_j = 1/Var(x_j|x_{-j}): larger = more discriminating.
         vi <- setNames(rep(NA_real_, length(key)), key)
         if (!is.null(mahal_prep) && length(mahal_prep$numeric_keys) > 0) {
             diag_inv <- diag(mahal_prep$cov_inv)
+            diag_inv <- diag_inv / sum(diag_inv)
             for (j in seq_along(mahal_prep$numeric_keys)) {
                 vi[mahal_prep$numeric_keys[j]] <- diag_inv[j]
             }
@@ -2163,6 +2191,9 @@ print.recordLinkageRisk <- function(x, ...) {
         cat("Blocking:    ", paste(s$block, collapse = ", "), "\n", sep = "")
     }
 
+    if (meth == "mahalanobis") {
+        cat("Robust MCD:  ", if (isTRUE(s$robust)) "yes" else "no", "\n", sep = "")
+    }
     if (meth == "predictive") {
         cat("Pred. model: ", s$pred_model, "\n", sep = "")
         cat("Fisher SE:   ", if (isTRUE(s$pred_se)) "yes" else "no", "\n", sep = "")
@@ -2342,6 +2373,7 @@ print.summary.recordLinkageRisk <- function(x, ...) {
             probabilistic = "Variable Importance (log-LR on agreement):",
             predictive    = "Variable Importance (model coefficients):",
             pram          = "Variable Importance (perturbation strength):",
+            mahalanobis   = "Variable Importance (precision matrix proportion):",
             "Variable Importance:")
         cat("\n", vi_label, "\n", sep = "")
         for (v in names(x$var_importance)) {
@@ -2471,6 +2503,7 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1,
                 predictive    = "Absolute Model Coefficient",
                 pram          = "Perturbation Strength (1 - diag)",
                 rf            = "RF Impurity Importance",
+                mahalanobis   = "Precision Matrix Proportion",
                 "Importance")
             barplot(vi[order(vi, decreasing = TRUE)],
                     main = paste0("Variable Importance", dir_suffix),

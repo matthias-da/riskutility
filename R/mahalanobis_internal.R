@@ -11,9 +11,10 @@
 #'   \code{robustbase::covMcd()} or \code{MASS::cov.rob(method = "mcd")}.
 #'   Falls back to classical \code{cov()} if MCD fails.
 #' @param alpha numeric. Significance level for chi-squared threshold
-#'   (default 0.025, giving a 97.5\% quantile).
-#' @return list with cov_inv, center, numeric_keys, nominal_keys,
-#'   alpha (proportion numeric), robust, chi_sq_threshold, p.
+#'   (default 0.025, giving the 97.5 percent quantile).
+#' @return list with cov_inv, center (diagnostic only; not used in distance
+#'   computation), numeric_keys, nominal_keys, alpha (proportion numeric),
+#'   robust, chi_sq_threshold, p.
 #' @keywords internal
 .mahal_prepare <- function(data, key, type, robust = TRUE, alpha = 0.025) {
 
@@ -85,12 +86,12 @@
   rob_cov <- cov_est$cov
   center <- cov_est$center
 
-  # Check for singularity and regularize
-  cov_det <- det(rob_cov)
-  if (is.na(cov_det) || cov_det < .Machine$double.eps) {
+  # Check for singularity and regularize (relative to scale)
+  if (rcond(rob_cov) < .Machine$double.eps) {
     warning("Covariance matrix is (near-)singular. ",
             "Regularizing with ridge penalty.", call. = FALSE)
-    rob_cov <- rob_cov + diag(1e-6, p)
+    ridge <- 1e-6 * max(abs(diag(rob_cov)), 1)
+    rob_cov <- rob_cov + diag(ridge, p)
   }
 
   # Invert
@@ -99,15 +100,19 @@
     error = function(e) {
       warning("Could not invert covariance matrix. ",
               "Using regularized version.", call. = FALSE)
-      solve(rob_cov + diag(1e-4, p))
+      ridge <- 1e-4 * max(abs(diag(rob_cov)), 1)
+      solve(rob_cov + diag(ridge, p))
     }
   )
 
   # Alpha: proportion of numeric vars among all key vars
   alpha_mix <- length(numeric_keys) / length(key)
 
-  # Chi-squared threshold for p numeric dimensions
-  chi_sq_thr <- sqrt(stats::qchisq(1 - alpha, df = p))
+
+  # Chi-squared threshold for pairwise distances:
+  # For two independent draws x_i, x_j ~ N(mu, Sigma), the difference
+  # has covariance 2*Sigma, so d^2(x_i, x_j)/2 ~ chi^2_p.
+  chi_sq_thr <- sqrt(2 * stats::qchisq(1 - alpha, df = p))
 
   list(
     cov_inv = cov_inv,
@@ -126,7 +131,7 @@
 #'
 #' For numeric/ordinal variables, computes Mahalanobis distance using the
 #' pre-computed inverse covariance from \code{.mahal_prepare()}, normalized
-#' by the chi-squared threshold to produce values in approximately [0,1].
+#' by the chi-squared threshold to produce values in approximately \eqn{[0, 1]}.
 #' For nominal variables, computes Gower-style exact match (0/1).
 #' Combined as weighted average based on proportion of each type.
 #'
@@ -138,6 +143,7 @@
 #' @keywords internal
 .mahal_dist <- function(x_row, candidates, prep, type) {
   nc <- nrow(candidates)
+  if (nc == 0L) return(numeric(0L))
 
   # --- Numeric part: Mahalanobis distance ---
   d_maha <- rep(0, nc)
@@ -182,6 +188,8 @@
   if (length(prep$nominal_keys) == 0) {
     d_maha
   } else {
-    prep$alpha * d_maha + (1 - prep$alpha) * d_nom
+    # Clamp numeric part to [0,1] before combining with bounded nominal part
+    d_maha_clamped <- pmin(d_maha, 1)
+    prep$alpha * d_maha_clamped + (1 - prep$alpha) * d_nom
   }
 }

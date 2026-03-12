@@ -94,9 +94,12 @@ test_that(".mahal_prepare handles near-singular covariance", {
   X <- data.frame(a = rnorm(50), b = rnorm(50))
   X$c <- X$a + X$b  # perfectly collinear
   type <- c(a = "numeric", b = "numeric", c = "numeric")
-  # MCD and our code both warn about singularity
+  # MCD and our code both warn about singularity; verify ours fires
   suppressWarnings(
-    res <- .mahal_prepare(X, names(X), type, robust = TRUE)
+    expect_warning(
+      res <- .mahal_prepare(X, names(X), type, robust = TRUE),
+      "singular"
+    )
   )
   expect_true(is.matrix(res$cov_inv))
   expect_true(all(is.finite(res$cov_inv)))
@@ -108,11 +111,54 @@ test_that(".mahal_prepare computes chi-squared threshold", {
   type <- c(a = "numeric", b = "numeric", c = "numeric")
   res <- .mahal_prepare(X, names(X), type, robust = TRUE)
 
-  expected <- sqrt(qchisq(0.975, df = 3))
+  expected <- sqrt(2 * qchisq(0.975, df = 3))
   expect_equal(res$chi_sq_threshold, expected)
 })
 
 # --- .mahal_dist() tests ---
+
+test_that(".mahal_dist matches hand-computed Mahalanobis with identity cov", {
+  # With identity covariance, Mahalanobis = Euclidean
+  # Two points: (0,0) and (3,4) -> Euclidean = 5
+  # chi_sq_thr = sqrt(2 * qchisq(0.975, 2))
+  X <- data.frame(a = c(0, 3, 1), b = c(0, 4, 1))
+  type <- c(a = "numeric", b = "numeric")
+  prep <- .mahal_prepare(X, names(X), type, robust = FALSE)
+  # Force identity covariance for hand computation
+  prep$cov_inv <- diag(2)
+  chi_thr <- prep$chi_sq_threshold
+
+  x_row <- data.frame(a = 0, b = 0)
+  cand <- data.frame(a = 3, b = 4)
+  d <- .mahal_dist(x_row, cand, prep, type)
+  # raw Mahalanobis = sqrt(3^2 + 4^2) = 5, normalized by chi_thr
+  expect_equal(d, 5 / chi_thr, tolerance = 1e-10)
+})
+
+test_that(".mahal_dist with known 2x2 covariance matches stats::mahalanobis", {
+  # Known covariance: Sigma = [[1, 0.8], [0.8, 1]]
+  # Sigma^{-1} = 1/(1-0.64) * [[1, -0.8], [-0.8, 1]] = [[2.778, -2.222], [-2.222, 2.778]]
+  Sigma <- matrix(c(1, 0.8, 0.8, 1), 2, 2)
+  Sigma_inv <- solve(Sigma)
+
+  # Use enough data so classical cov is close to known Sigma
+  set.seed(42)
+  X <- data.frame(a = rnorm(1000), b = rnorm(1000))
+  type <- c(a = "numeric", b = "numeric")
+  prep <- .mahal_prepare(X, names(X), type, robust = FALSE)
+  # Override with known inverse
+  prep$cov_inv <- Sigma_inv
+
+  x_row <- data.frame(a = 0, b = 0)
+  cand <- data.frame(a = 1, b = -1)
+  d <- .mahal_dist(x_row, cand, prep, type)
+
+  # Hand: diff = (1, -1), d^2 = (1,-1) %*% Sigma_inv %*% (1,-1)
+  diff_vec <- c(1, -1)
+  d_sq_expected <- as.numeric(t(diff_vec) %*% Sigma_inv %*% diff_vec)
+  d_expected <- sqrt(d_sq_expected) / prep$chi_sq_threshold
+  expect_equal(d, d_expected, tolerance = 1e-10)
+})
 
 test_that(".mahal_dist computes correct distances for pure numeric", {
   set.seed(1)
