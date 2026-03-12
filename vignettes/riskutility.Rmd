@@ -316,6 +316,42 @@ print(ims_result)
 
 An IMS close to 0 indicates good privacy protection (no exact copies of training data).
 
+### RF Proximity Privacy (`rf_privacy`)
+
+RF proximity offers a data-adaptive alternative to DCR for memorization detection.
+Instead of computing Gower or Euclidean distances, it trains a Random Forest to
+discriminate original from synthetic records and measures how often synthetic
+records share terminal nodes with training vs. holdout records. This approach
+naturally handles mixed data types and captures complex variable interactions.
+
+The key metric is `max_prox_share`: the fraction of synthetic records whose
+nearest real-data neighbor (by terminal node co-occurrence) belongs to the
+training set rather than the holdout. Values near 0.5 indicate no memorization;
+values above 0.5 suggest the synthetic data is systematically closer to training
+records.
+
+```{r rf-privacy, eval=requireNamespace("ranger", quietly=TRUE)}
+rfp_result <- rf_privacy(
+  X = train_data,
+  Y = synthetic,
+  holdout = holdout_data,
+  n_trees = 200,
+  null_test = FALSE,
+  seed = 42
+)
+
+print(rfp_result)
+```
+
+```{r rf-privacy-plot, fig.cap="RF proximity: training vs holdout", eval=requireNamespace("ranger", quietly=TRUE)}
+plot(rfp_result, which = 1)
+```
+
+**When to use RF proximity vs DCR**: Use `rf_privacy()` when you have 20+
+variables with complex interactions or mixed data types. Use `dcr()` with Gower
+distance for simpler settings where interpretability matters more, or when speed
+is a priority (DCR is faster for n < 5,000).
+
 # Data Utility Metrics
 
 Protecting privacy is only valuable if the synthetic data remains useful for
@@ -345,6 +381,29 @@ summary(ps_result)
 preservation (the classifier cannot distinguish original from synthetic).
 The closer the score distributions for original and synthetic data, the
 better the utility.
+
+### Ranger-Based Propensity Scores
+
+The `method = "ranger"` option uses a probability forest (via the **ranger**
+package) instead of `randomForest`, providing OOB propensity scores and
+proximity-based structural metrics that quantify within-class vs. cross-class
+similarity.
+
+```{r propscore-ranger, eval=requireNamespace("ranger", quietly=TRUE)}
+ps_ranger <- propscore(
+  X = original,
+  Y = synthetic,
+  method = "ranger",
+  proximity = "summary"
+)
+
+summary(ps_ranger)
+```
+
+The `structure_ratio` compares cross-class proximity to within-class proximity.
+Values near 1 indicate the forest cannot distinguish the two datasets (good
+utility). Values well below 1 suggest the datasets occupy distinct regions of
+feature space.
 
 ## Distribution Comparisons
 
