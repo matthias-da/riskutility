@@ -91,6 +91,17 @@
 #' the same forest. Use the permutation null test (\code{null_test = TRUE}) for
 #' principled inference.
 #'
+#' When \code{null_test = FALSE}, a heuristic threshold of 0.55 is used for
+#' \code{max_prox_share}. This is a rough default; the permutation null test
+#' provides an adaptive, data-driven threshold.
+#'
+#' When an explicit \code{holdout} is provided that is much smaller or larger
+#' than the training set, the max-proximity comparison is biased because the
+#' maximum over a larger set is naturally higher. The permutation null test
+#' compensates for this (it permutes with the same split sizes), but the
+#' Wilcoxon heuristic does not. Prefer roughly equal split sizes (the default
+#' \code{holdout_fraction = 0.5}).
+#'
 #' @section Computational considerations:
 #' Expected runtimes (n_trees = 500, modern laptop):
 #' n = 1,000: ~5 seconds; n = 5,000: ~30 seconds;
@@ -131,7 +142,7 @@ rf_privacy <- function(X, ...) UseMethod("rf_privacy")
 #' @export
 rf_privacy.synth_pair <- function(X, ...) {
   rf_privacy.default(X = X$original, Y = X$synthetic,
-                     vars = X$vars, ...)
+                     holdout = X$holdout, vars = X$vars, ...)
 }
 
 #' @rdname rf_privacy
@@ -340,12 +351,15 @@ rf_privacy.default <- function(X, Y,
     n_synthetic      = n_syn,
     n_train          = n_train,
     n_holdout        = n_ho,
+    holdout_fraction = if (prep$was_split) holdout_fraction else NA,
     vars             = vars_use
   )
   class(result) <- "rf_privacy"
   result
 }
 
+#' @param x an object of class \code{"rf_privacy"} or \code{"summary.rf_privacy"}
+#' @rdname rf_privacy
 #' @export
 print.rf_privacy <- function(x, ...) {
   pass_label <- if (x$privacy_pass) "PASS" else "FAIL"
@@ -365,6 +379,8 @@ print.rf_privacy <- function(x, ...) {
   invisible(x)
 }
 
+#' @param object an object of class \code{"rf_privacy"}
+#' @rdname rf_privacy
 #' @export
 summary.rf_privacy <- function(object, ...) {
   s <- list(
@@ -389,6 +405,7 @@ summary.rf_privacy <- function(object, ...) {
   s
 }
 
+#' @rdname rf_privacy
 #' @export
 print.summary.rf_privacy <- function(x, ...) {
   cat("RF Privacy Assessment -- Summary\n")
@@ -398,7 +415,9 @@ print.summary.rf_privacy <- function(x, ...) {
 
   cat("Max-based metrics (primary):\n")
   cat("  max_prox_share: ", sprintf("%.4f", x$max_prox_share), "\n")
-  cat("  max_prox_ratio: ", sprintf("%.4f", x$max_prox_ratio), "\n\n")
+  cat("  max_prox_ratio: ",
+      if (is.na(x$max_prox_ratio)) "NA (degenerate holdout)"
+      else sprintf("%.4f", x$max_prox_ratio), "\n\n")
 
   cat("Mean-based metrics (supplementary):\n")
   cat("  prox_share:     ", sprintf("%.4f", x$prox_share), "\n")
@@ -433,8 +452,13 @@ print.summary.rf_privacy <- function(x, ...) {
   invisible(x)
 }
 
+#' @param y not used
+#' @param ... additional arguments (not used)
+#' @param which integer, which plot: 1 = density, 2 = difference histogram,
+#'   3 = null distribution
+#' @rdname rf_privacy
 #' @export
-plot.rf_privacy <- function(x, y = NULL, which = 1L, ...) {
+plot.rf_privacy <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 3)
   show[which] <- TRUE
 
@@ -466,7 +490,7 @@ plot.rf_privacy <- function(x, y = NULL, which = 1L, ...) {
                            color = "red") +
       ggplot2::labs(
         title = "Per-Record Max Proximity Difference",
-        x = "max_prox(train) - max_prox(holdout)",
+        x = "Proximity difference (training - holdout)",
         y = "Count"
       ) +
       ggplot2::theme_minimal()

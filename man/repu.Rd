@@ -56,6 +56,7 @@ Other distance-risk:
 \code{\link{hitting_rate}()},
 \code{\link{ims}()},
 \code{\link{nnaa}()},
-\code{\link{nndr}()}
+\code{\link{nndr}()},
+\code{\link{rf_privacy}()}
 }
 \concept{distance-risk}

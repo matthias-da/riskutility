@@ -10,7 +10,7 @@ abstract: >
   The R package **riskutility** provides a comprehensive framework for measuring
   disclosure risk and data utility in synthetic and anonymized datasets. It implements
   attribution-based privacy metrics (DCAP, TCAP, WEAP, DiSCO), distance-based metrics
-  (DCR, NNDR, IMS), and various utility measures. This vignette demonstrates the
+  (DCR, NNDR, IMS), RF proximity-based memorization detection, and various utility measures. This vignette demonstrates the
   complete workflow from synthetic data generation to risk assessment, explains metric
   interpretation, and shows integration with existing R packages for statistical
   disclosure control.
@@ -336,7 +336,7 @@ rfp_result <- rf_privacy(
   Y = synthetic,
   holdout = holdout_data,
   n_trees = 200,
-  null_test = FALSE,
+  null_test = FALSE,  # skip permutation test for speed
   seed = 42
 )
 
@@ -559,6 +559,16 @@ if (exists("rapid_result")) {
   )
 }
 
+# Add RF Privacy if available
+if (exists("rfp_result")) {
+  rfp_val <- rfp_result$max_prox_share
+  metrics <- c(metrics, "RF Privacy")
+  values <- c(values, round(rfp_val, 4))
+  interp <- c(interp,
+    ifelse(rfp_val <= 0.55, "No memorization signal",
+           "Memorization signal"))
+}
+
 comparison <- data.frame(
   Metric = metrics,
   Value = values,
@@ -617,16 +627,17 @@ computation on datasets with hundreds of thousands of records.
 
 The **riskutility** package provides a comprehensive toolkit for evaluating synthetic
 data quality. By combining attribution-based metrics (DCAP, TCAP, WEAP, DiSCO, RAPID)
-with distance-based metrics (DCR, NNDR, IMS) and utility measures, practitioners can
-make informed decisions about the privacy-utility trade-off in their synthetic data
-products.
+with distance-based metrics (DCR, NNDR, IMS), RF proximity-based memorization
+detection, and utility measures, practitioners can make informed decisions about the
+privacy-utility trade-off in their synthetic data products.
 
 Key takeaways:
 
 - Use **DCAP/TCAP** to assess attribute disclosure risk via matching
 - Use **RAPID** for ML-based attribute inference risk (captures complex relationships)
-- Use **DCR/NNDR/IMS** to detect memorization
-- Use **propensity scores** and **distribution comparisons** for utility assessment
+- Use **DCR/NNDR/IMS** to detect memorization via distance comparisons
+- Use **rf_privacy()** as a data-adaptive alternative to DCR for mixed-type data
+- Use **propensity scores** (including ranger-based) and **distribution comparisons** for utility assessment
 - Use **disclosure_report()** for comprehensive assessment
 - Always evaluate multiple metrics and consider the specific use case
 

@@ -87,18 +87,6 @@
   # Extract terminal nodes
   tn <- predict(forest, combined, type = "terminalNodes")$predictions
 
-  # Handle OOB prediction NAs for small datasets
-  if (any(is.na(tn))) {
-    na_rows <- which(rowSums(is.na(tn)) > 0)
-    warning("OOB terminal node predictions contain NAs for ", length(na_rows),
-            " records (small dataset). Falling back to in-bag predictions ",
-            "for affected records.", call. = FALSE)
-    # Re-predict without OOB restriction for affected records
-    tn_inbag <- predict(forest, combined[na_rows, , drop = FALSE],
-                        type = "terminalNodes")$predictions
-    tn[na_rows, ] <- tn_inbag[, , drop = FALSE]
-  }
-
   # Importance
   imp <- if (importance) forest$variable.importance else NULL
   # Remove .rf_label from importance if present
@@ -140,7 +128,7 @@
   nodes2 <- terminal_nodes[idx2, , drop = FALSE]  # n2 x n_trees
 
   # prox[i, j] = fraction of trees where idx2[i] and idx1[j] share a node
-  prox <- matrix(0L, nrow = n2, ncol = n1)
+  prox <- matrix(0, nrow = n2, ncol = n1)
 
   if (progress && n_trees > 10) {
     pb <- utils::txtProgressBar(min = 0, max = n_trees, style = 3)
@@ -159,7 +147,7 @@
       j_in <- which(tn1 == nid)  # positions in idx1 with this node
       i_in <- which(tn2 == nid)  # positions in idx2 with this node
       if (length(i_in) > 0 && length(j_in) > 0) {
-        prox[i_in, j_in] <- prox[i_in, j_in] + 1L
+        prox[i_in, j_in] <- prox[i_in, j_in] + 1
       }
     }
     if (!is.null(pb)) utils::setTxtProgressBar(pb, t)

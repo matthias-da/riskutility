@@ -301,6 +301,25 @@ kernels, while confidently classified records get narrow kernels (higher
 individual risk).
 }
 
+\section{RF method}{
+
+When \code{method = "rf"}, a random forest (ranger) is trained on the
+stacked original + anonymized records to learn a supervised similarity.
+Terminal-node co-occurrence across trees yields a proximity matrix in \link{0,1}.
+Each original record is linked to the anonymized record with highest
+proximity.  Per-block RF is used by default; set \code{rf_global = TRUE}
+to train a single global forest and restrict proximity lookups within blocks.
+Blocks with fewer than 2 records per class fall back to a global RF
+second pass.  Bijective matching is supported via the existing
+\code{matching = "bijective"} mechanism with \code{maximize = TRUE}.
+
+Note: for the RF method, \code{risk} is the maximum proximity (similarity
+in \link{0,1}) to any candidate, not a re-identification probability.
+The \code{d_min} and \code{d_true} fields store proximity values (higher
+= more similar), which is inverted from the distance convention used by
+other methods (lower = closer).
+}
+
 \section{Softmax risk weighting}{
 
 When \code{risk_weighting = "softmax"}, closer candidates receive higher

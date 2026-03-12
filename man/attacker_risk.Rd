@@ -8,7 +8,7 @@
 \usage{
 attacker_risk(X, ...)
 
-\method{attacker_risk}{synth_pair}(X, data = c("synthetic", "original"), ...)
+\method{attacker_risk}{synth_pair}(X, ...)
 
 \method{attacker_risk}{default}(
   X,
@@ -23,9 +23,6 @@ attacker_risk(X, ...)
 \item{X}{data frame to assess, or a \code{\link{synth_pair}} object}
 
 \item{...}{additional arguments passed to methods (currently unused)}
-
-\item{data}{character, which dataset to assess: "synthetic" (default) or "original".
-Only used by the synth_pair method.}
 
 \item{key_vars}{character vector of quasi-identifier variable names}
 
@@ -150,15 +147,19 @@ Other privacy-models:
 \code{\link{drisk}()},
 \code{\link{epsilon_identifiability}()},
 \code{\link{individual_risk}()},
+\code{\link{inspect_record}()},
 \code{\link{kanonymity}()},
 \code{\link{ldiversity}()},
 \code{\link{linkability}()},
+\code{\link{merge_per_record}()},
 \code{\link{mia_classifier}()},
 \code{\link{population_uniqueness}()},
 \code{\link{recordLinkage}()},
+\code{\link{risk_by_group}()},
 \code{\link{singling_out}()},
 \code{\link{suda}()},
-\code{\link{tcloseness}()}
+\code{\link{tcloseness}()},
+\code{\link{top_at_risk}()}
 }
 \author{
 Matthias Templ

@@ -321,7 +321,7 @@ propscore.default <- function(X, Y,
     }
 
     n_total <- nrow(X) + nrow(Y)
-    pmse <- (1 / (2 * n_total)) * sum((p_hat - cr)^2)
+    pmse <- (1 / n_total) * sum((p_hat - cr)^2)
 
     # Proximity-based structural metrics
     prox_fields <- list(
@@ -547,6 +547,12 @@ summary.propscore <- function(object, ...) {
     res$oob_error <- object$oob_error
     res$var_importance <- object$var_importance
   }
+  if (!is.null(object$structure_ratio)) {
+    res$within_orig_prox <- object$within_orig_prox
+    res$within_synth_prox <- object$within_synth_prox
+    res$cross_prox <- object$cross_prox
+    res$structure_ratio <- object$structure_ratio
+  }
   class(res) <- "summary.propscore"
   res
 }
@@ -563,18 +569,33 @@ print.summary.propscore <- function(x, ...) {
   cat("Sample sizes:     n_original =", x$n_x, ", n_synthetic =", x$n_y, "\n")
   cat("Class ratio (cr):", round(x$cr, 4), "\n\n")
   cat("Propensity Score Statistic (pMSE):", format(x$ps_score, digits = 4), "\n")
-  cat("PS ratio (below/above cr):       ", round(x$ps_ratio, 4), "\n\n")
+  if (!is.na(x$ps_ratio)) {
+    cat("PS ratio (below/above cr):       ", round(x$ps_ratio, 4), "\n\n")
+  } else {
+    cat("\n")
+  }
   cat("Mean propensity (original): ", round(x$mean_ps_x, 4), "\n")
   cat("Mean propensity (synthetic):", round(x$mean_ps_y, 4), "\n\n")
   if (!is.null(x$oob_error)) {
     cat("OOB error:                  ", round(x$oob_error, 4), "\n")
   }
+  if (!is.null(x$structure_ratio)) {
+    cat("\nProximity structure:\n")
+    cat("  Within-original:  ", round(x$within_orig_prox, 4), "\n")
+    cat("  Within-synthetic: ", round(x$within_synth_prox, 4), "\n")
+    cat("  Cross-class:      ", round(x$cross_prox, 4), "\n")
+    cat("  Structure ratio:  ",
+        if (is.na(x$structure_ratio)) "NA"
+        else round(x$structure_ratio, 4),
+        " (1 = indistinguishable)\n")
+  }
   if (!is.na(x$kl)) {
-    cat("KL divergence:              ", format(x$kl, digits = 4), "\n")
-    cat("KL divergence (Bayes space):", format(x$kl_bayes, digits = 4), "\n")
-    cat("Mean density ratio:         ", round(x$mean_ratio, 4),
+    cat("\nDensity diagnostics:\n")
+    cat("  KL divergence:              ", format(x$kl, digits = 4), "\n")
+    cat("  KL divergence (Bayes space):", format(x$kl_bayes, digits = 4), "\n")
+    cat("  Mean density ratio:         ", round(x$mean_ratio, 4),
         " (sd:", round(x$sd_ratio, 4), ")\n")
-    cat("Mean density ratio (Bayes): ", round(x$mean_ratio_bayes, 4),
+    cat("  Mean density ratio (Bayes): ", round(x$mean_ratio_bayes, 4),
         " (sd:", round(x$sd_ratio_bayes, 4), ")\n")
   }
   invisible(x)
@@ -698,8 +719,9 @@ plot.propscore <- function(x, y, ..., which = 1){
       if (is.null(x$within_orig_prox)) {
         message("No proximity data (method != 'ranger' or proximity = 'none')")
       } else {
+        grp_levels <- c("Within original", "Within synthetic", "Cross-class")
         df <- data.frame(
-          group = c("Within original", "Within synthetic", "Cross-class"),
+          group = factor(grp_levels, levels = grp_levels),
           proximity = c(x$within_orig_prox, x$within_synth_prox, x$cross_prox)
         )
         p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$group,
@@ -707,8 +729,9 @@ plot.propscore <- function(x, y, ..., which = 1){
           ggplot2::geom_col(fill = "steelblue") +
           ggplot2::labs(title = "Proximity Structure",
                         x = NULL, y = "Mean proximity",
-                        caption = sprintf("Structure ratio: %.3f",
-                                          x$structure_ratio)) +
+                        caption = if (is.na(x$structure_ratio)) "Structure ratio: NA"
+                                  else sprintf("Structure ratio: %.3f",
+                                               x$structure_ratio)) +
           ggplot2::theme_minimal()
         print(p)
       }

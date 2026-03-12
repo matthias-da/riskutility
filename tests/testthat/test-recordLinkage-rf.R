@@ -109,3 +109,17 @@ test_that("recordLinkage(method = 'rf') var_importance plot works", {
   # which = 3 is existing var importance plot
   expect_silent(plot(res, which = 3))
 })
+
+test_that("recordLinkage(method = 'rf') detects copies", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  X <- data.frame(a = rnorm(30), b = rnorm(30), c = rnorm(30))
+  # Y is near-identical copy of X (memorized)
+  Y <- X + rnorm(nrow(X) * ncol(X), 0, 0.01)
+  res <- recordLinkage(X, Y, key = c("a", "b", "c"), method = "rf",
+                       truth = "row", n_trees = 200)
+  # High risk: most records should be correctly linked
+  expect_true(res$overall$mean_risk > 0.3)
+  # Many true matches found
+  expect_true(mean(res$per_record$true_in_set) > 0.8)
+})

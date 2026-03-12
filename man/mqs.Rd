@@ -37,11 +37,8 @@ methods supported from R package caret can be used.}
 \item{ntop}{number of top models considered for the mqs statistics}
 }
 \value{
-An object of class "mqs" containing:
-\itemize{
-\item mqs_ratio: the model quality statistics ratio
-\item mqs_table: data frame with model performance comparison
-}
+A list with the model quality statistics ratio and the model
+quality statistics table.
 }
 \description{
 Computes the prediction quality or accuracy of ML models

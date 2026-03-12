@@ -4,6 +4,10 @@
 \alias{rf_privacy}
 \alias{rf_privacy.synth_pair}
 \alias{rf_privacy.default}
+\alias{print.rf_privacy}
+\alias{summary.rf_privacy}
+\alias{print.summary.rf_privacy}
+\alias{plot.rf_privacy}
 \title{RF Proximity Privacy Assessment}
 \usage{
 rf_privacy(X, ...)
@@ -25,12 +29,20 @@ rf_privacy(X, ...)
   mtry = NULL,
   ...
 )
+
+\method{print}{rf_privacy}(x, ...)
+
+\method{summary}{rf_privacy}(object, ...)
+
+\method{print}{summary.rf_privacy}(x, ...)
+
+\method{plot}{rf_privacy}(x, y = NULL, ..., which = 1)
 }
 \arguments{
 \item{X}{For \code{rf_privacy.default}: a data.frame of original data.
 For \code{rf_privacy.synth_pair}: a \code{synth_pair} object.}
 
-\item{...}{additional arguments passed to ranger via modifyList}
+\item{...}{additional arguments (not used)}
 
 \item{Y}{data.frame of synthetic data (for default method)}
 
@@ -55,6 +67,15 @@ training (seed + 1) to avoid correlation.}
 \item{n_trees}{integer (>= 10), number of trees}
 
 \item{mtry}{integer or NULL, number of variables to consider at each split}
+
+\item{x}{an object of class \code{"rf_privacy"} or \code{"summary.rf_privacy"}}
+
+\item{object}{an object of class \code{"rf_privacy"}}
+
+\item{y}{not used}
+
+\item{which}{integer, which plot: 1 = density, 2 = difference histogram,
+3 = null distribution}
 }
 \value{
 An S3 object of class \code{"rf_privacy"} with fields:
@@ -136,6 +157,17 @@ may reflect distributional differences, not individual copying.
 The Wilcoxon p-value is anti-conservative because all proximity values share
 the same forest. Use the permutation null test (\code{null_test = TRUE}) for
 principled inference.
+
+When \code{null_test = FALSE}, a heuristic threshold of 0.55 is used for
+\code{max_prox_share}. This is a rough default; the permutation null test
+provides an adaptive, data-driven threshold.
+
+When an explicit \code{holdout} is provided that is much smaller or larger
+than the training set, the max-proximity comparison is biased because the
+maximum over a larger set is naturally higher. The permutation null test
+compensates for this (it permutes with the same split sizes), but the
+Wilcoxon heuristic does not. Prefer roughly equal split sizes (the default
+\code{holdout_fraction = 0.5}).
 }
 
 \section{Computational considerations}{

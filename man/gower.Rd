@@ -20,12 +20,10 @@ gower(X, ...)
 \item{Y}{data frame}
 }
 \value{
-An object of class "gower" containing:
-\itemize{
-\item gower_distance: the average Gower distance
-\item n: number of observations
-\item n_vars: number of variables
-}
+A single numeric value: the average Gower distance between the
+rows of \code{X} and the corresponding rows of \code{Y}, computed as
+the sum of absolute pairwise Gower distances divided by the number of
+observations in \code{X}.
 }
 \description{
 Average (per observation) Gower distance

@@ -46,29 +46,6 @@ strata_x <- factor(sample(c("A", "B"), length(x), replace = TRUE))
 strata_y <- factor(sample(c("A", "B"), length(y), replace = TRUE))
 d2 <- densitydiff_1d_num(x, y, strata_x = strata_x, strata_y = strata_y)
 }
-\seealso{
-Other comparison: 
-\code{\link{ci_overlap}()},
-\code{\link{compare_boxplots}()},
-\code{\link{compare_chisq_gof}()},
-\code{\link{compare_correlation_matrices}()},
-\code{\link{compare_distributions_cont}()},
-\code{\link{compare_embedding}()},
-\code{\link{compare_feature_importance}()},
-\code{\link{compare_histograms}()},
-\code{\link{compare_ks_test}()},
-\code{\link{compare_means_frequencies}()},
-\code{\link{compare_missing_values}()},
-\code{\link{compare_model_performance}()},
-\code{\link{compare_multivariate_distribution}()},
-\code{\link{compare_multivariate_summary_statistics}()},
-\code{\link{compare_outliers}()},
-\code{\link{compare_pca}()},
-\code{\link{compare_wasserstein}()},
-\code{\link{densitydiff_kl_num}()},
-\code{\link{densitydiff_pca}()}
-}
 \author{
 Matthias Templ
 }
-\concept{comparison}

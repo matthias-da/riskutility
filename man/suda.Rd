@@ -8,7 +8,7 @@
 \usage{
 suda(X, ...)
 
-\method{suda}{synth_pair}(X, max_msu = NULL, data = c("synthetic", "original"), ...)
+\method{suda}{synth_pair}(X, max_msu = NULL, ...)
 
 \method{suda}{default}(X, key_vars, max_msu = NULL, missing = NA, na.rm = TRUE, ...)
 }
@@ -19,9 +19,6 @@ suda(X, ...)
 
 \item{max_msu}{integer, maximum size of Minimal Sample Uniques to consider
 (default: NULL, uses all variables up to length(key_vars))}
-
-\item{data}{character, which dataset to assess: "synthetic" (default) or "original".
-Only used by the synth_pair method.}
 
 \item{key_vars}{character vector of quasi-identifier variable names}
 
@@ -111,14 +108,18 @@ Other privacy-models:
 \code{\link{drisk}()},
 \code{\link{epsilon_identifiability}()},
 \code{\link{individual_risk}()},
+\code{\link{inspect_record}()},
 \code{\link{kanonymity}()},
 \code{\link{ldiversity}()},
 \code{\link{linkability}()},
+\code{\link{merge_per_record}()},
 \code{\link{mia_classifier}()},
 \code{\link{population_uniqueness}()},
 \code{\link{recordLinkage}()},
+\code{\link{risk_by_group}()},
 \code{\link{singling_out}()},
-\code{\link{tcloseness}()}
+\code{\link{tcloseness}()},
+\code{\link{top_at_risk}()}
 }
 \author{
 Matthias Templ

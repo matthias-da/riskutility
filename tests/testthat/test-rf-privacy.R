@@ -153,4 +153,61 @@ test_that("rf_privacy print/summary/plot methods work", {
   expect_output(print(s))
   expect_silent(plot(res, which = 1))
   expect_silent(plot(res, which = 2))
+  expect_message(plot(res, which = 3), "No null distribution")
+})
+
+test_that("rf_privacy plot which = 3 works with null test", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  X <- data.frame(a = rnorm(80), b = rnorm(80))
+  Y <- data.frame(a = rnorm(80), b = rnorm(80))
+  res <- rf_privacy(X, Y, seed = 1, n_trees = 50,
+                    null_test = TRUE, n_null = 10)
+  expect_silent(plot(res, which = 3))
+})
+
+test_that("rf_privacy synth_pair forwards holdout", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  X <- data.frame(a = rnorm(80), b = rnorm(80))
+  Y <- data.frame(a = rnorm(80), b = rnorm(80))
+  ho <- data.frame(a = rnorm(40), b = rnorm(40))
+  sp <- synth_pair(X, Y, holdout = ho)
+  res <- rf_privacy(sp, seed = 1, n_trees = 50, null_test = FALSE)
+  expect_equal(res$n_holdout, 40)
+  expect_true(is.na(res$holdout_fraction))
+})
+
+test_that("rf_privacy holdout_fraction stored when splitting", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  X <- data.frame(a = rnorm(80), b = rnorm(80))
+  Y <- data.frame(a = rnorm(80), b = rnorm(80))
+  res <- rf_privacy(X, Y, holdout_fraction = 0.3, seed = 1,
+                    n_trees = 50, null_test = FALSE)
+  expect_equal(res$holdout_fraction, 0.3)
+})
+
+test_that("rf_privacy works in disclosure_report", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  X <- data.frame(a = rnorm(60), b = rnorm(60))
+  Y <- data.frame(a = rnorm(60), b = rnorm(60))
+  dr <- disclosure_report(X, Y, metrics = "rf_privacy",
+                          verbose = FALSE, n_trees = 50)
+  expect_s3_class(dr, "disclosure_report")
+  expect_true("rf_privacy" %in% names(dr$results))
+  s <- summary(dr)
+  expect_true("rf_privacy" %in% names(s$distance_results))
+})
+
+test_that("rf_privacy works in rumap", {
+  skip_if_not_installed("ranger")
+  set.seed(1)
+  X <- data.frame(a = rnorm(60), b = rnorm(60))
+  Y <- data.frame(a = rnorm(60), b = rnorm(60))
+  ru <- rumap(X, Y, risk_measures = "rf_privacy",
+              utility_measures = "pmse", n_trees = 50)
+  expect_s3_class(ru, "rumap")
+  expect_true("rf_privacy" %in% colnames(ru$risk))
 })

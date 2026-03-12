@@ -8,7 +8,7 @@
 \usage{
 individual_risk(X, ...)
 
-\method{individual_risk}{synth_pair}(X, threshold = 0.1, data = c("synthetic", "original"), ...)
+\method{individual_risk}{synth_pair}(X, threshold = 0.1, ...)
 
 \method{individual_risk}{default}(
   X,
@@ -26,9 +26,6 @@ individual_risk(X, ...)
 \item{...}{additional arguments passed to methods}
 
 \item{threshold}{numeric, risk threshold for flagging high-risk records (default: 0.1)}
-
-\item{data}{character, which dataset to assess: "synthetic" (default) or "original".
-Only used by the synth_pair method.}
 
 \item{key_vars}{character vector of quasi-identifier variable names}
 
@@ -127,15 +124,19 @@ Other privacy-models:
 \code{\link{domias}()},
 \code{\link{drisk}()},
 \code{\link{epsilon_identifiability}()},
+\code{\link{inspect_record}()},
 \code{\link{kanonymity}()},
 \code{\link{ldiversity}()},
 \code{\link{linkability}()},
+\code{\link{merge_per_record}()},
 \code{\link{mia_classifier}()},
 \code{\link{population_uniqueness}()},
 \code{\link{recordLinkage}()},
+\code{\link{risk_by_group}()},
 \code{\link{singling_out}()},
 \code{\link{suda}()},
-\code{\link{tcloseness}()}
+\code{\link{tcloseness}()},
+\code{\link{top_at_risk}()}
 }
 \author{
 Matthias Templ

@@ -107,7 +107,8 @@ Other distance-risk:
 \code{\link{hitting_rate}()},
 \code{\link{nnaa}()},
 \code{\link{nndr}()},
-\code{\link{repu}()}
+\code{\link{repu}()},
+\code{\link{rf_privacy}()}
 }
 \author{
 Matthias Templ
