@@ -14,24 +14,30 @@ propscore(X, ...)
   X,
   Y,
   form = NULL,
-  method = "rf",
+  method = c("rf", "ranger", "logreg"),
   adjust_size = TRUE,
   cluster = NULL,
   na = "impute",
+  proximity = c("summary", "full", "none"),
+  importance = TRUE,
   ...
 )
 }
 \arguments{
 \item{X}{data frame}
 
-\item{...}{additional arguments passed to methods (currently unused)}
+\item{...}{additional arguments passed to methods. For
+\code{method = "ranger"}, extra arguments are forwarded to
+\code{\link[ranger]{ranger}} via \code{modifyList}.}
 
 \item{form}{formula. If NULL all variables are used as predictors}
 
 \item{Y}{data frame with the same structure as X}
 
-\item{method}{method for propensity score estimation. Default is rf
-(random forest)}
+\item{method}{method for propensity score estimation: \code{"rf"} (default,
+uses \code{randomForest}), \code{"ranger"} (uses \code{ranger} with
+proximity-based structural metrics), or \code{"logreg"} (logistic
+regression).}
 
 \item{adjust_size}{for very unbalanced sizes of original and synthetic data.
 Instead of using a constant c, observations are drawn from the smaller
@@ -44,6 +50,15 @@ if no cluster structure is present in the data.}
 
 \item{na}{missing value treatment. Either stop, remove or impute
 (using a kNN from R package VIM).}
+
+\item{proximity}{character; proximity computation mode for
+\code{method = "ranger"}: \code{"summary"} (default) returns aggregate
+within-class and cross-class proximity statistics, \code{"full"} also
+stores the full proximity matrix, \code{"none"} skips proximity
+computation. Ignored for other methods.}
+
+\item{importance}{logical; whether to compute variable importance for
+\code{method = "ranger"}. Default \code{TRUE}. Ignored for other methods.}
 }
 \value{
 An S3 object of class \code{"propscore"} containing:
@@ -69,6 +84,13 @@ An S3 object of class \code{"propscore"} containing:
 \item{n_x}{Number of original records.}
 \item{n_y}{Number of synthetic records.}
 \item{method}{Method used for propensity score estimation.}
+\item{oob_error}{OOB prediction error (ranger method only).}
+\item{var_importance}{Named numeric vector of variable importance (ranger method only).}
+\item{within_orig_prox}{Mean within-original proximity (ranger with proximity != "none").}
+\item{within_synth_prox}{Mean within-synthetic proximity (ranger with proximity != "none").}
+\item{cross_prox}{Mean cross-class proximity (ranger with proximity != "none").}
+\item{structure_ratio}{Ratio of cross-class to within-class proximity (ranger with proximity != "none").}
+\item{proximity_matrix}{Full proximity matrix (ranger with proximity = "full" only).}
 }
 }
 \description{

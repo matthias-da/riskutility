@@ -4,7 +4,7 @@
 \alias{plot.propscore}
 \title{Plot method for propscore objects}
 \usage{
-\method{plot}{propscore}(x, y = NULL, ..., which = 1)
+\method{plot}{propscore}(x, y, ..., which = 1)
 }
 \arguments{
 \item{x}{an object of class "propscore"}
@@ -13,7 +13,9 @@
 
 \item{...}{additional arguments passed to the plot method}
 
-\item{which}{which plot to show: 1 for density, 2 for density ratio}
+\item{which}{which plot to show: 1 for density, 2 for density ratio,
+3 for proximity structure (ranger only), 4 for variable importance
+(ranger only)}
 }
 \description{
 Plot method for propscore objects

@@ -5,8 +5,10 @@
 #' @param X data frame
 #' @param Y data frame with the same structure as X
 #' @param form formula. If NULL all variables are used as predictors
-#' @param method method for propensity score estimation. Default is rf
-#' (random forest)
+#' @param method method for propensity score estimation: \code{"rf"} (default,
+#' uses \code{randomForest}), \code{"ranger"} (uses \code{ranger} with
+#' proximity-based structural metrics), or \code{"logreg"} (logistic
+#' regression).
 #' @param adjust_size for very unbalanced sizes of original and synthetic data.
 #' Instead of using a constant c, observations are drawn from the smaller
 #' data set so that the both data sets has the same size. If a cluster
@@ -16,7 +18,16 @@
 #' if no cluster structure is present in the data.
 #' @param na missing value treatment. Either stop, remove or impute
 #' (using a kNN from R package VIM).
-#' @param ... additional arguments passed to methods (currently unused)
+#' @param proximity character; proximity computation mode for
+#' \code{method = "ranger"}: \code{"summary"} (default) returns aggregate
+#' within-class and cross-class proximity statistics, \code{"full"} also
+#' stores the full proximity matrix, \code{"none"} skips proximity
+#' computation. Ignored for other methods.
+#' @param importance logical; whether to compute variable importance for
+#' \code{method = "ranger"}. Default \code{TRUE}. Ignored for other methods.
+#' @param ... additional arguments passed to methods. For
+#' \code{method = "ranger"}, extra arguments are forwarded to
+#' \code{\link[ranger]{ranger}} via \code{modifyList}.
 #' @importFrom randomForest randomForest
 #' @importFrom stats as.formula formula
 #' @importFrom stats terms.formula
@@ -45,6 +56,13 @@
 #'   \item{n_x}{Number of original records.}
 #'   \item{n_y}{Number of synthetic records.}
 #'   \item{method}{Method used for propensity score estimation.}
+#'   \item{oob_error}{OOB prediction error (ranger method only).}
+#'   \item{var_importance}{Named numeric vector of variable importance (ranger method only).}
+#'   \item{within_orig_prox}{Mean within-original proximity (ranger with proximity != "none").}
+#'   \item{within_synth_prox}{Mean within-synthetic proximity (ranger with proximity != "none").}
+#'   \item{cross_prox}{Mean cross-class proximity (ranger with proximity != "none").}
+#'   \item{structure_ratio}{Ratio of cross-class to within-class proximity (ranger with proximity != "none").}
+#'   \item{proximity_matrix}{Full proximity matrix (ranger with proximity = "full" only).}
 #' }
 #' @family utility
 #' @export
@@ -133,11 +151,18 @@ propscore.synth_pair <- function(X, form = NULL, ...) {
 #' @export
 propscore.default <- function(X, Y,
                               form = NULL,
-                              method = "rf",
+                              method = c("rf", "ranger", "logreg"),
                               adjust_size = TRUE,
                               cluster = NULL,
                               na = "impute",
+                              proximity = c("summary", "full", "none"),
+                              importance = TRUE,
                               ...) {
+  # Capture missing() before match.arg resolves defaults
+  proximity_supplied <- !missing(proximity)
+  importance_supplied <- !missing(importance)
+  method <- match.arg(method)
+  proximity <- match.arg(proximity)
   # Check if X and Y are data frames
   if (!is.data.frame(X)) {
     stop("X must be a data frame.")
@@ -207,7 +232,12 @@ propscore.default <- function(X, Y,
     stop(paste("na must be one of", paste(valid_na_values, collapse = ", "), "."))
   }
 
-  vars <- attributes(terms.formula(form))$term.labels
+  # Extract variable names; handle "group ~ ." formula specially
+  if (identical(deparse(form), "group ~ .")) {
+    vars <- names(X)
+  } else {
+    vars <- attributes(terms.formula(form))$term.labels
+  }
   if(any(is.na(X[, vars]))){
     if(na == "stop") stop("data contains missing values")
     if(na == "impute"){
@@ -261,6 +291,135 @@ propscore.default <- function(X, Y,
     }
     cr <- nrow(Y) / (nrow(X) + nrow(Y))
     mi_x <- mi_y <- min(c(n_x, n_y))
+  }
+
+  # Warn if ranger-only params used with non-ranger method
+  if (method != "ranger" && (proximity_supplied || importance_supplied)) {
+    message("'proximity' and 'importance' are only used with method = 'ranger'.")
+  }
+
+  # --- ranger branch: uses .rf_proximity() engine, returns early ---
+  if (method == "ranger") {
+    if (!requireNamespace("ranger", quietly = TRUE)) {
+      stop("Package 'ranger' required for propscore(method = 'ranger'). ",
+           "Install with install.packages('ranger')", call. = FALSE)
+    }
+
+    # Use .rf_proximity() engine
+    rf_res <- .rf_proximity(X[, vars, drop = FALSE], Y[, vars, drop = FALSE],
+                            vars = vars, n_trees = 500L,
+                            importance = importance, ...)
+
+    # OOB propensity scores
+    p_hat <- rf_res$forest$predictions[, 2]  # P(synthetic)
+    # Handle OOB prediction NAs
+    if (any(is.na(p_hat))) {
+      p_inbag <- predict(rf_res$forest,
+                         rbind(X[, vars, drop = FALSE],
+                               Y[, vars, drop = FALSE]))$predictions[, 2]
+      p_hat[is.na(p_hat)] <- p_inbag[is.na(p_hat)]
+    }
+
+    n_total <- nrow(X) + nrow(Y)
+    pmse <- (1 / (2 * n_total)) * sum((p_hat - cr)^2)
+
+    # Proximity-based structural metrics
+    prox_fields <- list(
+      within_orig_prox = NULL,
+      within_synth_prox = NULL,
+      cross_prox = NULL,
+      structure_ratio = NULL,
+      proximity_matrix = NULL
+    )
+    if (proximity != "none") {
+      n1 <- rf_res$n1
+      n2 <- rf_res$n2
+      idx_orig <- seq_len(n1)
+      idx_synth <- n1 + seq_len(n2)
+
+      # Within-original proximity (mean of upper triangle)
+      if (n1 > 1) {
+        wo <- .proximity_from_nodes(rf_res$terminal_nodes, idx_orig, idx_orig)
+        prox_fields$within_orig_prox <- (sum(wo) - n1) / (n1 * (n1 - 1))
+      } else {
+        prox_fields$within_orig_prox <- NA_real_
+      }
+
+      # Within-synthetic proximity
+      if (n2 > 1) {
+        ws <- .proximity_from_nodes(rf_res$terminal_nodes, idx_synth, idx_synth)
+        prox_fields$within_synth_prox <- (sum(ws) - n2) / (n2 * (n2 - 1))
+      } else {
+        prox_fields$within_synth_prox <- NA_real_
+      }
+
+      # Cross-class proximity
+      cross <- .proximity_from_nodes(rf_res$terminal_nodes, idx_orig, idx_synth)
+      prox_fields$cross_prox <- mean(cross)
+
+      # Structure ratio
+      denom <- (prox_fields$within_orig_prox +
+                prox_fields$within_synth_prox) / 2
+      prox_fields$structure_ratio <- if (!is.na(denom) && denom > 0) {
+        prox_fields$cross_prox / denom
+      } else {
+        NA_real_
+      }
+
+      if (proximity == "full") {
+        n_combined <- n1 + n2
+        if (n_combined > 10000) {
+          mem_mb <- round(n_combined^2 * 8 / 1e6)
+          warning("Full proximity matrix is ", n_combined, " x ",
+                  n_combined, " (~", mem_mb, " MB). ",
+                  "Consider proximity = 'summary'.", call. = FALSE)
+        }
+        all_idx <- seq_len(n_combined)
+        prox_fields$proximity_matrix <- .proximity_from_nodes(
+          rf_res$terminal_nodes, all_idx, all_idx
+        )
+      }
+    }
+
+    oob_error <- rf_res$oob_error
+
+    # Build result — ranger bypasses KDE and returns directly
+    p <- data.frame(
+      prediction = p_hat,
+      group = rep(c("real", "synth"), times = c(nrow(X), nrow(Y)))
+    )
+
+    results <- list(
+      predictions = p,
+      ps_ratio = NA_real_,
+      ps_score = pmse,
+      cr = cr,
+      mean_ps_x = mean(p_hat[seq_len(nrow(X))], na.rm = TRUE),
+      mean_ps_y = mean(p_hat[nrow(X) + seq_len(nrow(Y))], na.rm = TRUE),
+      density_ratio = NULL,
+      density_ratio_bayes = NULL,
+      kl = NA_real_,
+      kl_bayes = NA_real_,
+      mean_ratio = NA_real_,
+      sd_ratio = NA_real_,
+      mean_ratio_bayes = NA_real_,
+      sd_ratio_bayes = NA_real_,
+      points = NULL,
+      denX = NULL,
+      denY = NULL,
+      bayesspace = FALSE,
+      n_x = n_x,
+      n_y = n_y,
+      method = "ranger",
+      oob_error = oob_error,
+      var_importance = rf_res$importance
+    )
+
+    # Add proximity fields
+    for (nm in names(prox_fields)) results[[nm]] <- prox_fields[[nm]]
+
+    class(results) <- "propscore"
+    return(results)
   }
 
     Z <- rbind(X[, vars], Y[, vars])
@@ -381,6 +540,10 @@ summary.propscore <- function(object, ...) {
     n_y = object$n_y,
     method = object$method
   )
+  if (!is.null(object$oob_error)) {
+    res$oob_error <- object$oob_error
+    res$var_importance <- object$var_importance
+  }
   class(res) <- "summary.propscore"
   res
 }
@@ -400,12 +563,17 @@ print.summary.propscore <- function(x, ...) {
   cat("PS ratio (below/above cr):       ", round(x$ps_ratio, 4), "\n\n")
   cat("Mean propensity (original): ", round(x$mean_ps_x, 4), "\n")
   cat("Mean propensity (synthetic):", round(x$mean_ps_y, 4), "\n\n")
-  cat("KL divergence:              ", format(x$kl, digits = 4), "\n")
-  cat("KL divergence (Bayes space):", format(x$kl_bayes, digits = 4), "\n")
-  cat("Mean density ratio:         ", round(x$mean_ratio, 4),
-      " (sd:", round(x$sd_ratio, 4), ")\n")
-  cat("Mean density ratio (Bayes): ", round(x$mean_ratio_bayes, 4),
-      " (sd:", round(x$sd_ratio_bayes, 4), ")\n")
+  if (!is.null(x$oob_error)) {
+    cat("OOB error:                  ", round(x$oob_error, 4), "\n")
+  }
+  if (!is.na(x$kl)) {
+    cat("KL divergence:              ", format(x$kl, digits = 4), "\n")
+    cat("KL divergence (Bayes space):", format(x$kl_bayes, digits = 4), "\n")
+    cat("Mean density ratio:         ", round(x$mean_ratio, 4),
+        " (sd:", round(x$sd_ratio, 4), ")\n")
+    cat("Mean density ratio (Bayes): ", round(x$mean_ratio_bayes, 4),
+        " (sd:", round(x$sd_ratio_bayes, 4), ")\n")
+  }
   invisible(x)
 }
 
@@ -414,7 +582,9 @@ print.summary.propscore <- function(x, ...) {
 #' @param x an object of class "propscore"
 #' @param y not used
 #' @param ... additional arguments passed to the plot method
-#' @param which which plot to show: 1 for density, 2 for density ratio
+#' @param which which plot to show: 1 for density, 2 for density ratio,
+#' 3 for proximity structure (ranger only), 4 for variable importance
+#' (ranger only)
 #' @export
 plot.propscore <- function(x, y, ..., which = 1){
 
@@ -434,7 +604,7 @@ plot.propscore <- function(x, y, ..., which = 1){
     return(TRUE)
   }
 
-  show <- rep(FALSE, 2)
+  show <- rep(FALSE, 4)
   show[which] <- TRUE
 
   if(is_list_of_lists(x)){
@@ -489,6 +659,14 @@ plot.propscore <- function(x, y, ..., which = 1){
     }
 
   } else {
+    # Guard for ranger method: density/ratio plots need KDE fields
+    if (is.null(x$points) && (show[1L] || show[2L])) {
+      message("Density plots not available for method = 'ranger'. ",
+              "Use which = 3 (proximity) or which = 4 (importance).")
+      show[1L] <- FALSE
+      show[2L] <- FALSE
+    }
+
     if(x$bayesspace){
       ylab1 <- "densities (Bayes space)"
       ylab2 <- "density ratio (Bayes space)"
@@ -496,7 +674,7 @@ plot.propscore <- function(x, y, ..., which = 1){
       ylab1 <- "density"
       ylab2 <- "density ratio"
     }
-    if(sum(show) > 1){
+    if(sum(show[1:2]) > 1){
       par(mfrow = c(1,2))
     }
     if(show[1L]){
@@ -510,6 +688,46 @@ plot.propscore <- function(x, y, ..., which = 1){
            type = "l",
            ylab = ylab2, xlab = "")
       abline(h = 1, lty = 2, col = "gray")
+    }
+
+    if (show[3L]) {
+      # Proximity structure bar chart
+      if (is.null(x$within_orig_prox)) {
+        message("No proximity data (method != 'ranger' or proximity = 'none')")
+      } else {
+        df <- data.frame(
+          group = c("Within original", "Within synthetic", "Cross-class"),
+          proximity = c(x$within_orig_prox, x$within_synth_prox, x$cross_prox)
+        )
+        p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$group,
+                                               y = .data$proximity)) +
+          ggplot2::geom_col(fill = "steelblue") +
+          ggplot2::labs(title = "Proximity Structure",
+                        x = NULL, y = "Mean proximity",
+                        caption = sprintf("Structure ratio: %.3f",
+                                          x$structure_ratio)) +
+          ggplot2::theme_minimal()
+        print(p)
+      }
+    }
+
+    if (show[4L]) {
+      # Variable importance bar chart
+      if (is.null(x$var_importance)) {
+        message("No importance data (importance = FALSE or method != 'ranger')")
+      } else {
+        imp <- sort(x$var_importance, decreasing = TRUE)
+        df <- data.frame(var = factor(names(imp), levels = names(imp)),
+                         importance = imp)
+        p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$var,
+                                               y = .data$importance)) +
+          ggplot2::geom_col(fill = "darkgreen") +
+          ggplot2::coord_flip() +
+          ggplot2::labs(title = "Variable Importance",
+                        x = NULL, y = "Importance") +
+          ggplot2::theme_minimal()
+        print(p)
+      }
     }
 
   }
