@@ -301,44 +301,22 @@ linkability.default <- function(X, Y,
   n_success <- sum(links)
   n_control_success <- sum(links_control)
 
-  # Compute risk scores with Wilson CIs
-  attack_wilson <- .wilson_score(n_success, n_attacks, confidence_level)
-  control_wilson <- .wilson_score(n_control_success, n_attacks, confidence_level)
-
-  risk_attack <- attack_wilson$estimate
-  risk_control <- control_wilson$estimate
-
-  # Residual risk: (attack - control) / (1 - control), bounded [0, 1]
-  if (risk_control < 1) {
-    risk <- max(0, (risk_attack - risk_control) / (1 - risk_control))
-  } else {
-    risk <- 0
-  }
-
-  # Propagate CI for residual risk
-  risk_ci_lower <- max(0, (attack_wilson$ci_lower - control_wilson$ci_upper) /
-                          max(1e-10, 1 - control_wilson$ci_upper))
-  risk_ci_upper <- min(1, (attack_wilson$ci_upper - control_wilson$ci_lower) /
-                          max(1e-10, 1 - control_wilson$ci_lower))
-  risk_ci <- c(lower = risk_ci_lower, upper = risk_ci_upper)
-
-  privacy_pass <- risk <= 0.1
+  # Compute residual risk with Wilson CIs
+  rr <- .residual_risk(n_success, n_control_success, n_attacks, confidence_level)
 
   results <- list(
-    risk = risk,
-    risk_ci = risk_ci,
-    risk_attack = risk_attack,
-    risk_attack_ci = c(lower = attack_wilson$ci_lower,
-                       upper = attack_wilson$ci_upper),
-    risk_control = risk_control,
-    risk_control_ci = c(lower = control_wilson$ci_lower,
-                        upper = control_wilson$ci_upper),
+    risk = rr$risk,
+    risk_ci = rr$risk_ci,
+    risk_attack = rr$risk_attack,
+    risk_attack_ci = rr$risk_attack_ci,
+    risk_control = rr$risk_control,
+    risk_control_ci = rr$risk_control_ci,
     n_attacks = n_attacks,
     n_success = n_success,
     n_control_success = n_control_success,
     links = links,
     links_control = links_control,
-    privacy_pass = privacy_pass,
+    privacy_pass = rr$privacy_pass,
     n_original = n_train,
     n_synthetic = n_synthetic,
     n_holdout = n_holdout_final,

@@ -95,16 +95,21 @@ individual_risk <- function(X, ...) {
 }
 
 #' @rdname individual_risk
+#' @param data character, which dataset to assess: "synthetic" (default) or "original".
+#'   Only used by the synth_pair method.
 #' @export
-individual_risk.synth_pair <- function(X, threshold = 0.1, ...) {
+individual_risk.synth_pair <- function(X, threshold = 0.1, data = c("synthetic", "original"), ...) {
   if (is.null(X$key_vars)) {
     stop("synth_pair must have 'key_vars' set for individual_risk()")
   }
+  data <- match.arg(data)
+  dataset <- if (data == "synthetic") X$synthetic else X$original
+  weight <- if (data == "synthetic") X$weight_synthetic else X$weight_original
 
   individual_risk.default(
-    X = X$synthetic,
+    X = dataset,
     key_vars = X$key_vars,
-    weight = X$weight_synthetic,
+    weight = weight,
     threshold = threshold,
     ...
   )

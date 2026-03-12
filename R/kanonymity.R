@@ -80,15 +80,18 @@ kanonymity <- function(X, ...) {
 }
 
 #' @rdname kanonymity
+#' @param data character, which dataset to assess: "synthetic" (default) or "original".
+#'   Only used by the synth_pair method.
 #' @export
-kanonymity.synth_pair <- function(X, k = 5, ...) {
+kanonymity.synth_pair <- function(X, k = 5, data = c("synthetic", "original"), ...) {
   if (is.null(X$key_vars)) {
     stop("synth_pair must have 'key_vars' set for kanonymity()")
   }
-  # Assess k-anonymity of the synthetic data
+  data <- match.arg(data)
+  dataset <- if (data == "synthetic") X$synthetic else X$original
 
-kanonymity.default(
-    X = X$synthetic,
+  kanonymity.default(
+    X = dataset,
     key_vars = X$key_vars,
     k = k,
     ...

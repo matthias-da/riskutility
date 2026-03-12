@@ -260,6 +260,8 @@ epsilon_identifiability.default <- function(X, Y,
 #' @param n_bins integer, number of bins for discretizing numeric variables
 #' @return numeric scalar, the Shannon entropy (natural log)
 #' @keywords internal
+# Note: handles raw data vectors (discretization + entropy), unlike the
+# probability-vector entropy functions in divergence.R/divergence2.R.
 .compute_entropy <- function(x, n_bins = 20L) {
   x <- x[!is.na(x)]
   if (length(x) == 0) return(0)

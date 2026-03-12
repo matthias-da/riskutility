@@ -85,17 +85,21 @@ ldiversity <- function(X, ...) {
 }
 
 #' @rdname ldiversity
+#' @param data character, which dataset to assess: "synthetic" (default) or "original".
+#'   Only used by the synth_pair method.
 #' @export
-ldiversity.synth_pair <- function(X, l = 2, c = 2, ...) {
+ldiversity.synth_pair <- function(X, l = 2, c = 2, data = c("synthetic", "original"), ...) {
   if (is.null(X$key_vars)) {
     stop("synth_pair must have 'key_vars' set for ldiversity()")
   }
   if (is.null(X$target_var)) {
     stop("synth_pair must have 'target_var' set as sensitive variable for ldiversity()")
   }
+  data <- match.arg(data)
+  dataset <- if (data == "synthetic") X$synthetic else X$original
 
   ldiversity.default(
-    X = X$synthetic,
+    X = dataset,
     key_vars = X$key_vars,
     sensitive_var = X$target_var,
     l = l,

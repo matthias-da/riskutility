@@ -13,8 +13,11 @@
 #' quality than the original data.
 #'
 #' @param ... additional arguments passed to methods
-#' @return A list with the model quality statistics ratio and the model
-#' quality statistics table.
+#' @return An object of class "mqs" containing:
+#' \itemize{
+#'   \item mqs_ratio: the model quality statistics ratio
+#'   \item mqs_table: data frame with model performance comparison
+#' }
 #' @seealso \code{\link{propscore}}, \code{\link{compare_model_performance}}
 #'
 #' @author Matthias Templ
@@ -242,9 +245,64 @@ mqs.default <- function(X, Y, form,
         mqs_table <- cbind(mqs_table, "measure" = c("Accuracy", "Accuracy"))
     }
 
-  return(list("mqs_ratio" = mqs_stat,
-              "mqs_table" = mqs_table))
+  result <- list(
+    mqs_ratio = mqs_stat,
+    mqs_table = mqs_table
+  )
+  class(result) <- "mqs"
+  return(result)
 
+}
+
+#' Print method for mqs objects
+#'
+#' @param x an object of class "mqs"
+#' @param ... additional arguments (ignored)
+#' @export
+print.mqs <- function(x, ...) {
+  cat("Model Quality Score (MQS)\n")
+  cat("=========================\n")
+  cat("MQS ratio:", round(x$mqs_ratio, 4), "\n\n")
+  cat("Model performance table:\n")
+  print(x$mqs_table, row.names = FALSE)
+  invisible(x)
+}
+
+#' Summary method for mqs objects
+#'
+#' @param object an object of class "mqs"
+#' @param ... additional arguments (ignored)
+#' @return An object of class "summary.mqs"
+#' @export
+summary.mqs <- function(object, ...) {
+  summ <- list(
+    mqs_ratio = object$mqs_ratio,
+    mqs_table = object$mqs_table,
+    interpretation = if (object$mqs_ratio > 1.05) {
+      "Synthetic data has better prediction quality than original"
+    } else if (object$mqs_ratio < 0.95) {
+      "Synthetic data has lower prediction quality than original"
+    } else {
+      "Synthetic data has comparable prediction quality to original"
+    }
+  )
+  class(summ) <- "summary.mqs"
+  summ
+}
+
+#' Print method for summary.mqs objects
+#'
+#' @param x an object of class "summary.mqs"
+#' @param ... additional arguments (ignored)
+#' @export
+print.summary.mqs <- function(x, ...) {
+  cat("Summary: Model Quality Score (MQS)\n")
+  cat("===================================\n")
+  cat("MQS ratio:", round(x$mqs_ratio, 4), "\n")
+  cat("Interpretation:", x$interpretation, "\n\n")
+  cat("Model performance table:\n")
+  print(x$mqs_table, row.names = FALSE)
+  invisible(x)
 }
 
 
