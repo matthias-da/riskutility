@@ -37,11 +37,13 @@ recordLinkage(X, ...)
   pred_model = c("logit", "rf"),
   pred_se = TRUE,
   return_matches = FALSE,
-  matching = c("independent", "bijective"),
+  matching = c("independent", "bijective", "ot"),
   risk_threshold = 0.1,
   n_trees = 500L,
   rf_global = FALSE,
   robust = TRUE,
+  ot_epsilon = NULL,
+  ot_max_iter = 100L,
   ...
 )
 }
@@ -57,8 +59,9 @@ recordLinkage(X, ...)
 \item{method}{character. Linkage method: \code{"deterministic"} (default),
 \code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
 \code{"predictive"} (propensity-score-based), \code{"rf"}
-(random forest proximity-based; requires \pkg{ranger}), or
-\code{"rbrl"} (rank-based record linkage).}
+(random forest proximity-based; requires \pkg{ranger}),
+\code{"rbrl"} (rank-based record linkage), or
+\code{"mahalanobis"} (Mahalanobis distance with robust covariance).}
 
 \item{direction}{character. Direction of the linkage attack:
 \code{"forward"} (default) loops over original records and searches in the
@@ -144,10 +147,10 @@ Ignored for \code{"rf"} or when \code{bandwidth} is user-supplied.}
 
 \item{matching}{character. Matching mode: \code{"independent"} (default) scores
 each record independently (classical DBRL), \code{"bijective"} enforces
-one-to-one assignment via the Hungarian algorithm (GDBRL). Bijective
-matching models a stronger attacker who optimizes a global assignment and
-typically yields higher risk estimates. Requires the \pkg{clue} package.
-See Herranz, Nin, Rodriguez & Tassa (2016).}
+one-to-one assignment via the Hungarian algorithm (GDBRL), and \code{"ot"}
+uses entropy-regularized optimal transport (Sinkhorn) for soft global
+assignment producing continuous risk. Bijective matching requires the
+\pkg{clue} package. See Herranz, Nin, Rodriguez & Tassa (2016).}
 
 \item{risk_threshold}{numeric. Threshold for classifying records as "high risk"
 and for the \code{privacy_pass} flag (default 0.1). Records with risk above
@@ -169,6 +172,15 @@ via \code{robustbase::covMcd()} for robust covariance estimation,
 with automatic fallback to \code{MASS::cov.rob()} or classical
 \code{cov()} if MCD fails. If \code{FALSE}, use classical covariance.
 Ignored for other methods.}
+
+\item{ot_epsilon}{numeric or NULL. Regularization strength for OT matching.
+Smaller values produce sharper (more bijective-like) assignments;
+larger values produce smoother (more uniform) risk. If \code{NULL}
+(default), auto-calibrated as \code{median(C[C > 0]) * 0.05}.
+Ignored unless \code{matching = "ot"}.}
+
+\item{ot_max_iter}{integer. Maximum Sinkhorn iterations for OT matching
+(default 100). Ignored unless \code{matching = "ot"}.}
 }
 \value{
 An object of class \code{"recordLinkageRisk"}: a list with components
@@ -189,7 +201,10 @@ assigned by the Hungarian algorithm. In bijective mode,
 \code{risk} and \code{bijective_assigned} reflect the global
 one-to-one assignment, while \code{d_true}, \code{d_min}, and
 \code{d_rank} retain their per-record independent-scoring values
-from the main loop (useful for diagnostics).}
+from the main loop (useful for diagnostics).
+When \code{matching = "ot"}, \code{risk} is the continuous
+transport-weighted risk from the Sinkhorn plan and
+\code{d_rank} is the rank of the true match by transport weight.}
 \item{overall}{list with aggregate statistics including \code{risk_gini}
 (Gini coefficient of risk concentration).}
 \item{var_importance}{named numeric vector of per-variable importance.}
@@ -369,6 +384,34 @@ instead.
 
 Ordinal factors are converted to integer codes (1, 2, 3, ...),
 assuming approximately equal spacing between levels.
+}
+
+\section{OT matching}{
+
+When \code{matching = "ot"}, an entropy-regularized optimal transport
+plan replaces the hard assignment of bijective matching.
+The Sinkhorn-Knopp algorithm computes a transport plan \eqn{P}
+that minimizes
+\deqn{
+\sum_{ij} P_{ij} C_{ij} + \varepsilon \sum_{ij} P_{ij} \log P_{ij}
+}
+subject to marginal constraints, where \eqn{C} is the cost matrix
+from the chosen \code{method} and \eqn{\varepsilon} is the
+regularization strength (\code{ot_epsilon}).
+
+Risk for record \eqn{i} is defined as
+\eqn{P_{i,\text{true}} \times n_{\text{query}}}, where
+\eqn{P_{i,\text{true}}} is the transport weight from query record
+\eqn{i} to its true match. Under uniform random matching this gives
+\eqn{1/n_{\text{search}}} (the same baseline as independent matching).
+
+OT matching produces \emph{continuous} risk scores in \eqn{[0, 1]},
+interpolating between independent matching (smooth) and bijective
+matching (hard assignment). As \eqn{\varepsilon \to 0}, the transport
+plan converges to the Hungarian assignment; as
+\eqn{\varepsilon \to \infty}, it approaches a uniform plan.
+If \code{ot_epsilon = NULL} (default), epsilon is auto-calibrated
+from the cost matrix as \code{median(C[C > 0]) * 0.05}.
 }
 
 \section{Softmax risk weighting}{

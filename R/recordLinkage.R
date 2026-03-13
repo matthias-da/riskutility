@@ -151,6 +151,32 @@
 #' Ordinal factors are converted to integer codes (1, 2, 3, ...),
 #' assuming approximately equal spacing between levels.
 #'
+#' @section OT matching:
+#' When \code{matching = "ot"}, an entropy-regularized optimal transport
+#' plan replaces the hard assignment of bijective matching.
+#' The Sinkhorn-Knopp algorithm computes a transport plan \eqn{P}
+#' that minimizes
+#' \deqn{
+#' \sum_{ij} P_{ij} C_{ij} + \varepsilon \sum_{ij} P_{ij} \log P_{ij}
+#' }
+#' subject to marginal constraints, where \eqn{C} is the cost matrix
+#' from the chosen \code{method} and \eqn{\varepsilon} is the
+#' regularization strength (\code{ot_epsilon}).
+#'
+#' Risk for record \eqn{i} is defined as
+#' \eqn{P_{i,\text{true}} \times n_{\text{query}}}, where
+#' \eqn{P_{i,\text{true}}} is the transport weight from query record
+#' \eqn{i} to its true match. Under uniform random matching this gives
+#' \eqn{1/n_{\text{search}}} (the same baseline as independent matching).
+#'
+#' OT matching produces \emph{continuous} risk scores in \eqn{[0, 1]},
+#' interpolating between independent matching (smooth) and bijective
+#' matching (hard assignment). As \eqn{\varepsilon \to 0}, the transport
+#' plan converges to the Hungarian assignment; as
+#' \eqn{\varepsilon \to \infty}, it approaches a uniform plan.
+#' If \code{ot_epsilon = NULL} (default), epsilon is auto-calibrated
+#' from the cost matrix as \code{median(C[C > 0]) * 0.05}.
+#'
 #' @section Softmax risk weighting:
 #' When \code{risk_weighting = "softmax"}, closer candidates receive higher
 #' attribution probability via:
@@ -193,8 +219,9 @@
 #' @param method character. Linkage method: \code{"deterministic"} (default),
 #'   \code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
 #'   \code{"predictive"} (propensity-score-based), \code{"rf"}
-#'   (random forest proximity-based; requires \pkg{ranger}), or
-#'   \code{"rbrl"} (rank-based record linkage).
+#'   (random forest proximity-based; requires \pkg{ranger}),
+#'   \code{"rbrl"} (rank-based record linkage), or
+#'   \code{"mahalanobis"} (Mahalanobis distance with robust covariance).
 #' @param direction character. Direction of the linkage attack:
 #'   \code{"forward"} (default) loops over original records and searches in the
 #'   anonymized data, answering "how safe is each original individual?";
@@ -258,10 +285,10 @@
 #' @param return_matches logical. If TRUE, returns candidate indices per record (may be memory-heavy).
 #' @param matching character. Matching mode: \code{"independent"} (default) scores
 #'   each record independently (classical DBRL), \code{"bijective"} enforces
-#'   one-to-one assignment via the Hungarian algorithm (GDBRL). Bijective
-#'   matching models a stronger attacker who optimizes a global assignment and
-#'   typically yields higher risk estimates. Requires the \pkg{clue} package.
-#'   See Herranz, Nin, Rodriguez & Tassa (2016).
+#'   one-to-one assignment via the Hungarian algorithm (GDBRL), and \code{"ot"}
+#'   uses entropy-regularized optimal transport (Sinkhorn) for soft global
+#'   assignment producing continuous risk. Bijective matching requires the
+#'   \pkg{clue} package. See Herranz, Nin, Rodriguez & Tassa (2016).
 #' @param risk_threshold numeric. Threshold for classifying records as "high risk"
 #'   and for the \code{privacy_pass} flag (default 0.1). Records with risk above
 #'   this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
@@ -279,6 +306,13 @@
 #'   with automatic fallback to \code{MASS::cov.rob()} or classical
 #'   \code{cov()} if MCD fails. If \code{FALSE}, use classical covariance.
 #'   Ignored for other methods.
+#' @param ot_epsilon numeric or NULL. Regularization strength for OT matching.
+#'   Smaller values produce sharper (more bijective-like) assignments;
+#'   larger values produce smoother (more uniform) risk. If \code{NULL}
+#'   (default), auto-calibrated as \code{median(C[C > 0]) * 0.05}.
+#'   Ignored unless \code{matching = "ot"}.
+#' @param ot_max_iter integer. Maximum Sinkhorn iterations for OT matching
+#'   (default 100). Ignored unless \code{matching = "ot"}.
 #' @param ... additional arguments passed to methods.
 #' @author Roman Mueller and Matthias Templ
 #'
@@ -300,7 +334,10 @@
 #'       \code{risk} and \code{bijective_assigned} reflect the global
 #'       one-to-one assignment, while \code{d_true}, \code{d_min}, and
 #'       \code{d_rank} retain their per-record independent-scoring values
-#'       from the main loop (useful for diagnostics).}
+#'       from the main loop (useful for diagnostics).
+#'       When \code{matching = "ot"}, \code{risk} is the continuous
+#'       transport-weighted risk from the Sinkhorn plan and
+#'       \code{d_rank} is the rank of the true match by transport weight.}
 #'     \item{overall}{list with aggregate statistics including \code{risk_gini}
 #'       (Gini coefficient of risk concentration).}
 #'     \item{var_importance}{named numeric vector of per-variable importance.}
@@ -455,11 +492,13 @@ recordLinkage.default <- function(X,
                                   pred_model = c("logit", "rf"),
                                   pred_se = TRUE,
                                   return_matches = FALSE,
-                                  matching = c("independent", "bijective"),
+                                  matching = c("independent", "bijective", "ot"),
                                   risk_threshold = 0.1,
                                   n_trees = 500L,
                                   rf_global = FALSE,
                                   robust = TRUE,
+                                  ot_epsilon = NULL,
+                                  ot_max_iter = 100L,
                                   ...) {
 
     method <- match.arg(method)
@@ -481,6 +520,12 @@ recordLinkage.default <- function(X,
                     "'strategy' applies only to independent-scoring diagnostics.")
         if (risk_weighting != "uniform")
             message("Note: bijective matching produces binary risk (0/1); ",
+                    "'risk_weighting' applies only to independent-scoring diagnostics.")
+    }
+
+    if (matching == "ot") {
+        if (risk_weighting != "uniform")
+            message("Note: matching = 'ot' computes risk from the transport plan; ",
                     "'risk_weighting' applies only to independent-scoring diagnostics.")
     }
 
@@ -689,7 +734,7 @@ recordLinkage.default <- function(X,
     d_rank <- rep(NA_integer_, n_query)
     matches <- if (isTRUE(return_matches)) vector("list", n_query) else NULL
     # Bijective matching: cache full score vectors per record
-    score_cache <- if (matching == "bijective") vector("list", n_query) else NULL
+    score_cache <- if (matching %in% c("bijective", "ot")) vector("list", n_query) else NULL
     # Per-variable distance accumulator (deterministic only)
     var_dist_acc <- if (method == "deterministic") {
         setNames(numeric(length(key)), key)
@@ -1244,6 +1289,15 @@ recordLinkage.default <- function(X,
         }
     }
 
+    if (matching == "ot") {
+        ot_res <- .solve_ot(score_cache, true_idx, n_query,
+                             split_search, blk_query,
+                             epsilon = ot_epsilon, max_iter = ot_max_iter)
+        risk <- ot_res$risk
+        d_rank <- ot_res$d_rank
+        transport_plans <- ot_res$transport_plans
+    }
+
     # risk_band ----
     risk_band <- cut(risk,
         breaks = c(-Inf, 0.05, 0.1, 0.2, 0.5, 1 - .Machine$double.eps, Inf),
@@ -1367,10 +1421,14 @@ recordLinkage.default <- function(X,
             risk_threshold = risk_threshold,
             n_trees = if (method == "rf") n_trees else NULL,
             rf_global = if (method == "rf") rf_global else NULL,
-            robust = if (method == "mahalanobis") robust else NULL
+            robust = if (method == "mahalanobis") robust else NULL,
+            ot_epsilon = if (matching == "ot") ot_epsilon else NULL,
+            ot_max_iter = if (matching == "ot") ot_max_iter else NULL
         )
     )
     if (isTRUE(return_matches)) out$matches <- matches
+    if (matching == "ot" && exists("transport_plans"))
+        out$transport_plans <- transport_plans
     if (!is.null(fs_params)) out$fs_params <- fs_params
     if (method == "predictive" && !is.null(prop_fit)) {
         out$propensity_info <- list(
