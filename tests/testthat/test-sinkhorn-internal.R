@@ -216,3 +216,108 @@ test_that(".solve_ot risk is higher when OT assigns to true match", {
   expect_true(res$risk[1] > res$risk[2])
   expect_true(res$risk[1] > res$risk[3])
 })
+
+# --- Additional edge case tests ---
+
+test_that(".sinkhorn handles 1x1 cost matrix", {
+  C <- matrix(0.5, 1, 1)
+  P <- .sinkhorn(C, epsilon = 0.1)
+  expect_equal(dim(P), c(1, 1))
+  expect_equal(P[1, 1], 1, tolerance = 1e-6)
+})
+
+test_that(".sinkhorn handles all-zero cost matrix", {
+  C <- matrix(0, 4, 4)
+  P <- .sinkhorn(C, epsilon = 0.1)
+  expect_equal(dim(P), c(4, 4))
+  expect_true(all(is.finite(P)))
+  # All entries should be uniform: 1/16
+  expect_true(all(abs(P - 1/16) < 1e-4))
+})
+
+test_that(".sinkhorn handles constant cost matrix", {
+  C <- matrix(0.5, 4, 4)
+  P <- .sinkhorn(C, epsilon = 0.1)
+  expect_true(all(is.finite(P)))
+  # All entries should be uniform: 1/16
+  expect_true(all(abs(P - 1/16) < 1e-4))
+})
+
+test_that(".sinkhorn with epsilon = 0 falls back to 0.01", {
+  C <- matrix(c(0, 1, 1, 0), 2, 2)
+  expect_silent(P <- .sinkhorn(C, epsilon = 0))
+  expect_true(all(is.finite(P)))
+  expect_true(all(P >= 0))
+})
+
+test_that(".sinkhorn with negative epsilon falls back to 0.01", {
+  C <- matrix(c(0, 1, 1, 0), 2, 2)
+  expect_silent(P <- .sinkhorn(C, epsilon = -1))
+  expect_true(all(is.finite(P)))
+})
+
+test_that(".sinkhorn warns on very small epsilon causing non-finite values", {
+  # Matrix where row-shift still leaves cost differences that cause underflow
+  C <- matrix(c(1, 2, 3, 1.5, 2.5, 3.5, 2, 3, 4), 3, 3)
+  expect_warning(.sinkhorn(C, epsilon = 1e-300), "non-finite")
+})
+
+test_that(".sinkhorn handles 1x5 rectangular matrix", {
+  C <- matrix(c(0.1, 0.5, 0.9, 0.3, 0.7), 1, 5)
+  P <- .sinkhorn(C, epsilon = 0.1)
+  expect_equal(dim(P), c(1, 5))
+  expect_true(all(is.finite(P)))
+  expect_equal(sum(P), 1, tolerance = 1e-4)  # single row sums to 1/1 = 1
+})
+
+test_that(".solve_ot handles nq > ns (more query than search)", {
+  score_cache <- list(
+    list(cand = 1:2, scores = c(0.0, 0.5), maximize = FALSE),
+    list(cand = 1:2, scores = c(0.6, 0.0), maximize = FALSE),
+    list(cand = 1:2, scores = c(0.3, 0.4), maximize = FALSE)
+  )
+  true_idx <- c(1, 2, NA)
+  split_search <- list(all = 1:2)
+  blk_query <- rep("all", 3)
+
+  res <- .solve_ot(score_cache, true_idx, 3L,
+                    split_search, blk_query, epsilon = 0.1)
+  expect_equal(length(res$risk), 3)
+  expect_true(all(is.finite(res$risk[1:2])))
+  # Record 3 has NA true_idx -> risk stays 0
+  expect_equal(res$risk[3], 0)
+})
+
+test_that(".solve_ot handles NULL score_cache entries", {
+  score_cache <- list(
+    list(cand = 1:3, scores = c(0.0, 0.5, 0.8), maximize = FALSE),
+    NULL,  # missing entry
+    list(cand = 1:3, scores = c(0.9, 0.8, 0.0), maximize = FALSE)
+  )
+  true_idx <- 1:3
+  split_search <- list(all = 1:3)
+  blk_query <- rep("all", 3)
+
+  res <- .solve_ot(score_cache, true_idx, 3L,
+                    split_search, blk_query, epsilon = 0.1)
+  expect_equal(length(res$risk), 3)
+  expect_true(all(is.finite(res$risk)))
+})
+
+test_that(".solve_ot analytical verification: uniform plan gives risk 1/ns", {
+  # With very large epsilon, plan approaches uniform
+  # For 3x3: P[i,j] ≈ 1/9, risk = P[i,true] * 3 ≈ 1/3
+  score_cache <- list(
+    list(cand = 1:3, scores = c(0.1, 0.2, 0.3), maximize = FALSE),
+    list(cand = 1:3, scores = c(0.2, 0.1, 0.3), maximize = FALSE),
+    list(cand = 1:3, scores = c(0.3, 0.2, 0.1), maximize = FALSE)
+  )
+  true_idx <- 1:3
+  split_search <- list(all = 1:3)
+  blk_query <- rep("all", 3)
+
+  res <- .solve_ot(score_cache, true_idx, 3L,
+                    split_search, blk_query, epsilon = 1000)
+  # With huge epsilon, all risks should approach 1/3
+  expect_true(all(abs(res$risk - 1/3) < 0.05))
+})

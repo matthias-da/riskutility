@@ -1,15 +1,18 @@
 #' Sinkhorn Optimal Transport Solver
 #'
 #' Computes the entropy-regularized optimal transport plan between
-#' two discrete distributions using the Sinkhorn-Knopp algorithm.
+#' two discrete distributions using the Sinkhorn-Knopp algorithm
+#' (Cuturi, 2013).
 #'
 #' Given a cost matrix \eqn{C} (n_orig x n_anon) and regularization
 #' \eqn{\varepsilon > 0}, the transport plan \eqn{P} minimizes
 #' \deqn{
 #' \sum_{ij} P_{ij} C_{ij} + \varepsilon \sum_{ij} P_{ij} \log P_{ij}
 #' }
-#' subject to marginal constraints. With \eqn{\varepsilon \to 0},
-#' the solution approaches the Hungarian (LSAP) assignment.
+#' subject to marginal constraints (rows sum to \eqn{1/n_{orig}},
+#' columns sum to \eqn{1/n_{anon}}).
+#' With \eqn{\varepsilon \to 0}, the solution approaches the
+#' Hungarian (LSAP) assignment.
 #'
 #' Supports rectangular matrices (unequal dataset sizes).
 #' Marginals default to uniform: \eqn{r_i = 1/n_{orig}},
@@ -23,8 +26,10 @@
 #' @param max_iter integer. Maximum Sinkhorn iterations (default 100).
 #' @param tol numeric. Convergence tolerance on marginal error (default 1e-8).
 #' @return numeric matrix. Transport plan P of same dimensions as C.
-#'   Entry \eqn{P_{ij}} is the transport weight from original i to anonymized j.
+#'   Entry \eqn{P_{ij}} is the transport weight (fraction of record i's
+#'   mass shipped to record j; higher weight = stronger association).
 #'   Row sums = 1/n_orig, column sums = 1/n_anon.
+#' @seealso \code{\link{.solve_ot}}, \code{\link{recordLinkage}}
 #' @keywords internal
 .sinkhorn <- function(C, epsilon = NULL, max_iter = 100L, tol = 1e-8) {
   nr <- nrow(C)
@@ -39,32 +44,48 @@
 
   # Uniform marginals
   r <- rep(1 / nr, nr)
-  cc <- rep(1 / nc, nc)
+  cc <- rep(1 / nc, nc)  # 'cc' avoids shadowing base::c()
 
   # Gibbs kernel: K = exp(-C / epsilon)
-  # Stabilize by subtracting row-wise min to avoid underflow
+  # Row-wise shift stabilizes exp() against underflow; the shift is
+  # absorbed into the u scaling vectors and does not change the final
+  # transport plan P = diag(u) %*% K %*% diag(v).
   C_shifted <- C - apply(C, 1, min)
   K <- exp(-C_shifted / epsilon)
+
+  # Pre-compute transpose to avoid repeated allocation in the loop
+  Kt <- t(K)
 
   # Initialize scaling vectors
   u <- rep(1, nr)
   v <- rep(1, nc)
 
+  had_nonfinite <- FALSE
   for (iter in seq_len(max_iter)) {
-    u <- r / (K %*% v)
-    v <- cc / (t(K) %*% u)
+    Kv <- K %*% v
+    u <- r / Kv
+    v <- cc / (Kt %*% u)
 
-    # Replace non-finite values (numerical instability)
-    u[!is.finite(u)] <- 1e-10
-    v[!is.finite(v)] <- 1e-10
+    # Replace non-finite values (numerical instability from small epsilon)
+    if (any(!is.finite(u)) || any(!is.finite(v))) {
+      had_nonfinite <- TRUE
+      u[!is.finite(u)] <- 1e-10
+      v[!is.finite(v)] <- 1e-10
+    }
 
-    # Check convergence: marginal error
+    # Check convergence: marginal error (reuses cached Kv if u unchanged,
+    # but u was just updated so we recompute)
     row_err <- max(abs(u * (K %*% v) - r))
     if (row_err < tol) break
   }
 
-  # Transport plan
-  P <- diag(as.numeric(u)) %*% K %*% diag(as.numeric(v))
+  if (had_nonfinite)
+    warning("Sinkhorn encountered non-finite scaling vectors (epsilon may ",
+            "be too small). Consider increasing ot_epsilon.", call. = FALSE)
+
+  # Transport plan: P = diag(u) %*% K %*% diag(v), computed memory-efficiently
+  # via element-wise multiplication instead of creating n×n diagonal matrices
+  P <- sweep(sweep(K, 1, as.numeric(u), `*`), 2, as.numeric(v), `*`)
 
   # Ensure non-negative (numerical cleanup)
   P[P < 0] <- 0
@@ -84,7 +105,8 @@
 #' where \eqn{P_{i, \text{true}}} is the transport weight from query
 #' record i to its true match in the search data. Under uniform random
 #' matching, this gives risk = 1/n_search (same baseline as independent
-#' matching).
+#' matching). When \eqn{n_{query} > n_{search}}, the raw product can
+#' exceed 1 and is capped.
 #'
 #' @param score_cache list of length n_query. Each element is
 #'   \code{list(cand, scores, maximize)}.
@@ -96,6 +118,7 @@
 #' @param max_iter integer. Max Sinkhorn iterations (default 100).
 #' @return list with \code{risk} (numeric), \code{d_rank} (integer),
 #'   \code{transport_plans} (list of matrices per block).
+#' @seealso \code{\link{.sinkhorn}}, \code{\link{.solve_bijective}}
 #' @keywords internal
 .solve_ot <- function(score_cache, true_idx, n_query,
                        split_search, blk_query,
@@ -123,16 +146,22 @@
       }
     }
 
-    # Build cost matrix: rows = query records, cols = search records
-    # Use worst-case score as fill for missing entries
+    # Collect all scores for global max/fill computation
     all_scores <- unlist(lapply(q_idx, function(qi) {
       if (!is.null(score_cache[[qi]])) score_cache[[qi]]$scores
     }))
-    fill_val <- if (length(all_scores) > 0) {
-      if (maximize) min(all_scores) else max(all_scores)
-    } else 1
 
-    cost <- matrix(fill_val, nrow = nq, ncol = ns)
+    if (maximize) {
+      # Global max for consistent maximize→minimize transform across all rows
+      global_max <- if (length(all_scores) > 0) max(all_scores) else 1
+      # Fill: highest cost (= worst match) for missing entries
+      fill_cost <- global_max - (if (length(all_scores) > 0) min(all_scores) else 0)
+    } else {
+      # Fill: highest observed distance for missing entries
+      fill_cost <- if (length(all_scores) > 0) max(all_scores) else 1
+    }
+
+    cost <- matrix(fill_cost, nrow = nq, ncol = ns)
 
     for (r in seq_along(q_idx)) {
       qi <- q_idx[r]
@@ -144,8 +173,8 @@
       if (!any(valid)) next
 
       if (maximize) {
-        # Transform to minimization: cost = max - score
-        cost[r, col_pos[valid]] <- max(sc$scores) - sc$scores[valid]
+        # Transform to minimization using global max for consistent scale
+        cost[r, col_pos[valid]] <- global_max - sc$scores[valid]
       } else {
         cost[r, col_pos[valid]] <- sc$scores[valid]
       }
@@ -172,7 +201,7 @@
     }
   }
 
-  # Cap risk at 1
+  # Cap risk at 1 (can exceed 1 when n_query > n_search)
   risk_out <- pmin(risk_out, 1)
 
   list(risk = risk_out, d_rank = d_rank_out,

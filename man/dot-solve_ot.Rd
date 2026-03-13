@@ -45,6 +45,10 @@ Risk for record i is defined as:
 where \eqn{P_{i, \text{true}}} is the transport weight from query
 record i to its true match in the search data. Under uniform random
 matching, this gives risk = 1/n_search (same baseline as independent
-matching).
+matching). When \eqn{n_{query} > n_{search}}, the raw product can
+exceed 1 and is capped.
+}
+\seealso{
+\code{\link{.sinkhorn}}, \code{\link{.solve_bijective}}
 }
 \keyword{internal}

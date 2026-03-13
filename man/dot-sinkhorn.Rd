@@ -20,12 +20,14 @@ larger = smoother (closer to uniform).}
 }
 \value{
 numeric matrix. Transport plan P of same dimensions as C.
-Entry \eqn{P_{ij}} is the transport weight from original i to anonymized j.
+Entry \eqn{P_{ij}} is the transport weight (fraction of record i's
+mass shipped to record j; higher weight = stronger association).
 Row sums = 1/n_orig, column sums = 1/n_anon.
 }
 \description{
 Computes the entropy-regularized optimal transport plan between
-two discrete distributions using the Sinkhorn-Knopp algorithm.
+two discrete distributions using the Sinkhorn-Knopp algorithm
+(Cuturi, 2013).
 }
 \details{
 Given a cost matrix \eqn{C} (n_orig x n_anon) and regularization
@@ -33,11 +35,16 @@ Given a cost matrix \eqn{C} (n_orig x n_anon) and regularization
 \deqn{
 \sum_{ij} P_{ij} C_{ij} + \varepsilon \sum_{ij} P_{ij} \log P_{ij}
 }
-subject to marginal constraints. With \eqn{\varepsilon \to 0},
-the solution approaches the Hungarian (LSAP) assignment.
+subject to marginal constraints (rows sum to \eqn{1/n_{orig}},
+columns sum to \eqn{1/n_{anon}}).
+With \eqn{\varepsilon \to 0}, the solution approaches the
+Hungarian (LSAP) assignment.
 
 Supports rectangular matrices (unequal dataset sizes).
 Marginals default to uniform: \eqn{r_i = 1/n_{orig}},
 \eqn{c_j = 1/n_{anon}}.
+}
+\seealso{
+\code{\link{.solve_ot}}, \code{\link{recordLinkage}}
 }
 \keyword{internal}

@@ -204,12 +204,22 @@ one-to-one assignment, while \code{d_true}, \code{d_min}, and
 from the main loop (useful for diagnostics).
 When \code{matching = "ot"}, \code{risk} is the continuous
 transport-weighted risk from the Sinkhorn plan and
-\code{d_rank} is the rank of the true match by transport weight.}
+\code{d_rank} is the rank of the true match by transport weight.
+In OT mode, \code{cand_n}, \code{true_in_set}, \code{d_true},
+and \code{d_min} retain their per-record independent-scoring
+values from the main loop (useful for diagnostics).
+When \code{return_matches = TRUE} with OT, the returned
+\code{matches} also reflect independent scoring; use
+\code{transport_plans} for the OT assignment.}
 \item{overall}{list with aggregate statistics including \code{risk_gini}
 (Gini coefficient of risk concentration).}
 \item{var_importance}{named numeric vector of per-variable importance.}
 \item{direction}{character, \code{"forward"} or \code{"reverse"}.}
 \item{matches}{(optional) list of integer vectors with candidate indices.}
+\item{transport_plans}{(only when \code{matching = "ot"}) list of
+transport plan matrices per block. Each matrix has dimensions
+n_query_in_block x n_search_in_block, with rows summing to
+\code{1/n_query} and columns to \code{1/n_search}.}
 }
 When \code{direction = "forward"}, \code{per_record} has one row per
 original record; when \code{"reverse"}, one row per anonymized record.
@@ -406,12 +416,34 @@ Risk for record \eqn{i} is defined as
 \eqn{1/n_{\text{search}}} (the same baseline as independent matching).
 
 OT matching produces \emph{continuous} risk scores in \eqn{[0, 1]},
-interpolating between independent matching (smooth) and bijective
-matching (hard assignment). As \eqn{\varepsilon \to 0}, the transport
+interpolating between bijective matching (hard one-to-one assignment)
+and uniform random matching. As \eqn{\varepsilon \to 0}, the transport
 plan converges to the Hungarian assignment; as
-\eqn{\varepsilon \to \infty}, it approaches a uniform plan.
+\eqn{\varepsilon \to \infty}, it approaches a uniform plan where
+every record gets equal risk \eqn{1/n_{\text{search}}}.
 If \code{ot_epsilon = NULL} (default), epsilon is auto-calibrated
 from the cost matrix as \code{median(C[C > 0]) * 0.05}.
+Note that the auto-calibrated epsilon depends on the cost scale,
+which varies across methods (e.g., Gower distances in \eqn{[0,1]}
+vs.\ probabilistic log-likelihood ratios). Typical useful values
+range from 0.001 (nearly deterministic) to 1 (nearly uniform).
+
+The OT attacker model represents an adversary who performs a
+global soft assignment, hedging uncertainty across multiple
+candidate matches via a maximum-entropy prior over assignments.
+This is appropriate when the attacker is uncertain about the
+true one-to-one mapping but still optimizes globally.
+The resulting risk is a \emph{relative risk index} proportional
+to the attacker's confidence, not a re-identification probability
+in the frequentist sense.
+
+\strong{When to use which matching mode:}
+Use \code{"independent"} for classical per-record risk (DBRL).
+Use \code{"bijective"} when the attacker is known to perform
+a one-to-one assignment (GDBRL; binary risk).
+Use \code{"ot"} for a global assignment that yields continuous
+risk, or to explore the sensitivity of risk to the assignment
+model via the \code{ot_epsilon} parameter.
 }
 
 \section{Softmax risk weighting}{
@@ -516,6 +548,11 @@ res5 <- recordLinkage(x, x_anon, key = c("age","sex","region"),
 print(res5)
 plot(res5, which = 4)  # propensity distributions
 
+# Optimal transport matching (continuous risk via Sinkhorn)
+res_ot <- recordLinkage(x, x_anon, key = c("age","sex","region"),
+                        matching = "ot")
+print(res_ot)
+
 # Plot risk distribution
 plot(res1)
 plot(res1, which = 2)
@@ -543,6 +580,9 @@ Deliverable MI-3/D2). Unpublished technical report.
 Herranz, J., Nin, J., Rodriguez, P., & Tassa, T. (2016). Revisiting
 distance-based record linkage for privacy-preserving release of statistical
 datasets. Data & Knowledge Engineering, 100, 78-93.
+
+Cuturi, M. (2013). Sinkhorn Distances: Lightspeed Computation of Optimal
+Transport. Advances in Neural Information Processing Systems, 26.
 }
 \seealso{
 \code{\link{individual_risk}}, \code{\link{dcr}},
