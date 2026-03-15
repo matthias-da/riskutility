@@ -1,6 +1,7 @@
 # tests/testthat/test-recordLinkage-embedding.R
 
 test_that(".ae_preprocess handles numeric data", {
+  skip_if_not_installed("torch")
   df <- data.frame(a = c(0, 5, 10), b = c(100, 200, 300))
   res <- .ae_preprocess(df, key = c("a", "b"), type = NULL)
 
@@ -15,6 +16,7 @@ test_that(".ae_preprocess handles numeric data", {
 })
 
 test_that(".ae_preprocess handles categorical data", {
+  skip_if_not_installed("torch")
   df <- data.frame(x = c("A", "B", "C", "A"), stringsAsFactors = FALSE)
   res <- .ae_preprocess(df, key = "x", type = NULL)
 
@@ -29,6 +31,7 @@ test_that(".ae_preprocess handles categorical data", {
 })
 
 test_that(".ae_preprocess handles mixed data", {
+  skip_if_not_installed("torch")
   df <- data.frame(a = c(1, 2, 3), b = c("X", "Y", "X"),
                    stringsAsFactors = FALSE)
   res <- .ae_preprocess(df, key = c("a", "b"), type = NULL)
@@ -40,6 +43,7 @@ test_that(".ae_preprocess handles mixed data", {
 })
 
 test_that(".ae_preprocess maps unseen levels to UNK", {
+  skip_if_not_installed("torch")
   df_train <- data.frame(x = c("A", "B"), stringsAsFactors = FALSE)
   prep_train <- .ae_preprocess(df_train, key = "x", type = NULL)
 
@@ -52,6 +56,7 @@ test_that(".ae_preprocess maps unseen levels to UNK", {
 })
 
 test_that(".ae_preprocess handles constant numeric column", {
+  skip_if_not_installed("torch")
   df <- data.frame(a = c(5, 5, 5), b = c(1, 2, 3))
   res <- .ae_preprocess(df, key = c("a", "b"), type = NULL)
 
