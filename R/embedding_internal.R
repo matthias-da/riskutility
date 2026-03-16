@@ -481,3 +481,85 @@
 
   list(dist_mat = cross_dist, threshold = threshold)
 }
+
+#' Permutation-based variable importance in latent space
+#'
+#' For each variable, shuffles its values in the data, re-encodes, and measures
+#' the mean Euclidean shift in the latent space compared to the original
+#' embeddings. Normalized to sum to 1.
+#'
+#' @param model trained torch nn_module
+#' @param data data.frame
+#' @param prep preprocessing metadata
+#' @param key character vector of column names
+#' @param type variable types (or NULL)
+#' @param emb_original numeric matrix of original embeddings (n x latent_dim)
+#' @return named numeric vector of importance scores summing to 1
+#' @keywords internal
+.ae_var_importance <- function(model, data, prep, key, type = NULL,
+                               emb_original = NULL) {
+  if (is.null(emb_original)) {
+    emb_original <- .ae_encode(model, data, prep, key, type)
+  }
+  n <- nrow(data)
+  importance <- setNames(numeric(length(key)), key)
+
+  for (v in key) {
+    shuffled <- data
+    shuffled[[v]] <- data[[v]][sample.int(n)]
+    emb_shuffled <- .ae_encode(model, shuffled, prep, key, type)
+    # Mean Euclidean shift
+    shifts <- sqrt(rowSums((emb_original - emb_shuffled)^2))
+    importance[v] <- mean(shifts)
+  }
+
+  # Normalize to sum to 1 (avoid division by zero)
+  total <- sum(importance)
+  if (total > 0) importance <- importance / total
+
+  importance
+}
+
+#' Orchestrate embedding-based linkage for one block
+#'
+#' Preprocesses, trains autoencoder, encodes query and search data,
+#' computes normalized distances, and variable importance.
+#'
+#' @param query data.frame of query records
+#' @param search data.frame of search records
+#' @param key character vector of column names
+#' @param type variable types (or NULL)
+#' @param latent_dim integer or NULL (auto)
+#' @param epochs integer, max training epochs
+#' @return list with:
+#'   \describe{
+#'     \item{dist_mat}{numeric matrix (n_q x n_s) of normalized distances}
+#'     \item{var_importance}{named numeric vector}
+#'     \item{threshold}{numeric, distance normalization threshold}
+#'     \item{latent_dim}{integer, latent dimension used}
+#'   }
+#' @keywords internal
+.embedding_linkage_block <- function(query, search, key, type = NULL,
+                                     latent_dim = NULL, epochs = 50L) {
+  # Train on query data only (attacker model)
+  trained <- .ae_train(query, key, type,
+                       latent_dim = latent_dim, epochs = epochs)
+
+  # Encode both datasets
+  emb_query <- .ae_encode(trained$model, query, trained$prep, key, type)
+  emb_search <- .ae_encode(trained$model, search, trained$prep, key, type)
+
+  # Distances
+  dist_res <- .ae_distance(emb_query, emb_search)
+
+  # Variable importance
+  var_imp <- .ae_var_importance(trained$model, query, trained$prep, key, type,
+                                emb_original = emb_query)
+
+  list(
+    dist_mat = dist_res$dist_mat,
+    var_importance = var_imp,
+    threshold = dist_res$threshold,
+    latent_dim = trained$latent_dim
+  )
+}

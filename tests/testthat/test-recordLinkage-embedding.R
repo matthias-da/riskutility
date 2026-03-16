@@ -198,3 +198,34 @@ test_that(".ae_distance returns normalized distances", {
   expect_true(all(res$dist_mat <= 1))
   expect_true(res$threshold > 0)
 })
+
+test_that(".ae_var_importance returns valid importance scores", {
+  skip_if_not_installed("torch")
+  set.seed(42)
+  df <- data.frame(a = rnorm(30), b = sample(letters[1:3], 30, TRUE),
+                   stringsAsFactors = FALSE)
+  trained <- .ae_train(df, key = c("a", "b"), latent_dim = 2L, epochs = 5L)
+  emb <- .ae_encode(trained$model, df, trained$prep, key = c("a", "b"))
+  vi <- .ae_var_importance(trained$model, df, trained$prep,
+                           key = c("a", "b"), emb_original = emb)
+
+  expect_equal(names(vi), c("a", "b"))
+  expect_true(all(vi >= 0))
+  expect_equal(sum(vi), 1, tolerance = 1e-10)
+})
+
+test_that(".embedding_linkage_block returns expected structure", {
+  skip_if_not_installed("torch")
+  set.seed(42)
+  X <- data.frame(a = rnorm(25), b = rnorm(25))
+  Y <- data.frame(a = rnorm(25), b = rnorm(25))
+  res <- .embedding_linkage_block(X, Y, key = c("a", "b"), epochs = 3L)
+
+  expect_equal(nrow(res$dist_mat), 25)
+  expect_equal(ncol(res$dist_mat), 25)
+  expect_true(all(res$dist_mat >= 0))
+  expect_true(all(res$dist_mat <= 1))
+  expect_true(is.numeric(res$var_importance))
+  expect_true(res$threshold > 0)
+  expect_true(is.integer(res$latent_dim))
+})
