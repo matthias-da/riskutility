@@ -154,3 +154,48 @@ test_that(".ae_train is reproducible with set.seed", {
   w2 <- as.numeric(res2$model$enc1$weight$cpu())
   expect_equal(w1, w2, tolerance = 1e-6)
 })
+
+test_that(".ae_encode returns correct dimensions", {
+  skip_if_not_installed("torch")
+  set.seed(42)
+  df <- data.frame(a = rnorm(30), b = rnorm(30))
+  trained <- .ae_train(df, key = c("a", "b"), latent_dim = 3L, epochs = 3L)
+
+  emb <- .ae_encode(trained$model, df, trained$prep,
+                    key = c("a", "b"))
+  expect_equal(nrow(emb), 30)
+  expect_equal(ncol(emb), 3)
+  expect_true(all(is.finite(emb)))
+})
+
+test_that(".ae_encode handles unseen categorical levels", {
+  skip_if_not_installed("torch")
+  set.seed(42)
+  df_train <- data.frame(a = 1:20,
+                         b = rep(c("X", "Y"), 10),
+                         stringsAsFactors = FALSE)
+  trained <- .ae_train(df_train, key = c("a", "b"),
+                       latent_dim = 2L, epochs = 3L)
+
+  df_new <- data.frame(a = 1:5,
+                       b = c("X", "Y", "Z", "X", "W"),  # Z, W unseen
+                       stringsAsFactors = FALSE)
+  emb <- .ae_encode(trained$model, df_new, trained$prep,
+                    key = c("a", "b"))
+  expect_equal(nrow(emb), 5)
+  expect_true(all(is.finite(emb)))
+})
+
+test_that(".ae_distance returns normalized distances", {
+  skip_if_not_installed("torch")
+  set.seed(42)
+  emb_q <- matrix(rnorm(20), 10, 2)
+  emb_s <- matrix(rnorm(14), 7, 2)
+  res <- .ae_distance(emb_q, emb_s)
+
+  expect_equal(nrow(res$dist_mat), 10)
+  expect_equal(ncol(res$dist_mat), 7)
+  expect_true(all(res$dist_mat >= 0))
+  expect_true(all(res$dist_mat <= 1))
+  expect_true(res$threshold > 0)
+})

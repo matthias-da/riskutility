@@ -387,3 +387,91 @@
     latent_dim = latent_dim
   )
 }
+
+#' Encode data through trained autoencoder
+#'
+#' Passes data through the encoder portion of the trained autoencoder,
+#' returning an n x latent_dim embedding matrix.
+#'
+#' @param model trained torch nn_module from .ae_train()
+#' @param data data.frame to encode
+#' @param prep preprocessing metadata from .ae_preprocess() (training-time)
+#' @param key character vector of column names
+#' @param type named character vector of variable types (or NULL)
+#' @return numeric matrix (n x latent_dim)
+#' @keywords internal
+.ae_encode <- function(model, data, prep, key, type = NULL) {
+  # Preprocess with training-time mappings
+  new_prep <- .ae_preprocess(data, key, type,
+                             cat_maps = prep$cat_maps,
+                             num_ranges = prep$num_ranges)
+
+  num_t <- if (!is.null(new_prep$num_mat)) {
+    torch::torch_tensor(new_prep$num_mat, dtype = torch::torch_float())
+  } else {
+    NULL
+  }
+  cat_t <- lapply(new_prep$cat_idx, function(idx) {
+    torch::torch_tensor(idx, dtype = torch::torch_long())
+  })
+
+  model$eval()
+  emb <- torch::with_no_grad({
+    model$encode(num_t, cat_t)
+  })
+
+  as.matrix(emb$cpu())
+}
+
+#' Compute normalized Euclidean distances in latent space
+#'
+#' Computes pairwise Euclidean distances between query and search embeddings,
+#' normalized to [0,1] using the 97.5th percentile of within-query distances
+#' (with fallback to max for small datasets).
+#'
+#' @param emb_query numeric matrix (n_q x latent_dim)
+#' @param emb_search numeric matrix (n_s x latent_dim)
+#' @return list with:
+#'   \describe{
+#'     \item{dist_mat}{numeric matrix (n_q x n_s) of normalized distances}
+#'     \item{threshold}{numeric, normalization threshold used}
+#'   }
+#' @keywords internal
+.ae_distance <- function(emb_query, emb_search) {
+  n_q <- nrow(emb_query)
+  n_s <- nrow(emb_search)
+
+  # Cross-distance: ||q_i - s_j||^2 = ||q_i||^2 + ||s_j||^2 - 2*q_i.s_j
+  q_sq <- rowSums(emb_query^2)
+  s_sq <- rowSums(emb_search^2)
+  cross_sq <- outer(q_sq, s_sq, "+") - 2 * tcrossprod(emb_query, emb_search)
+  cross_sq[cross_sq < 0] <- 0  # numerical cleanup
+  cross_dist <- sqrt(cross_sq)
+
+  # Within-query distances for threshold
+  if (n_q > 1) {
+    q_sq_mat <- outer(q_sq, q_sq, "+") - 2 * tcrossprod(emb_query)
+    q_sq_mat[q_sq_mat < 0] <- 0
+    q_dist <- sqrt(q_sq_mat)
+    q_upper <- q_dist[upper.tri(q_dist)]
+    if (length(q_upper) > 0 && any(q_upper > 0)) {
+      if (n_q < 40) {
+        threshold <- max(q_upper)
+      } else {
+        threshold <- as.numeric(stats::quantile(q_upper, 0.975))
+      }
+    } else {
+      threshold <- 1
+    }
+  } else {
+    threshold <- if (max(cross_dist) > 0) max(cross_dist) else 1
+  }
+
+  if (threshold <= 0) threshold <- 1
+
+  # Normalize and clamp
+  cross_dist <- cross_dist / threshold
+  cross_dist <- pmin(cross_dist, 1)
+
+  list(dist_mat = cross_dist, threshold = threshold)
+}
