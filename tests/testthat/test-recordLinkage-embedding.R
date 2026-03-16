@@ -231,3 +231,237 @@ test_that(".embedding_linkage_block returns expected structure", {
   expect_true(res$threshold > 0)
   expect_true(is.integer(res$latent_dim))
 })
+
+# --- Integration tests via recordLinkage() ---
+
+test_that("recordLinkage(method = 'embedding') basic numeric", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(30), b = rnorm(30))
+  Y <- data.frame(a = rnorm(30), b = rnorm(30))
+  res <- recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                       emb_epochs = 5L)
+
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_equal(nrow(res$per_record), 30)
+  expect_true(all(res$per_record$risk >= 0))
+  expect_true(all(res$per_record$risk <= 1))
+  expect_equal(res$settings$matching, "independent")
+})
+
+test_that("recordLinkage(method = 'embedding') all-categorical", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(
+    sex = sample(c("M", "F"), 30, TRUE),
+    edu = sample(c("low", "mid", "high"), 30, TRUE),
+    stringsAsFactors = FALSE
+  )
+  Y <- data.frame(
+    sex = sample(c("M", "F"), 30, TRUE),
+    edu = sample(c("low", "mid", "high"), 30, TRUE),
+    stringsAsFactors = FALSE
+  )
+  res <- recordLinkage(X, Y, key = c("sex", "edu"), method = "embedding",
+                       emb_epochs = 5L)
+
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_true(all(is.finite(res$per_record$risk)))
+})
+
+test_that("recordLinkage(method = 'embedding') mixed data", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(30),
+                  b = sample(c("X", "Y", "Z"), 30, TRUE),
+                  stringsAsFactors = FALSE)
+  Y <- data.frame(a = rnorm(30),
+                  b = sample(c("X", "Y", "Z"), 30, TRUE),
+                  stringsAsFactors = FALSE)
+  res <- recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                       emb_epochs = 5L)
+
+  expect_s3_class(res, "recordLinkageRisk")
+})
+
+test_that("recordLinkage(method = 'embedding') near-copy detection", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(20), b = rnorm(20))
+  Y <- X + rnorm(40, 0, 0.01)  # near-copies
+  res <- recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                       truth = "row", emb_epochs = 10L)
+
+  expect_true(res$overall$mean_risk > 0.1)
+})
+
+test_that("recordLinkage(method = 'embedding') bijective matching", {
+  skip_if_not_installed("torch")
+  skip_if_not_installed("clue")
+  set.seed(1)
+  X <- data.frame(a = rnorm(20), b = rnorm(20))
+  Y <- data.frame(a = rnorm(20), b = rnorm(20))
+  res <- recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                       matching = "bijective", emb_epochs = 5L)
+
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_true(all(res$per_record$risk %in% c(0, 1)))
+})
+
+test_that("recordLinkage(method = 'embedding') OT matching", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(20), b = rnorm(20))
+  Y <- data.frame(a = rnorm(20), b = rnorm(20))
+  res <- recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                       matching = "ot", emb_epochs = 5L)
+
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_true(any(res$per_record$risk > 0 & res$per_record$risk < 1))
+})
+
+test_that("recordLinkage(method = 'embedding') with blocking", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(80), b = rep(c("A", "B"), 40))
+  Y <- data.frame(a = rnorm(80), b = rep(c("A", "B"), 40))
+  res <- recordLinkage(X, Y, key = c("a", "b"), block = "b",
+                       method = "embedding", emb_epochs = 3L)
+
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_equal(nrow(res$per_record), 80)
+})
+
+test_that("recordLinkage(method = 'embedding') emb_global = TRUE with blocking", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(80), b = rep(c("A", "B"), 40))
+  Y <- data.frame(a = rnorm(80), b = rep(c("A", "B"), 40))
+  res <- recordLinkage(X, Y, key = c("a", "b"), block = "b",
+                       method = "embedding", emb_epochs = 3L,
+                       emb_global = TRUE)
+
+  expect_s3_class(res, "recordLinkageRisk")
+})
+
+test_that("recordLinkage(method = 'embedding') direction = 'reverse'", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(20), b = rnorm(20))
+  Y <- data.frame(a = rnorm(20), b = rnorm(20))
+  res <- recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                       direction = "reverse", emb_epochs = 5L)
+
+  expect_equal(res$direction, "reverse")
+})
+
+test_that("recordLinkage(method = 'embedding') custom latent_dim and epochs", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(30), b = rnorm(30))
+  Y <- data.frame(a = rnorm(30), b = rnorm(30))
+  res <- recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                       emb_latent_dim = 4L, emb_epochs = 3L)
+
+  expect_equal(res$settings$emb_latent_dim, 4L)
+  expect_equal(res$settings$emb_epochs, 3L)
+})
+
+test_that("recordLinkage(method = 'embedding') small-block fallback", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  # Block C has only 5 records -> should fall back to deterministic
+  X <- data.frame(a = rnorm(85),
+                  b = c(rep("A", 40), rep("B", 40), rep("C", 5)))
+  Y <- data.frame(a = rnorm(85),
+                  b = c(rep("A", 40), rep("B", 40), rep("C", 5)))
+  expect_message(
+    res <- recordLinkage(X, Y, key = c("a", "b"), block = "b",
+                         method = "embedding", emb_epochs = 3L),
+    "deterministic fallback"
+  )
+  expect_s3_class(res, "recordLinkageRisk")
+})
+
+test_that("recordLinkage(method = 'embedding') unseen categories", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(30),
+                  b = sample(c("X", "Y"), 30, TRUE),
+                  stringsAsFactors = FALSE)
+  Y <- data.frame(a = rnorm(30),
+                  b = sample(c("X", "Y", "Z"), 30, TRUE),  # Z unseen
+                  stringsAsFactors = FALSE)
+  res <- recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                       emb_epochs = 5L)
+
+  expect_s3_class(res, "recordLinkageRisk")
+  expect_true(all(is.finite(res$per_record$risk)))
+})
+
+test_that("recordLinkage(method = 'embedding') print output", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(20), b = rnorm(20))
+  Y <- data.frame(a = rnorm(20), b = rnorm(20))
+  res <- recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                       emb_epochs = 3L)
+
+  out <- capture.output(print(res))
+  expect_true(any(grepl("embedding", out)))
+  expect_true(any(grepl("autoencoder", out)))
+  expect_true(any(grepl("latent_dim", out)))
+})
+
+test_that("recordLinkage(method = 'embedding') summary output", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(20), b = rnorm(20))
+  Y <- data.frame(a = rnorm(20), b = rnorm(20))
+  res <- recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                       emb_epochs = 3L)
+
+  out <- capture.output(print(summary(res)))
+  expect_true(any(grepl("permutation", out, ignore.case = TRUE)))
+})
+
+test_that("recordLinkage(method = 'embedding') variable importance", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(30), b = rnorm(30), c = rnorm(30))
+  Y <- data.frame(a = rnorm(30), b = rnorm(30), c = rnorm(30))
+  res <- recordLinkage(X, Y, key = c("a", "b", "c"), method = "embedding",
+                       emb_epochs = 5L)
+
+  expect_true(!is.null(res$var_importance))
+  expect_equal(length(res$var_importance), 3)
+  expect_true(all(res$var_importance >= 0))
+})
+
+test_that("recordLinkage(method = 'embedding') weights message", {
+  skip_if_not_installed("torch")
+  set.seed(1)
+  X <- data.frame(a = rnorm(20), b = rnorm(20))
+  Y <- data.frame(a = rnorm(20), b = rnorm(20))
+  expect_message(
+    recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                  weights = c(a = 1, b = 2), emb_epochs = 3L),
+    "ignored"
+  )
+})
+
+test_that("recordLinkage(method = 'embedding') reproducibility", {
+  skip_if_not_installed("torch")
+  X <- data.frame(a = rnorm(20), b = rnorm(20))
+  Y <- data.frame(a = rnorm(20), b = rnorm(20))
+
+  set.seed(42)
+  res1 <- recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                        emb_epochs = 5L)
+
+  set.seed(42)
+  res2 <- recordLinkage(X, Y, key = c("a", "b"), method = "embedding",
+                        emb_epochs = 5L)
+
+  expect_equal(res1$per_record$risk, res2$per_record$risk)
+})

@@ -45,6 +45,7 @@ Suggests:
     xgboost,
     partykit,
     testthat (>= 3.0.0),
+    torch,
     knitr,
     rmarkdown,
     plotly,

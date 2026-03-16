@@ -15,7 +15,7 @@ recordLinkage(X, ...)
   x_anon,
   key,
   method = c("deterministic", "probabilistic", "pram", "predictive", "rf", "rbrl",
-    "mahalanobis"),
+    "mahalanobis", "embedding"),
   direction = c("forward", "reverse"),
   risk_weighting = c("uniform", "softmax", "kernel"),
   kappa = NULL,
@@ -44,6 +44,9 @@ recordLinkage(X, ...)
   robust = TRUE,
   ot_epsilon = NULL,
   ot_max_iter = 100L,
+  emb_latent_dim = NULL,
+  emb_epochs = 50L,
+  emb_global = FALSE,
   ...
 )
 }
@@ -60,8 +63,9 @@ recordLinkage(X, ...)
 \code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
 \code{"predictive"} (propensity-score-based), \code{"rf"}
 (random forest proximity-based; requires \pkg{ranger}),
-\code{"rbrl"} (rank-based record linkage), or
-\code{"mahalanobis"} (Mahalanobis distance with robust covariance).}
+\code{"rbrl"} (rank-based record linkage),
+\code{"mahalanobis"} (Mahalanobis distance with robust covariance), or
+\code{"embedding"} (autoencoder latent-space distance; requires \pkg{torch}).}
 
 \item{direction}{character. Direction of the linkage attack:
 \code{"forward"} (default) loops over original records and searches in the
@@ -181,6 +185,21 @@ Ignored unless \code{matching = "ot"}.}
 
 \item{ot_max_iter}{integer. Maximum Sinkhorn iterations for OT matching
 (default 100). Ignored unless \code{matching = "ot"}.}
+
+\item{emb_latent_dim}{integer or NULL. For \code{method = "embedding"}:
+bottleneck dimension. If \code{NULL} (default), auto-computed as
+\code{max(2, floor(input_dim / 3))} where \code{input_dim} includes
+entity embedding dimensions for categoricals.}
+
+\item{emb_epochs}{integer. For \code{method = "embedding"}: maximum
+training epochs (default 50). Early stopping with patience 5 may
+terminate training earlier.}
+
+\item{emb_global}{logical. For \code{method = "embedding"} with blocking:
+if \code{TRUE}, train a single autoencoder on all query data and
+restrict distance computation within blocks. If \code{FALSE} (default),
+train a separate autoencoder per block (with deterministic fallback for
+blocks smaller than \code{max(30, 5 * latent_dim)}).}
 }
 \value{
 An object of class \code{"recordLinkageRisk"}: a list with components
@@ -486,6 +505,25 @@ original. Deterministic, probabilistic, and predictive methods are symmetric
 (distance/agreement does not depend on direction), so only the evaluation
 perspective changes. The PRAM method is asymmetric: the transition matrix
 \eqn{P(\text{output} \mid \text{input})} is looked up with swapped roles.
+}
+
+\section{Embedding method}{
+
+The \code{method = "embedding"} approach trains an autoencoder with entity
+embeddings (Guo & Berkhahn, 2016) on the original (query) data, projects
+both query and search records into a latent space, and measures
+re-identification risk via Euclidean distance. This captures nonlinear
+dependencies between quasi-identifiers that Gower and Mahalanobis distances
+may miss.
+
+The autoencoder trains only on query data, modeling an attacker who knows
+the population structure but not the specific anonymization. Distances are
+normalized to \link{0,1} using the 97.5th percentile of within-query pairwise
+distances. Variable importance is permutation-based: each variable is
+shuffled and the mean embedding shift is measured.
+
+Requires the \pkg{torch} package. Entity embeddings handle mixed data
+naturally; all-numeric and all-categorical datasets are supported.
 }
 
 \examples{

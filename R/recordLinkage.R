@@ -242,8 +242,9 @@
 #'   \code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
 #'   \code{"predictive"} (propensity-score-based), \code{"rf"}
 #'   (random forest proximity-based; requires \pkg{ranger}),
-#'   \code{"rbrl"} (rank-based record linkage), or
-#'   \code{"mahalanobis"} (Mahalanobis distance with robust covariance).
+#'   \code{"rbrl"} (rank-based record linkage),
+#'   \code{"mahalanobis"} (Mahalanobis distance with robust covariance), or
+#'   \code{"embedding"} (autoencoder latent-space distance; requires \pkg{torch}).
 #' @param direction character. Direction of the linkage attack:
 #'   \code{"forward"} (default) loops over original records and searches in the
 #'   anonymized data, answering "how safe is each original individual?";
@@ -335,6 +336,18 @@
 #'   Ignored unless \code{matching = "ot"}.
 #' @param ot_max_iter integer. Maximum Sinkhorn iterations for OT matching
 #'   (default 100). Ignored unless \code{matching = "ot"}.
+#' @param emb_latent_dim integer or NULL. For \code{method = "embedding"}:
+#'   bottleneck dimension. If \code{NULL} (default), auto-computed as
+#'   \code{max(2, floor(input_dim / 3))} where \code{input_dim} includes
+#'   entity embedding dimensions for categoricals.
+#' @param emb_epochs integer. For \code{method = "embedding"}: maximum
+#'   training epochs (default 50). Early stopping with patience 5 may
+#'   terminate training earlier.
+#' @param emb_global logical. For \code{method = "embedding"} with blocking:
+#'   if \code{TRUE}, train a single autoencoder on all query data and
+#'   restrict distance computation within blocks. If \code{FALSE} (default),
+#'   train a separate autoencoder per block (with deterministic fallback for
+#'   blocks smaller than \code{max(30, 5 * latent_dim)}).
 #' @param ... additional arguments passed to methods.
 #' @author Roman Mueller and Matthias Templ
 #'
@@ -382,6 +395,23 @@
 #'   Use \code{\link{top_at_risk}}, \code{\link{risk_by_group}},
 #'   \code{\link{merge_per_record}}, and \code{\link{inspect_record}} for
 #'   post-hoc per-record analysis.
+#'
+#' @section Embedding method:
+#' The \code{method = "embedding"} approach trains an autoencoder with entity
+#' embeddings (Guo & Berkhahn, 2016) on the original (query) data, projects
+#' both query and search records into a latent space, and measures
+#' re-identification risk via Euclidean distance. This captures nonlinear
+#' dependencies between quasi-identifiers that Gower and Mahalanobis distances
+#' may miss.
+#'
+#' The autoencoder trains only on query data, modeling an attacker who knows
+#' the population structure but not the specific anonymization. Distances are
+#' normalized to [0,1] using the 97.5th percentile of within-query pairwise
+#' distances. Variable importance is permutation-based: each variable is
+#' shuffled and the mean embedding shift is measured.
+#'
+#' Requires the \pkg{torch} package. Entity embeddings handle mixed data
+#' naturally; all-numeric and all-categorical datasets are supported.
 #'
 #' @examples
 #' set.seed(1)
@@ -506,7 +536,7 @@ recordLinkage.default <- function(X,
                                   key,
                                   method = c("deterministic", "probabilistic",
                                              "pram", "predictive", "rf",
-                                             "rbrl", "mahalanobis"),
+                                             "rbrl", "mahalanobis", "embedding"),
                                   direction = c("forward", "reverse"),
                                   risk_weighting = c("uniform", "softmax",
                                                      "kernel"),
@@ -539,6 +569,9 @@ recordLinkage.default <- function(X,
                                   robust = TRUE,
                                   ot_epsilon = NULL,
                                   ot_max_iter = 100L,
+                                  emb_latent_dim = NULL,
+                                  emb_epochs = 50L,
+                                  emb_global = FALSE,
                                   ...) {
 
     method <- match.arg(method)
@@ -585,6 +618,22 @@ recordLinkage.default <- function(X,
             message("method = 'rf': strategy '", strategy,
                     "' uses proximity-based scores [0,1], ",
                     "not distance-based thresholds.")
+        }
+    }
+
+    if (method == "embedding") {
+        if (!requireNamespace("torch", quietly = TRUE)) {
+            stop("Package 'torch' required for recordLinkage(method = 'embedding'). ",
+                 "Install with install.packages('torch')", call. = FALSE)
+        }
+        if (!missing(weights)) {
+            message("method = 'embedding': weights ignored. ",
+                    "Embedding uses learned variable representations instead.")
+        }
+        if (!missing(strategy) && strategy != "nearest") {
+            message("method = 'embedding': strategy '", strategy,
+                    "' uses distance-based scores [0,1], ",
+                    "not threshold-based matching.")
         }
     }
 
@@ -786,7 +835,7 @@ recordLinkage.default <- function(X,
     }
 
     # main loop ----
-    if (method != "rf") {
+    if (!method %in% c("rf", "embedding")) {
     for (i in seq_len(n_query)) {
         cand <- split_search[[blk_query[i]]]
         if (is.null(cand) || length(cand) == 0L) {
@@ -1316,6 +1365,187 @@ recordLinkage.default <- function(X,
     }
     }
 
+    if (method == "embedding") {
+
+    # Embedding method: autoencoder-based record linkage ----
+    emb_var_importance <- NULL
+    emb_actual_latent_dim <- NULL
+
+    .emb_process_block <- function(q_idx, s_idx, dist_mat) {
+        for (r in seq_along(q_idx)) {
+            qi <- q_idx[r]
+            dist_vec <- dist_mat[r, ]
+            cand_n[qi] <<- length(s_idx)
+            best_col <- which.min(dist_vec)
+            risk[qi] <<- 1 - dist_vec[best_col]  # lower distance = higher risk
+
+            # Truth evaluation
+            tpos <- true_idx[qi]
+            if (!is.na(tpos) && tpos > 0L) {
+                t_col <- match(tpos, s_idx)
+                if (!is.na(t_col)) {
+                    true_in_set[qi] <<- TRUE
+                    d_true[qi] <<- dist_vec[t_col]
+                    d_min[qi] <<- min(dist_vec)
+                    d_rank[qi] <<- as.integer(sum(dist_vec <= dist_vec[t_col]))
+                }
+            }
+
+            if (!is.null(score_cache)) {
+                score_cache[[qi]] <<- list(cand = s_idx, scores = dist_vec,
+                                           maximize = FALSE)
+            }
+
+            if (isTRUE(return_matches)) {
+                matches[[qi]] <<- s_idx[best_col]
+            }
+        }
+    }
+
+    if (is.null(block) || length(split_search) == 1) {
+        # No blocking: single autoencoder
+        block_res <- .embedding_linkage_block(
+            query_data, search_data, key, type,
+            latent_dim = emb_latent_dim, epochs = emb_epochs
+        )
+        s_idx <- seq_len(nrow(search_data))
+        .emb_process_block(seq_len(n_query), s_idx, block_res$dist_mat)
+        emb_var_importance <- block_res$var_importance
+        emb_actual_latent_dim <- block_res$latent_dim
+
+    } else {
+        # Blocked matching
+        all_blocks <- names(split_search)
+        small_blocks <- 0L
+        total_blocks <- length(all_blocks)
+        fallback_blocks <- character(0)
+        importance_list <- list()
+        block_sizes <- integer(0)
+
+        # Determine latent_dim for fallback threshold
+        if (is.null(emb_latent_dim)) {
+            # Estimate from full data
+            prep_est <- .ae_preprocess(query_data, key, type)
+            auto_latent <- as.integer(max(2L, floor(prep_est$input_dim / 3)))
+        } else {
+            auto_latent <- emb_latent_dim
+        }
+        min_block_size <- as.integer(max(30L, 5L * auto_latent))
+
+        if (emb_global) {
+            # Global embedding: train once on all query data
+            trained <- .ae_train(query_data, key, type,
+                                 latent_dim = emb_latent_dim,
+                                 epochs = emb_epochs)
+            emb_actual_latent_dim <- trained$latent_dim
+
+            emb_all_query <- .ae_encode(trained$model, query_data,
+                                        trained$prep, key, type)
+            emb_all_search <- .ae_encode(trained$model, search_data,
+                                         trained$prep, key, type)
+
+            # Variable importance from global model
+            emb_var_importance <- .ae_var_importance(
+                trained$model, query_data, trained$prep, key, type,
+                emb_original = emb_all_query
+            )
+
+            for (blk in all_blocks) {
+                s_idx <- split_search[[blk]]
+                q_idx <- which(blk_query == blk)
+                if (length(q_idx) == 0 || length(s_idx) == 0) next
+
+                # Within-block distances from global embeddings
+                dist_res <- .ae_distance(emb_all_query[q_idx, , drop = FALSE],
+                                         emb_all_search[s_idx, , drop = FALSE])
+                .emb_process_block(q_idx, s_idx, dist_res$dist_mat)
+            }
+
+        } else {
+            # Per-block embedding
+            for (blk in all_blocks) {
+                s_idx <- split_search[[blk]]
+                q_idx <- which(blk_query == blk)
+                if (length(q_idx) == 0 || length(s_idx) == 0) next
+
+                if (length(q_idx) < min_block_size) {
+                    small_blocks <- small_blocks + 1L
+                    fallback_blocks <- c(fallback_blocks, blk)
+                    next
+                }
+
+                block_res <- .embedding_linkage_block(
+                    query_data[q_idx, , drop = FALSE],
+                    search_data[s_idx, , drop = FALSE],
+                    key, type,
+                    latent_dim = emb_latent_dim, epochs = emb_epochs
+                )
+                .emb_process_block(q_idx, s_idx, block_res$dist_mat)
+                importance_list[[blk]] <- block_res$var_importance
+                block_sizes <- c(block_sizes, length(q_idx))
+                if (is.null(emb_actual_latent_dim)) {
+                    emb_actual_latent_dim <- block_res$latent_dim
+                }
+            }
+
+            # Fallback blocks: use deterministic (Gower distance)
+            if (length(fallback_blocks) > 0) {
+                for (blk in fallback_blocks) {
+                    s_idx <- split_search[[blk]]
+                    q_idx <- which(blk_query == blk)
+                    if (length(q_idx) == 0 || length(s_idx) == 0) next
+
+                    anon_block <- search_data[s_idx, , drop = FALSE]
+                    for (r in seq_along(q_idx)) {
+                        qi <- q_idx[r]
+                        di <- .dist_to_candidates(
+                            query_data[qi, , drop = FALSE],
+                            anon_block, key, type, weights,
+                            wsum, rng, na_anon
+                        )
+                        cand_n[qi] <- length(s_idx)
+                        best <- which.min(di)
+                        risk[qi] <- 1 - di[best]
+
+                        tpos <- true_idx[qi]
+                        if (!is.na(tpos) && tpos > 0L) {
+                            t_col <- match(tpos, s_idx)
+                            if (!is.na(t_col)) {
+                                true_in_set[qi] <- TRUE
+                                d_true[qi] <- di[t_col]
+                                d_min[qi] <- min(di)
+                                d_rank[qi] <- as.integer(
+                                    sum(di <= di[t_col]))
+                            }
+                        }
+                        if (!is.null(score_cache)) {
+                            score_cache[[qi]] <- list(
+                                cand = s_idx, scores = di,
+                                maximize = FALSE)
+                        }
+                        if (isTRUE(return_matches)) {
+                            matches[[qi]] <- s_idx[best]
+                        }
+                    }
+                }
+            }
+
+            # Aggregate variable importance
+            if (length(importance_list) > 0) {
+                imp_mat <- do.call(rbind, importance_list)
+                emb_var_importance <- colSums(imp_mat * block_sizes) /
+                    sum(block_sizes)
+            }
+
+            if (small_blocks > 0) {
+                message(small_blocks, " of ", total_blocks,
+                        " blocks have < ", min_block_size,
+                        " query records; using deterministic fallback.")
+            }
+        }
+    }
+    }
+
     # bijective matching override ----
     bijective_assigned <- NULL
     if (matching == "bijective") {
@@ -1396,6 +1626,12 @@ recordLinkage.default <- function(X,
             }
         }
         var_importance <- vi
+    } else if (method == "embedding") {
+        var_importance <- if (!is.null(emb_var_importance)) {
+            emb_var_importance
+        } else {
+            setNames(rep(NA_real_, length(key)), key)
+        }
     } else {
         var_importance <- setNames(rep(NA_real_, length(key)), key)
     }
@@ -1466,7 +1702,12 @@ recordLinkage.default <- function(X,
             rf_global = if (method == "rf") rf_global else NULL,
             robust = if (method == "mahalanobis") robust else NULL,
             ot_epsilon = if (matching == "ot") ot_epsilon else NULL,
-            ot_max_iter = if (matching == "ot") ot_max_iter else NULL
+            ot_max_iter = if (matching == "ot") ot_max_iter else NULL,
+            emb_latent_dim = if (method == "embedding") {
+                emb_actual_latent_dim
+            } else NULL,
+            emb_epochs = if (method == "embedding") emb_epochs else NULL,
+            emb_global = if (method == "embedding") emb_global else NULL
         )
     )
     if (isTRUE(return_matches)) out$matches <- matches
@@ -2306,6 +2547,12 @@ print.recordLinkageRisk <- function(x, ...) {
                         x$propensity_info$mean_propensity_synthetic))
         }
     }
+    if (meth == "embedding") {
+        ldim <- if (!is.null(s$emb_latent_dim)) s$emb_latent_dim else "?"
+        epc <- if (!is.null(s$emb_epochs)) s$emb_epochs else "?"
+        cat("Embedding:   autoencoder (latent_dim = ", ldim,
+            ", epochs = ", epc, ")\n", sep = "")
+    }
 
     cat("\nRisk Summary\n")
     cat(sprintf("  Mean risk:       %6.4f\n", o$mean_risk))
@@ -2479,6 +2726,7 @@ print.summary.recordLinkageRisk <- function(x, ...) {
             predictive    = "Variable Importance (model coefficients):",
             pram          = "Variable Importance (perturbation strength):",
             mahalanobis   = "Variable Importance (precision matrix proportion):",
+            embedding     = "Variable Importance (permutation-based embedding shift):",
             "Variable Importance:")
         cat("\n", vi_label, "\n", sep = "")
         for (v in names(x$var_importance)) {
@@ -2609,6 +2857,7 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1,
                 pram          = "Perturbation Strength (1 - diag)",
                 rf            = "RF Impurity Importance",
                 mahalanobis   = "Precision Matrix Proportion",
+                embedding     = "Permutation Embedding Shift",
                 "Importance")
             barplot(vi[order(vi, decreasing = TRUE)],
                     main = paste0("Variable Importance", dir_suffix),

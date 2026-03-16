@@ -369,15 +369,20 @@
     }
   }
 
-  # Initialize UNK embeddings to mean of learned embeddings
+  # Initialize UNK embeddings to mean of learned embeddings.
+  # Use clone+copy_ to work around torch R in-place assignment issue
+  # on embedding parameters after optimizer steps.
   torch::with_no_grad({
     for (k in seq_along(prep$cat_keys)) {
       v <- prep$cat_keys[k]
       nl <- prep$n_levels[v]
       # Learned embeddings are indices 1:nl; UNK is nl+1
-      learned <- model$embeddings[[k]]$weight[1:nl, ]
+      w <- model$embeddings[[k]]$weight
+      learned <- w[1:nl, ]
       mean_emb <- if (nl == 1L) learned else learned$mean(dim = 1)
-      model$embeddings[[k]]$weight[nl + 1L, ] <- mean_emb
+      w_clone <- w$clone()
+      w_clone[nl + 1L, ] <- mean_emb
+      w$copy_(w_clone)
     }
   })
 
