@@ -11,15 +11,16 @@ author:
 abstract: >
   The **riskutility** package for R provides a unified framework for
   measuring re-identification risk in perturbed microdata. The
-  `recordLinkage()` function implements four linkage methods under a
+  `recordLinkage()` function implements five linkage methods under a
   single S3 interface --- deterministic (Gower distance), probabilistic
-  (Fellegi-Sunter), PRAM (transition matrix), and predictive (propensity
-  score) --- with consistent risk weighting, blocking, and
-  forward/reverse direction support. While several R packages provide
-  record linkage functionality (RecordLinkage, fastLink, reclin2) and
-  sdcMicro offers distance-based risk measures, no existing package
-  combines all four methods with flexible risk weighting and a focus
-  on disclosure risk quantification for perturbative SDC. This paper
+  (Fellegi-Sunter), PRAM (transition matrix), predictive (propensity
+  score), and embedding (autoencoder latent-space distance) --- with
+  consistent risk weighting, blocking, and forward/reverse direction
+  support. While several R packages provide record linkage functionality
+  (RecordLinkage, fastLink, reclin2) and sdcMicro offers distance-based
+  risk measures, no existing package combines all five methods with
+  flexible risk weighting and a focus on disclosure risk quantification
+  for perturbative SDC. This paper
   presents the methodology with mathematical derivations, hand-traceable
   toy examples, and realistic demonstrations using sdcMicro for
   perturbation. Practical guidance on method selection, risk
@@ -133,7 +134,7 @@ Several R packages address record linkage or disclosure risk:
 These packages focus primarily on *linking* records (classification into
 match/non-match) rather than *quantifying re-identification risk* per
 record. The `recordLinkage()` function in **riskutility** fills this gap
-by combining four linkage methods with risk-focused output: per-record
+by combining five linkage methods with risk-focused output: per-record
 risk scores, candidate set diagnostics, and configurable risk weighting.
 
 | Feature | sdcMicro | RecordLinkage | fastLink | riskutility |
@@ -142,6 +143,7 @@ risk scores, candidate set diagnostics, and configurable risk weighting.
 | Probabilistic (Fellegi-Sunter) | -- | Yes | Yes | Yes |
 | PRAM (transition matrix) | -- | -- | -- | Yes |
 | Predictive (propensity score) | -- | -- | -- | Yes |
+| Embedding (autoencoder) | -- | -- | -- | Yes |
 | Per-record risk scores | Partial[^1] | -- | -- | Yes |
 | Risk weighting schemes | -- | -- | -- | Yes |
 | Blocking | -- | Yes | Yes | Yes |
@@ -151,12 +153,12 @@ risk scores, candidate set diagnostics, and configurable risk weighting.
 
 ## Scope of This Paper
 
-The `recordLinkage()` function in **riskutility** unifies four linkage
-methods -- deterministic, probabilistic, PRAM, and predictive -- under a
-single S3 interface with consistent risk weighting, blocking, and
-direction support.
+The `recordLinkage()` function in **riskutility** unifies five linkage
+methods -- deterministic, probabilistic, PRAM, predictive, and
+embedding -- under a single S3 interface with consistent risk weighting,
+blocking, and direction support.
 
-This paper covers all four methods, each following the same pedagogical
+This paper covers all five methods, each following the same pedagogical
 structure: *mathematical formulation* $\to$ *hand-traceable toy example*
 $\to$ *realistic demonstration*:
 
@@ -164,6 +166,7 @@ $\to$ *realistic demonstration*:
 2. **Probabilistic** (Fellegi-Sunter log-likelihood ratios)
 3. **PRAM** (transition matrix products)
 4. **Predictive** (propensity-score-based)
+5. **Embedding** (autoencoder latent-space distance)
 
 The remaining sections compare methods and weighting schemes
 side by side, present computational details of the implementation,
@@ -842,7 +845,7 @@ knitr::kable(res_pram$per_record[, c("risk", "d_true")],
 
 ## Forward vs. Reverse Asymmetry
 
-The PRAM method is unique among the four methods in that it is
+The PRAM method is unique among the five methods in that it is
 *asymmetric*: the transition matrix $T_v[a, b]$ is not symmetric, so
 forward risk (given the original, sum over anonymized candidates) and
 reverse risk (given the anonymized record, sum over original candidates)
@@ -1151,13 +1154,138 @@ plot(res_pred_real, which = 4)
 ```
 
 
+# Embedding Method (Autoencoder)
+
+When quasi-identifiers interact nonlinearly or include a mix of numeric
+and high-cardinality categorical variables, the Gower and Mahalanobis
+distances used by deterministic methods may miss important structure.
+The embedding method addresses this by training an autoencoder
+[@guo2016entity] to learn a compact latent representation that captures
+nonlinear dependencies between quasi-identifiers.
+
+## Entity Embeddings and Latent-Space Distance
+
+The idea is borrowed from the entity-embedding literature: categorical
+variables are mapped to learned continuous vectors (entity embeddings),
+while numeric variables are min-max scaled to $[0,1]$. The concatenated
+representation is fed through a 2-layer encoder to produce a latent
+bottleneck of dimension $d_z = \max(2, \lfloor d_\text{input}/3 \rfloor)$
+(user-overridable via `emb_latent_dim`). A symmetric decoder
+reconstructs the input, and the model is trained with a composite loss:
+MSE for numeric outputs (after sigmoid activation) and cross-entropy for
+categorical outputs (raw logits), weighted by the proportion of each
+variable type.
+
+Training uses the Adam optimizer ($\text{lr} = 0.001$), a 20\%
+validation holdout with patience-5 early stopping, and a maximum of 50
+epochs (adjustable via `emb_epochs`). Crucially, the autoencoder trains
+only on the original (query) data, modeling an attacker who knows the
+population structure but not the specific anonymization applied. This
+means the latent space is optimized for the original distribution:
+search-side records that closely resemble originals will project nearby,
+while heavily perturbed records will project further away.
+
+After training, both query and search records are encoded. The pairwise
+Euclidean distance in latent space is computed:
+$$d_z(i,j) = \lVert z_i^\text{orig} - z_j^\text{anon} \rVert_2,$$
+normalized to $[0,1]$ using the 97.5th percentile of within-query
+pairwise distances (with a fallback to the maximum for blocks with fewer
+than 40 records). Risk is then $r_i = 1 - d_z(i, j^*)$, where $j^*$ is
+the nearest search record.
+
+Variable importance is permutation-based: each variable is shuffled in
+the query data, re-encoded, and the mean embedding shift is measured.
+This is normalized to sum to 1.
+
+## Unseen Categories and Small Blocks
+
+Categorical levels in the search data not seen during training receive
+an `<UNK>` embedding, initialized to the mean of all learned level
+embeddings for that variable. This avoids crashes on novel categories
+while providing a reasonable default representation.
+
+When blocking is used with `emb_global = FALSE` (default), each block
+trains its own autoencoder. Blocks with fewer than $\max(30, 5 \times d_z)$
+records fall back to the deterministic (Gower distance) method, since
+such small blocks lack sufficient data for meaningful autoencoder
+training. Setting `emb_global = TRUE` trains a single autoencoder on all
+query data and restricts distance computation within blocks, which is
+useful when blocks are small but the overall dataset is large.
+
+## Toy Example: 6 Records
+
+```{r emb-toy, eval=requireNamespace("torch", quietly = TRUE)}
+orig_emb <- data.frame(
+  age = c(20, 40, 40, 60, 60, 80),
+  sex = factor(c("F", "M", "F", "M", "F", "M"))
+)
+anon_emb <- data.frame(
+  age = c(20, 40, 60, 40, 60, 80),  # rows 3 and 4 swapped ages
+  sex = factor(c("F", "M", "F", "M", "F", "M"))
+)
+
+set.seed(42)
+res_emb <- recordLinkage(orig_emb, anon_emb,
+                          key = c("age", "sex"),
+                          method = "embedding",
+                          emb_epochs = 30L)
+print(res_emb)
+```
+
+```{r emb-toy-risk, eval=requireNamespace("torch", quietly = TRUE)}
+knitr::kable(res_emb$per_record[, c("risk", "cand_n", "true_in_set", "d_true")],
+             digits = 4,
+             caption = "Per-record risk (embedding method)")
+```
+
+The autoencoder learns a joint representation of `age` and `sex`.
+Records with identical covariates to their anonymized counterparts
+(rows 1, 2, 5, 6) tend to receive higher risk, while the swapped
+records (rows 3, 4) may show lower risk depending on how the latent
+space separates the age values.
+
+## Real-World Example (n = 500)
+
+```{r emb-real, eval=requireNamespace("torch", quietly = TRUE)}
+set.seed(42)
+res_emb_real <- recordLinkage(census, census_anon,
+                               key = c("age", "sex", "region", "educ"),
+                               method = "embedding",
+                               emb_epochs = 30L)
+print(res_emb_real)
+```
+
+```{r emb-real-riskhist, fig.height=4, fig.cap="Per-record risk distribution (embedding method).", eval=requireNamespace("torch", quietly = TRUE)}
+plot(res_emb_real, which = 1)
+```
+
+```{r emb-real-vi, fig.height=4, fig.cap="Variable importance (permutation-based embedding shift).", eval=requireNamespace("torch", quietly = TRUE)}
+plot(res_emb_real, which = 3)
+```
+
+The permutation-based variable importance reveals which quasi-identifiers
+contribute most to the latent representation. Unlike the deterministic
+method's weight-proportional importance, the embedding method can
+discover nonlinear interactions between variables.
+
+**When to use the embedding method**: The embedding approach is most
+valuable when (1) quasi-identifiers have complex nonlinear dependencies
+that Gower or Mahalanobis distances miss, (2) the dataset contains
+high-cardinality categorical variables where entity embeddings learn
+informative representations, or (3) you want a data-driven distance
+metric that adapts to the structure of the original data. The trade-off
+is computational cost (autoencoder training) and the requirement for
+the **torch** package.
+
+
 # Comparing Methods and Weighting Schemes
 
 ## Side-by-Side Comparison
 
-We run all four methods on the same 500-record census dataset and compare
+We run all five methods on the same 500-record census dataset and compare
 results. For the PRAM method we use the categorical-only subset since
-PRAM requires transition matrices.
+PRAM requires transition matrices. The embedding method requires the
+**torch** package; if unavailable, it is omitted from the comparison.
 
 ```{r compare-methods}
 # Deterministic (already computed)
@@ -1222,12 +1350,28 @@ compare_df <- data.frame(
     100 * res_pram_census$overall$pct_true_in_set
   )
 )
+
+# Add embedding row if torch is available
+if (requireNamespace("torch", quietly = TRUE)) {
+  res_emb_census <- recordLinkage(census, census_anon,
+                                   key = c("age", "sex", "region", "educ"),
+                                   method = "embedding",
+                                   emb_epochs = 50)
+  compare_df <- rbind(compare_df, data.frame(
+    Method = "Embedding (4 QIs)",
+    Mean_risk = res_emb_census$overall$mean_risk,
+    Max_risk = res_emb_census$overall$max_risk,
+    Pct_high = 100 * res_emb_census$overall$pct_high_risk,
+    Pct_true_in_set = 100 * res_emb_census$overall$pct_true_in_set
+  ))
+}
+
 knitr::kable(compare_df, digits = 3,
              caption = "Method comparison on the census dataset")
 ```
 
 **Important caveat**: This comparison is *illustrative*, not a
-controlled experiment. The five configurations differ in three ways
+controlled experiment. The configurations differ in three ways
 simultaneously: (1) the linkage method, (2) the set of quasi-identifiers
 (4 QIs including numeric `age` vs. 3 categorical QIs), and (3) the
 perturbation mechanism (rank swapping vs. PRAM). In particular, the
@@ -1315,6 +1459,7 @@ lower risk to well-protected ones.
 | Probabilistic | m/u available or estimable | Audit documentation | Sensitive to m/u misspecification |
 | PRAM | Transition matrix known | PRAM / swapping mechanism | Only categorical; requires exact matrices |
 | Predictive | Logistic model adequate | Potentially useful for high-dimensional / mixed QIs | Model uncertainty; not yet established in SDC literature |
+| Embedding | torch available; sufficient data for training | Complex interactions between mixed-type QIs | Requires torch; non-deterministic; needs sufficient data |
 
 
 # Computational Details
@@ -1340,6 +1485,8 @@ object of class `"recordLinkageRisk"` with the following components:
   supplied m/u probabilities.
 - For the predictive method: `$propensity_info` with fitted scores
   and, if `pred_se = TRUE`, Fisher standard errors.
+- For the embedding method: `$var_importance` with permutation-based
+  variable importance scores.
 
 Standard S3 methods are provided:
 
@@ -1365,6 +1512,7 @@ and $p = |\mathcal{K}|$ the number of quasi-identifiers.
 | Probabilistic | $O(nmp)$ | Log-LR computation per pair per variable |
 | PRAM | $O(nmp)$ | Transition probability lookup per pair per variable |
 | Predictive | $O((n+m)p + nm)$ | $O((n+m)p)$ for model fitting + $O(nm)$ for score comparison |
+| Embedding | $O(E \cdot n \cdot d + nm \cdot d)$ | $E$ epochs of autoencoder training ($d$ = latent dim) + $O(nm \cdot d)$ for latent-space distances |
 
 Without blocking, all methods require $O(nm)$ pairwise comparisons.
 For large datasets, blocking (described below) restricts comparisons
@@ -1381,9 +1529,11 @@ number of pairs. As a rough guideline:
 
 The core `recordLinkage()` function requires only base R and the
 **VIM** package (for Gower distance computation in the deterministic
-method). The examples in this paper additionally use **sdcMicro**
+method). The embedding method additionally requires **torch**
+[@R2025] for autoencoder training and inference.
+The examples in this paper additionally use **sdcMicro**
 [@templ2015sdcmicro] for perturbation (rank swapping and PRAM).
-Both packages are listed in `Suggests` in the package `DESCRIPTION`.
+All optional packages are listed in `Suggests` in the package `DESCRIPTION`.
 
 
 # Advanced Features
@@ -1839,7 +1989,7 @@ rarely has the full membership knowledge and computational resources
 required for GDBRL. Nevertheless, reporting both independent and
 bijective risk provides a useful bracket on the true risk level.
 
-Bijective matching works with all four methods and with blocking. When
+Bijective matching works with all five methods and with blocking. When
 blocking is enabled, the Hungarian algorithm runs independently within
 each block:
 
@@ -1856,11 +2006,13 @@ cat("Bijective + blocking: mean risk =",
 # Discussion and Conclusion
 
 The `recordLinkage()` function provides a unified framework for
-assessing re-identification risk in perturbed microdata. The four methods
+assessing re-identification risk in perturbed microdata. The five methods
 cover a range of scenarios: deterministic linkage for general-purpose
 assessment, probabilistic linkage for formal audits, PRAM linkage when
-the perturbation mechanism is known, and predictive linkage for
-high-dimensional or mixed-type quasi-identifiers.
+the perturbation mechanism is known, predictive linkage for
+high-dimensional or mixed-type quasi-identifiers, and embedding-based
+linkage for capturing complex non-linear interactions via learned
+latent representations.
 
 ## Key Takeaways
 
@@ -1907,7 +2059,12 @@ Several limitations should be noted:
    judgment calls about which variables an attacker might know, and
    should consider running the assessment with multiple QI sets to
    gauge sensitivity.
-6. **Sample vs. census**: The current implementation computes
+6. **Embedding method**: The autoencoder-based embedding method requires
+   **torch** and sufficient training data (blocks with fewer than
+   $\max(30, 5d)$ rows fall back to deterministic matching). Training
+   is non-deterministic across platforms even with fixed seeds, and the
+   method adds computational overhead compared to distance-based methods.
+7. **Sample vs. census**: The current implementation computes
    sample-level risk. For sample surveys where the attacker does not
    know whether the target is in the dataset, population-level
    adjustments [@franconi2004individual] are needed.
@@ -1916,10 +2073,7 @@ Several limitations should be noted:
 
 Planned extensions include integration with Franconi-Polettini
 population frequency estimation [@franconi2004individual] for
-population-level risk, rank-based record linkage
-[@muralidhar2016rankbased] as an alternative to distance-based matching
-(which can outperform Gower-based linkage for certain masking methods
-such as rank swapping), household-level matching for hierarchical
+population-level risk, household-level matching for hierarchical
 microdata, and attribute disclosure assessment (extending the function
 to evaluate whether an attacker could infer sensitive attributes after
 successful linkage). Performance improvements through parallel
