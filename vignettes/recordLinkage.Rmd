@@ -11,14 +11,17 @@ author:
 abstract: >
   The **riskutility** package for R provides a unified framework for
   measuring re-identification risk in perturbed microdata. The
-  `recordLinkage()` function implements five linkage methods under a
-  single S3 interface --- deterministic (Gower distance), probabilistic
+  `recordLinkage()` function implements eight linkage methods under a
+  single S3 interface with consistent risk weighting, blocking, and
+  forward/reverse direction support. This paper covers the five core
+  methods in detail --- deterministic (Gower distance), probabilistic
   (Fellegi-Sunter), PRAM (transition matrix), predictive (propensity
-  score), and embedding (autoencoder latent-space distance) --- with
-  consistent risk weighting, blocking, and forward/reverse direction
-  support. While several R packages provide record linkage functionality
+  score), and embedding (autoencoder latent-space distance) --- while
+  three additional methods (random forest proximity, rank-based, and
+  Mahalanobis) are documented in the package help pages.
+  While several R packages provide record linkage functionality
   (RecordLinkage, fastLink, reclin2) and sdcMicro offers distance-based
-  risk measures, no existing package combines all five methods with
+  risk measures, no existing package combines multiple linkage methods with
   flexible risk weighting and a focus on disclosure risk quantification
   for perturbative SDC. This paper
   presents the methodology with mathematical derivations, hand-traceable
@@ -134,7 +137,7 @@ Several R packages address record linkage or disclosure risk:
 These packages focus primarily on *linking* records (classification into
 match/non-match) rather than *quantifying re-identification risk* per
 record. The `recordLinkage()` function in **riskutility** fills this gap
-by combining five linkage methods with risk-focused output: per-record
+by combining eight linkage methods with risk-focused output: per-record
 risk scores, candidate set diagnostics, and configurable risk weighting.
 
 | Feature | sdcMicro | RecordLinkage | fastLink | riskutility |
@@ -144,29 +147,36 @@ risk scores, candidate set diagnostics, and configurable risk weighting.
 | PRAM (transition matrix) | -- | -- | -- | Yes |
 | Predictive (propensity score) | -- | -- | -- | Yes |
 | Embedding (autoencoder) | -- | -- | -- | Yes |
+| RF proximity | -- | -- | -- | Yes |
+| Rank-based (RBRL) | -- | -- | -- | Yes |
+| Mahalanobis (robust) | Yes | -- | -- | Yes |
 | Per-record risk scores | Partial[^1] | -- | -- | Yes |
 | Risk weighting schemes | -- | -- | -- | Yes |
 | Blocking | -- | Yes | Yes | Yes |
 | Forward/reverse direction | -- | -- | -- | Yes |
 
-[^1]: sdcMicro's `dRisk()` returns a global proportion of re-identified records rather than per-record continuous risk scores.
+[^1]: sdcMicro provides per-record risk via `individualRiskDT()` for frequency-based measures and `dRisk()` / `dRiskRMD()` for distance-based global proportions; however, it does not return continuous per-record record-linkage risk scores with candidate set diagnostics.
 
 ## Scope of This Paper
 
-The `recordLinkage()` function in **riskutility** unifies five linkage
-methods -- deterministic, probabilistic, PRAM, predictive, and
-embedding -- under a single S3 interface with consistent risk weighting,
-blocking, and direction support.
-
-This paper covers all five methods, each following the same pedagogical
-structure: *mathematical formulation* $\to$ *hand-traceable toy example*
-$\to$ *realistic demonstration*:
+The `recordLinkage()` function in **riskutility** implements eight
+linkage methods under a single S3 interface with consistent risk
+weighting, blocking, and direction support. This paper covers the five
+core methods in detail, each following the same pedagogical structure:
+*mathematical formulation* $\to$ *hand-traceable toy example* $\to$
+*realistic demonstration*:
 
 1. **Deterministic** (Gower distance)
 2. **Probabilistic** (Fellegi-Sunter log-likelihood ratios)
 3. **PRAM** (transition matrix products)
 4. **Predictive** (propensity-score-based)
 5. **Embedding** (autoencoder latent-space distance)
+
+Three additional methods -- **random forest proximity** (`"rf"`),
+**rank-based record linkage** (`"rbrl"`;
+@muralidhar2016rankbased), and **Mahalanobis distance** (`"mahalanobis"`;
+@templ2008robust) -- are available in the package and documented in the
+help pages but not covered here for brevity.
 
 The remaining sections compare methods and weighting schemes
 side by side, present computational details of the implementation,
@@ -224,7 +234,8 @@ the maximum $r_{\max}$, and the fraction of records exceeding a threshold
 The formulation above takes the *forward* perspective: for each original
 record, search the anonymized data for matches. The *reverse*
 perspective iterates over anonymized records and searches the original
-data, answering "how disclosive is each released record?" For symmetric
+data, answering "how easily can each released record be traced back
+to an individual?" For symmetric
 distance methods (deterministic, predictive), the two perspectives
 yield similar but not identical results because the evaluation criterion
 changes (different records serve as query vs. search). For PRAM, the
@@ -526,9 +537,13 @@ indicates strong evidence of a match.
 
 The standard Fellegi-Sunter model assumes *conditional independence* of
 agreement indicators across variables, given the match/non-match status.
-When quasi-identifiers are correlated (e.g., age and education), this
-assumption is approximate, and the log-likelihood ratios may
-overestimate or underestimate the evidence for a match.
+When quasi-identifiers are positively correlated (e.g., age and
+education), agreement indicators become positively correlated given match
+status, and the composite log-likelihood ratio typically *overestimates*
+the evidence for a match -- the model double-counts shared information.
+EM-based approaches [@winkler2006overview] can relax this assumption by
+estimating latent match/non-match classes, but the current implementation
+uses the standard model for simplicity and transparency.
 
 The key insight is that *rare agreements are more informative*: if a
 variable has many categories (low $u_v$), agreement provides stronger
@@ -891,9 +906,12 @@ the function evaluates $T[\text{original}, b]$ for each anonymized
 candidate $b$. In reverse mode, for each anonymized record's value
 (fixing a column of $T$), the function evaluates
 $T[\text{original}_j, \text{anon}]$ for each original candidate $j$.
-Both use $P(\text{output} \mid \text{input})$; only the roles of
-query and search change. When $T$ is asymmetric, the normalization
-denominators differ, yielding different risk profiles.
+Both use the same transition matrix $P(\text{output} \mid \text{input})$;
+only the roles of query and search change. Note that reverse PRAM risk
+is *not* the Bayesian posterior $P(\text{input} \mid \text{output})$,
+which would require prior information about the marginal distribution.
+When $T$ is asymmetric, the normalization denominators differ, yielding
+different risk profiles.
 
 ## Real-World Example (n = 500)
 
@@ -997,7 +1015,7 @@ where $e(x) = P(\text{original} \mid \text{QIs} = x)$ is the
 propensity score. This projects the multivariate QI space into a single
 dimension that captures the discriminability between the two datasets.
 When the logistic model is correctly specified, this projection
-maximally separates original from anonymized records; when
+effectively discriminates between original and anonymized records; when
 misspecified (e.g., important interactions are missing), the projection
 may compress relevant variation. A random forest alternative
 (`pred_model = "rf"`) is available for cases where nonlinearity is
@@ -1188,10 +1206,15 @@ while heavily perturbed records will project further away.
 After training, both query and search records are encoded. The pairwise
 Euclidean distance in latent space is computed:
 $$d_z(i,j) = \lVert z_i^\text{orig} - z_j^\text{anon} \rVert_2,$$
-normalized to $[0,1]$ using the 97.5th percentile of within-query
-pairwise distances (with a fallback to the maximum for blocks with fewer
-than 40 records). Risk is then $r_i = 1 - d_z(i, j^*)$, where $j^*$ is
-the nearest search record.
+normalized to $\eqn{[0,1]}$ using the 97.5th percentile of within-query
+pairwise distances (a pragmatic heuristic for robustness to outlier
+embeddings; blocks with fewer than 40 records fall back to the maximum).
+Risk is then $r_i = 1 - d_z(i, j^*)$, where $j^*$ is the nearest search
+record. **Important**: Unlike the candidate-set probability used by the
+other four methods (Section 2.2), this is a distance-based similarity
+index, not a re-identification probability. Embedding risk values are
+therefore not directly comparable on the same scale as risk from the
+deterministic, probabilistic, PRAM, or predictive methods.
 
 Variable importance is permutation-based: each variable is shuffled in
 the query data, re-encoded, and the mean embedding shift is measured.
@@ -1353,6 +1376,7 @@ compare_df <- data.frame(
 
 # Add embedding row if torch is available
 if (requireNamespace("torch", quietly = TRUE)) {
+  set.seed(42)
   res_emb_census <- recordLinkage(census, census_anon,
                                    key = c("age", "sex", "region", "educ"),
                                    method = "embedding",
@@ -1473,20 +1497,25 @@ object of class `"recordLinkageRisk"` with the following components:
 - `$per_record`: a `data.frame` with one row per query record,
   containing `risk` (re-identification risk), `cand_n` (candidate set
   size), `true_in_set` (logical, whether the true match is among
-  candidates), and `d_true` (distance to true match).
+  candidates), `d_true` (distance to true match), `d_min` (distance
+  to nearest candidate), `d_rank` (rank of the true match among
+  candidates by distance), and `risk_band` (factor categorizing risk
+  into bands from "very_low" to "unique_match").
 - `$overall`: a list with summary statistics: `mean_risk`, `max_risk`,
   `median_risk`, `pct_high_risk` (fraction above threshold),
   `pct_true_in_set`, `n_unique_match` (records with $r = 1$), and
   `risk_bands` (tabulated risk distribution).
 - `$privacy_pass`: logical, `TRUE` if `mean_risk` $\le 0.1$.
-- `$params`: a list recording the method, direction, weighting,
+- `$settings`: a list recording the method, direction, weighting,
   strategy, and other parameters used.
 - For the probabilistic method: `$fs_params` with estimated or
   supplied m/u probabilities.
 - For the predictive method: `$propensity_info` with fitted scores
   and, if `pred_se = TRUE`, Fisher standard errors.
-- For the embedding method: `$var_importance` with permutation-based
-  variable importance scores.
+- `$var_importance`: per-variable importance scores (available for all
+  methods; the computation varies: distance contributions for
+  deterministic, log-LR weights for probabilistic, permutation-based
+  embedding shift for embedding, etc.).
 
 Standard S3 methods are provided:
 
@@ -1496,10 +1525,11 @@ Standard S3 methods are provided:
   distribution, distance-to-true-match statistics, and per-variable
   Fellegi-Sunter parameters (for the probabilistic method). Returns
   an object of class `"summary.recordLinkageRisk"`.
-- `plot(x, which = ...)`: up to 4 plot types: (1) risk histogram,
-  (2) distance vs. risk scatter, (3) per-variable log-LR barplot
-  (probabilistic only), (4) propensity score densities (predictive
-  only).
+- `plot(x, which = ...)`: up to 8 plot types: (1) risk histogram,
+  (2) distance vs. risk scatter, (3) per-variable importance / log-LR
+  barplot, (4) propensity score densities (predictive only),
+  (5) risk band barplot, (6) true-match rank distribution,
+  (7) risk by subgroup, (8) Lorenz curve of risk concentration.
 
 ## Computational Complexity
 
@@ -1529,8 +1559,10 @@ number of pairs. As a rough guideline:
 
 The core `recordLinkage()` function requires only base R and the
 **VIM** package (for Gower distance computation in the deterministic
-method). The embedding method additionally requires **torch**
-[@R2025] for autoencoder training and inference.
+method). Optional method-specific dependencies include: **torch**
+(embedding method), **clue** (bijective matching via Hungarian
+algorithm), **robustbase** (Mahalanobis method, robust covariance),
+and **ranger** (RF proximity method).
 The examples in this paper additionally use **sdcMicro**
 [@templ2015sdcmicro] for perturbation (rank swapping and PRAM).
 All optional packages are listed in `Suggests` in the package `DESCRIPTION`.
@@ -1666,6 +1698,7 @@ need to specify `key` again.
 | Transition matrices available (PRAM, swapping) | `"pram"` |
 | m/u probabilities available or formal audit needed | `"probabilistic"` |
 | Many QIs, nonlinear interactions suspected | `"predictive"` |
+| Complex interactions, high-cardinality categoricals, torch available | `"embedding"` |
 | Quick initial assessment | `"deterministic"` with `strategy = "nearest"` |
 | Conservative upper bound | `"deterministic"` with `risk_weighting = "uniform"` |
 
@@ -1688,7 +1721,9 @@ more accurate risk estimates than the distance-based default.
 
 ## Interpreting Risk Bands
 
-The `summary()` output classifies records into risk bands:
+The `summary()` output classifies records into risk bands. These
+thresholds are package conventions for interpretive convenience, not
+established standards:
 
 | Band | Risk range | Interpretation |
 |:-----|:-----------|:---------------|
@@ -1704,9 +1739,12 @@ record under the assumed model -- it does not mean re-identification has
 occurred. The computed risk is an upper bound because the attacker model
 assumes perfect membership and QI knowledge.
 
-A common threshold for acceptable risk is $\bar{r} < 0.1$ (mean risk
-below 10%), following the guidelines in @hundepool2012statistical
-(Chapter 5). In practice, many statistical offices additionally require
+A common rule of thumb for acceptable risk is $\bar{r} < 0.1$ (mean risk
+below 10%), loosely inspired by individual risk thresholds discussed in
+@hundepool2012statistical (Chapter 5). This is a package convention, not
+a universal standard -- practitioners should consult their organization's
+data release policy for applicable thresholds. In practice, many
+statistical offices additionally require
 that no record has $r > 0.5$ (no unique matches) and that the fraction
 of high-risk records is small. The `privacy_pass` flag in
 `recordLinkage()` tests only the *mean* risk against the threshold.
@@ -1959,9 +1997,18 @@ being matched to the same anonymized record, the resulting risk
 estimates are typically higher than independent scoring: the attacker
 cannot "waste" the best candidates on multiple queries.
 
-Setting `matching = "bijective"` activates this mode. Risk becomes
-binary: 1 if the Hungarian algorithm assigns a record to its true match,
-0 otherwise. The `clue` package is required.
+Setting `matching = "bijective"` activates this mode. This implements
+the GDBRL-min variant (minimizing total assignment cost); Herranz et al.
+also define GDBRL-max (maximizing correct matches subject to a distance
+threshold), which is not currently supported. Risk becomes binary: 1 if
+the Hungarian algorithm assigns a record to its true match, 0 otherwise
+-- a simplification of the graded risk discussed in the original paper.
+The `clue` package is required.
+
+A third option, `matching = "ot"`, uses entropy-regularized optimal
+transport (Sinkhorn-Knopp algorithm) to produce continuous risk in
+$\eqn{[0,1]}$ that interpolates between independent (smooth) and
+bijective (hard) assignments, controlled by the `ot_epsilon` parameter.
 
 ## Comparison Example
 
@@ -1989,7 +2036,7 @@ rarely has the full membership knowledge and computational resources
 required for GDBRL. Nevertheless, reporting both independent and
 bijective risk provides a useful bracket on the true risk level.
 
-Bijective matching works with all five methods and with blocking. When
+Bijective (and OT) matching works with all eight methods and with blocking. When
 blocking is enabled, the Hungarian algorithm runs independently within
 each block:
 
@@ -2006,8 +2053,8 @@ cat("Bijective + blocking: mean risk =",
 # Discussion and Conclusion
 
 The `recordLinkage()` function provides a unified framework for
-assessing re-identification risk in perturbed microdata. The five methods
-cover a range of scenarios: deterministic linkage for general-purpose
+assessing re-identification risk in perturbed microdata. The five
+methods covered in this paper span a range of scenarios: deterministic linkage for general-purpose
 assessment, probabilistic linkage for formal audits, PRAM linkage when
 the perturbation mechanism is known, predictive linkage for
 high-dimensional or mixed-type quasi-identifiers, and embedding-based
