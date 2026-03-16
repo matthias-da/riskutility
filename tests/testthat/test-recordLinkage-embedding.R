@@ -187,7 +187,6 @@ test_that(".ae_encode handles unseen categorical levels", {
 })
 
 test_that(".ae_distance returns normalized distances", {
-  skip_if_not_installed("torch")
   set.seed(42)
   emb_q <- matrix(rnorm(20), 10, 2)
   emb_s <- matrix(rnorm(14), 7, 2)

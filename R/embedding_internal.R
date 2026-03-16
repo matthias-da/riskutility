@@ -427,7 +427,7 @@
 #'
 #' Computes pairwise Euclidean distances between query and search embeddings,
 #' normalized to [0,1] using the 97.5th percentile of within-query distances
-#' (with fallback to max for small datasets).
+#' (with fallback to max for small datasets, n < 40).
 #'
 #' @param emb_query numeric matrix (n_q x latent_dim)
 #' @param emb_search numeric matrix (n_s x latent_dim)
@@ -440,6 +440,11 @@
 .ae_distance <- function(emb_query, emb_search) {
   n_q <- nrow(emb_query)
   n_s <- nrow(emb_search)
+
+  # Guard: empty inputs
+  if (n_q == 0L || n_s == 0L) {
+    return(list(dist_mat = matrix(0, n_q, n_s), threshold = 1))
+  }
 
   # Cross-distance: ||q_i - s_j||^2 = ||q_i||^2 + ||s_j||^2 - 2*q_i.s_j
   q_sq <- rowSums(emb_query^2)
@@ -455,6 +460,7 @@
     q_dist <- sqrt(q_sq_mat)
     q_upper <- q_dist[upper.tri(q_dist)]
     if (length(q_upper) > 0 && any(q_upper > 0)) {
+      # n < 40: too few pairwise distances for a stable quantile; use max
       if (n_q < 40) {
         threshold <- max(q_upper)
       } else {
