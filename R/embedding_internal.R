@@ -495,6 +495,7 @@
 #' @param type variable types (or NULL)
 #' @param emb_original numeric matrix of original embeddings (n x latent_dim)
 #' @return named numeric vector of importance scores summing to 1
+#'   (all-zero if n <= 1 or no variable changes the embedding)
 #' @keywords internal
 .ae_var_importance <- function(model, data, prep, key, type = NULL,
                                emb_original = NULL) {
@@ -503,6 +504,9 @@
   }
   n <- nrow(data)
   importance <- setNames(numeric(length(key)), key)
+
+  # Single-record data: permutation is meaningless
+  if (n <= 1L) return(importance)
 
   for (v in key) {
     shuffled <- data
