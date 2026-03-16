@@ -221,3 +221,169 @@
 
   ae()
 }
+
+#' Train autoencoder on data
+#'
+#' Manual training loop with Adam optimizer, composite loss (MSE for numerics +
+#' cross-entropy for categoricals), and early stopping on a 20% validation
+#' holdout.
+#'
+#' @param data data.frame training data
+#' @param key character vector of column names
+#' @param type named character vector of variable types (or NULL)
+#' @param latent_dim integer, bottleneck dimension
+#' @param epochs integer, maximum training epochs
+#' @param batch_size integer, mini-batch size
+#' @param lr numeric, learning rate for Adam
+#' @param patience integer, early stopping patience
+#' @param val_fraction numeric, fraction of data for validation
+#' @return list with:
+#'   \describe{
+#'     \item{model}{trained torch nn_module}
+#'     \item{prep}{preprocessing metadata from .ae_preprocess()}
+#'     \item{latent_dim}{integer, latent dimension used}
+#'   }
+#' @keywords internal
+.ae_train <- function(data, key, type = NULL, latent_dim = NULL,
+                      epochs = 50L, batch_size = 32L, lr = 0.001,
+                      patience = 5L, val_fraction = 0.2) {
+
+  prep <- .ae_preprocess(data, key, type)
+
+  # Auto latent dimension
+  if (is.null(latent_dim)) {
+    latent_dim <- as.integer(max(2L, floor(prep$input_dim / 3)))
+  }
+
+  # Seed torch from R's RNG for reproducibility
+  torch::torch_manual_seed(sample.int(.Machine$integer.max, 1L))
+
+  model <- .ae_model(prep, latent_dim)
+
+  optimizer <- torch::optim_adam(model$parameters, lr = lr)
+
+  n <- nrow(data)
+  batch_size <- min(batch_size, n)
+
+  # Validation split
+  n_val <- max(1L, as.integer(floor(n * val_fraction)))
+  n_train <- n - n_val
+  perm <- sample.int(n)
+  train_idx <- perm[seq_len(n_train)]
+  val_idx <- perm[(n_train + 1L):n]
+
+  # Helper: build tensors for a subset of rows
+  .make_tensors <- function(rows) {
+    num_t <- if (!is.null(prep$num_mat)) {
+      torch::torch_tensor(prep$num_mat[rows, , drop = FALSE],
+                          dtype = torch::torch_float())
+    } else {
+      NULL
+    }
+    cat_t <- lapply(prep$cat_idx, function(idx) {
+      torch::torch_tensor(idx[rows], dtype = torch::torch_long())
+    })
+    list(num = num_t, cat = cat_t)
+  }
+
+  # Helper: compute composite loss
+  .compute_loss <- function(out, num_target, cat_targets) {
+    losses <- list()
+
+    if (!is.null(out$num_recon) && !is.null(num_target)) {
+      losses$mse <- torch::nnf_mse_loss(out$num_recon, num_target)
+    }
+
+    if (!is.null(out$cat_logits) && length(out$cat_logits) > 0) {
+      ce_sum <- torch::torch_tensor(0, dtype = torch::torch_float())
+      for (k in seq_along(prep$cat_keys)) {
+        ce_sum <- ce_sum + torch::nnf_cross_entropy(
+          out$cat_logits[[k]], cat_targets[[k]]
+        )
+      }
+      losses$ce <- ce_sum / length(prep$cat_keys)
+    }
+
+    if (length(losses) == 0) return(torch::torch_tensor(0))
+
+    # Weight by proportion of each type
+    n_vars <- length(prep$num_keys) + length(prep$cat_keys)
+    total <- torch::torch_tensor(0, dtype = torch::torch_float())
+    if (!is.null(losses$mse)) {
+      total <- total + losses$mse * (length(prep$num_keys) / n_vars)
+    }
+    if (!is.null(losses$ce)) {
+      total <- total + losses$ce * (length(prep$cat_keys) / n_vars)
+    }
+    total
+  }
+
+  # Prepare validation tensors (fixed)
+  val_tensors <- .make_tensors(val_idx)
+  val_cat_targets <- lapply(prep$cat_idx, function(idx) {
+    torch::torch_tensor(idx[val_idx], dtype = torch::torch_long())
+  })
+
+  best_val_loss <- Inf
+  patience_counter <- 0L
+
+  for (epoch in seq_len(epochs)) {
+    model$train()
+
+    # Shuffle training data
+    train_perm <- sample(train_idx)
+    n_batches <- ceiling(n_train / batch_size)
+
+    for (b in seq_len(n_batches)) {
+      start <- (b - 1L) * batch_size + 1L
+      end <- min(b * batch_size, n_train)
+      batch_rows <- train_perm[start:end]
+
+      batch_t <- .make_tensors(batch_rows)
+      batch_cat_targets <- lapply(prep$cat_idx, function(idx) {
+        torch::torch_tensor(idx[batch_rows], dtype = torch::torch_long())
+      })
+
+      optimizer$zero_grad()
+      out <- model(batch_t$num, batch_t$cat)
+      loss <- .compute_loss(out, batch_t$num, batch_cat_targets)
+      loss$backward()
+      optimizer$step()
+    }
+
+    # Validation loss
+    model$eval()
+    torch::with_no_grad({
+      val_out <- model(val_tensors$num, val_tensors$cat)
+      val_loss <- .compute_loss(val_out, val_tensors$num, val_cat_targets)
+      val_loss_val <- val_loss$item()
+    })
+
+    # Early stopping
+    if (val_loss_val < best_val_loss) {
+      best_val_loss <- val_loss_val
+      patience_counter <- 0L
+    } else {
+      patience_counter <- patience_counter + 1L
+      if (patience_counter >= patience) break
+    }
+  }
+
+  # Initialize UNK embeddings to mean of learned embeddings
+  torch::with_no_grad({
+    for (k in seq_along(prep$cat_keys)) {
+      v <- prep$cat_keys[k]
+      nl <- prep$n_levels[v]
+      # Learned embeddings are indices 1:nl; UNK is nl+1
+      learned <- model$embeddings[[k]]$weight[1:nl, ]
+      mean_emb <- if (nl == 1L) learned else learned$mean(dim = 1)
+      model$embeddings[[k]]$weight[nl + 1L, ] <- mean_emb
+    }
+  })
+
+  list(
+    model = model,
+    prep = prep,
+    latent_dim = latent_dim
+  )
+}

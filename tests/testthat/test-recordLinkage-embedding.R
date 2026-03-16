@@ -116,3 +116,41 @@ test_that(".ae_model works with all-categorical data", {
   expect_null(out$num_recon)
   expect_true(!is.null(out$cat_logits))
 })
+
+test_that(".ae_train produces a trained model", {
+  skip_if_not_installed("torch")
+  set.seed(42)
+  df <- data.frame(a = rnorm(50), b = sample(letters[1:3], 50, TRUE),
+                   stringsAsFactors = FALSE)
+  res <- .ae_train(df, key = c("a", "b"), epochs = 5L)
+
+  expect_true(inherits(res$model, "nn_module"))
+  expect_true(is.list(res$prep))
+  expect_true(is.integer(res$latent_dim))
+  expect_true(res$latent_dim >= 2L)
+})
+
+test_that(".ae_train respects custom latent_dim", {
+  skip_if_not_installed("torch")
+  set.seed(42)
+  df <- data.frame(a = rnorm(30), b = rnorm(30))
+  res <- .ae_train(df, key = c("a", "b"), latent_dim = 4L, epochs = 3L)
+
+  expect_equal(res$latent_dim, 4L)
+})
+
+test_that(".ae_train is reproducible with set.seed", {
+  skip_if_not_installed("torch")
+  df <- data.frame(a = rnorm(30), b = rnorm(30))
+
+  set.seed(123)
+  res1 <- .ae_train(df, key = c("a", "b"), latent_dim = 2L, epochs = 5L)
+
+  set.seed(123)
+  res2 <- .ae_train(df, key = c("a", "b"), latent_dim = 2L, epochs = 5L)
+
+  # Same seed -> same model weights
+  w1 <- as.numeric(res1$model$enc1$weight$cpu())
+  w2 <- as.numeric(res2$model$enc1$weight$cpu())
+  expect_equal(w1, w2, tolerance = 1e-6)
+})
