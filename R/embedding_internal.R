@@ -1,6 +1,6 @@
 #' Preprocess data for autoencoder embedding
 #'
-#' Min-max scales numeric columns to [0,1], builds 1-based category-to-index
+#' Min-max scales numeric columns to \eqn{[0, 1]}, builds 1-based category-to-index
 #' mappings for categorical columns, and computes metadata for model construction.
 #'
 #' @param data data.frame to preprocess
@@ -47,7 +47,7 @@
     }
   }
 
-  # Numeric: min-max scale to [0,1]
+  # Numeric: min-max scale to \eqn{[0, 1]}
   num_mat <- NULL
   if (length(num_keys) > 0) {
     if (is.null(num_ranges)) {
@@ -68,7 +68,7 @@
       } else {
         num_mat[, j] <- 0.5
       }
-      # Clamp to [0,1] for out-of-range values in new data
+      # Clamp to \eqn{[0, 1]} for out-of-range values in new data
       num_mat[, j] <- pmin(pmax(num_mat[, j], 0), 1)
     }
   } else {
@@ -431,7 +431,7 @@
 #' Compute normalized Euclidean distances in latent space
 #'
 #' Computes pairwise Euclidean distances between query and search embeddings,
-#' normalized to [0,1] using the 97.5th percentile of within-query distances
+#' normalized to \eqn{[0, 1]} using the 97.5th percentile of within-query distances
 #' (with fallback to max for small datasets, n < 40).
 #'
 #' @param emb_query numeric matrix (n_q x latent_dim)

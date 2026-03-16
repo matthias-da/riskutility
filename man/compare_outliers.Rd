@@ -83,7 +83,10 @@ Other comparison:
 \code{\link{compare_multivariate_distribution}()},
 \code{\link{compare_multivariate_summary_statistics}()},
 \code{\link{compare_pca}()},
-\code{\link{compare_wasserstein}()}
+\code{\link{compare_wasserstein}()},
+\code{\link{densitydiff_1d_num}()},
+\code{\link{densitydiff_kl_num}()},
+\code{\link{densitydiff_pca}()}
 }
 \author{
 Matthias Templ

@@ -8,7 +8,7 @@
 \usage{
 attacker_risk(X, ...)
 
-\method{attacker_risk}{synth_pair}(X, ...)
+\method{attacker_risk}{synth_pair}(X, data = c("synthetic", "original"), ...)
 
 \method{attacker_risk}{default}(
   X,
@@ -23,6 +23,9 @@ attacker_risk(X, ...)
 \item{X}{data frame to assess, or a \code{\link{synth_pair}} object}
 
 \item{...}{additional arguments passed to methods (currently unused)}
+
+\item{data}{character, which dataset to assess: "synthetic" (default) or "original".
+Only used by the synth_pair method.}
 
 \item{key_vars}{character vector of quasi-identifier variable names}
 

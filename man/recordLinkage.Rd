@@ -518,7 +518,7 @@ may miss.
 
 The autoencoder trains only on query data, modeling an attacker who knows
 the population structure but not the specific anonymization. Distances are
-normalized to \link{0,1} using the 97.5th percentile of within-query pairwise
+normalized to \eqn{[0, 1]} using the 97.5th percentile of within-query pairwise
 distances. Variable importance is permutation-based: each variable is
 shuffled and the mean embedding shift is measured.
 

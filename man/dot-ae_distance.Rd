@@ -4,12 +4,16 @@
 \alias{.ae_distance}
 \title{Compute normalized Euclidean distances in latent space}
 \usage{
-.ae_distance(emb_query, emb_search)
+.ae_distance(emb_query, emb_search, threshold = NULL)
 }
 \arguments{
 \item{emb_query}{numeric matrix (n_q x latent_dim)}
 
 \item{emb_search}{numeric matrix (n_s x latent_dim)}
+
+\item{threshold}{numeric or NULL. If provided, skip threshold computation
+and use this value for normalization (useful for emb_global mode where
+a single threshold is computed from all query data).}
 }
 \value{
 list with:
@@ -20,7 +24,7 @@ list with:
 }
 \description{
 Computes pairwise Euclidean distances between query and search embeddings,
-normalized to \link{0,1} using the 97.5th percentile of within-query distances
+normalized to \eqn{[0, 1]} using the 97.5th percentile of within-query distances
 (with fallback to max for small datasets, n < 40).
 }
 \keyword{internal}

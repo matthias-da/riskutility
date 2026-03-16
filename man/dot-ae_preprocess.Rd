@@ -37,7 +37,7 @@ level -> index (1-based)}
 }
 }
 \description{
-Min-max scales numeric columns to \link{0,1}, builds 1-based category-to-index
+Min-max scales numeric columns to \eqn{[0, 1]}, builds 1-based category-to-index
 mappings for categorical columns, and computes metadata for model construction.
 }
 \keyword{internal}

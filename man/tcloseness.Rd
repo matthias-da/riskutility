@@ -8,7 +8,7 @@
 \usage{
 tcloseness(X, ...)
 
-\method{tcloseness}{synth_pair}(X, t = 0.2, ...)
+\method{tcloseness}{synth_pair}(X, t = 0.2, data = c("synthetic", "original"), ...)
 
 \method{tcloseness}{default}(X, key_vars, sensitive_var, t = 0.2, na.rm = TRUE, ...)
 }
@@ -18,6 +18,9 @@ tcloseness(X, ...)
 \item{...}{additional arguments passed to methods (currently unused)}
 
 \item{t}{numeric, the t-closeness threshold (default: 0.2)}
+
+\item{data}{character, which dataset to assess: "synthetic" (default) or "original".
+Only used by the synth_pair method.}
 
 \item{key_vars}{character vector of quasi-identifier variable names}
 

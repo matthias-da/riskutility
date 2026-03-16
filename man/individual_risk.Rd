@@ -8,7 +8,7 @@
 \usage{
 individual_risk(X, ...)
 
-\method{individual_risk}{synth_pair}(X, threshold = 0.1, ...)
+\method{individual_risk}{synth_pair}(X, threshold = 0.1, data = c("synthetic", "original"), ...)
 
 \method{individual_risk}{default}(
   X,
@@ -26,6 +26,9 @@ individual_risk(X, ...)
 \item{...}{additional arguments passed to methods}
 
 \item{threshold}{numeric, risk threshold for flagging high-risk records (default: 0.1)}
+
+\item{data}{character, which dataset to assess: "synthetic" (default) or "original".
+Only used by the synth_pair method.}
 
 \item{key_vars}{character vector of quasi-identifier variable names}
 

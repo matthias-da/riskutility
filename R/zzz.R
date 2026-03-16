@@ -24,7 +24,9 @@ utils::globalVariables(c(
   # dcap/tcap data.table variables
   "key_sig", "target", "n_total", "orig_idx", "n_correct", "unique_syn", "unique_orig",
   # rapid plot variables
-  "at_risk"
+  "at_risk",
+  # torch nn_module self reference
+  "self"
 ))
 
 #' @importFrom grDevices rgb

@@ -6,14 +6,14 @@
 \alias{weap.default}
 \title{Within Equivalence Class Attribution Probability (WEAP)}
 \usage{
-weap(Y, ...)
+weap(X, ...)
 
-\method{weap}{synth_pair}(Y, ...)
+\method{weap}{synth_pair}(X, ...)
 
-\method{weap}{default}(Y, key_vars, target_var, na.rm = TRUE, ...)
+\method{weap}{default}(X, key_vars, target_var, na.rm = TRUE, ...)
 }
 \arguments{
-\item{Y}{data frame of synthetic data}
+\item{X}{data frame of synthetic data}
 
 \item{...}{additional arguments passed to methods (currently unused)}
 
@@ -59,7 +59,7 @@ can confidently infer the target value.
 \examples{
 # Create synthetic data
 set.seed(123)
-Y <- data.frame(
+X <- data.frame(
   age = sample(c("young", "middle", "old"), 200, replace = TRUE),
   gender = sample(c("M", "F"), 200, replace = TRUE),
   region = sample(c("N", "S"), 200, replace = TRUE),
@@ -67,7 +67,7 @@ Y <- data.frame(
 )
 
 # Compute WEAP
-result <- weap(Y,
+result <- weap(X,
                key_vars = c("age", "gender", "region"),
                target_var = "income")
 print(result)
@@ -77,7 +77,7 @@ plot(result)
 # Identify disclosive records
 disclosive_idx <- which(result$weap_scores == 1)
 if (length(disclosive_idx) > 0) {
-  head(Y[disclosive_idx, ])
+  head(X[disclosive_idx, ])
 }
 }
 \references{

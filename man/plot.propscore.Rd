@@ -4,7 +4,7 @@
 \alias{plot.propscore}
 \title{Plot method for propscore objects}
 \usage{
-\method{plot}{propscore}(x, y, ..., which = 1)
+\method{plot}{propscore}(x, y = NULL, ..., which = 1)
 }
 \arguments{
 \item{x}{an object of class "propscore"}
