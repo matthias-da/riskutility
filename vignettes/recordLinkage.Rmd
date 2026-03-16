@@ -14,9 +14,9 @@ abstract: >
   `recordLinkage()` function implements eight linkage methods under a
   single S3 interface with consistent risk weighting, blocking, and
   forward/reverse direction support. This paper covers the five core
-  methods in detail --- deterministic (Gower distance), probabilistic
+  methods in detail -- deterministic (Gower distance), probabilistic
   (Fellegi-Sunter), PRAM (transition matrix), predictive (propensity
-  score), and embedding (autoencoder latent-space distance) --- while
+  score), and embedding (autoencoder latent-space distance) -- while
   three additional methods (random forest proximity, rank-based, and
   Mahalanobis) are documented in the package help pages.
   While several R packages provide record linkage functionality
@@ -49,10 +49,17 @@ knitr::opts_chunk$set(
   warning = FALSE, message = FALSE
 )
 library(riskutility)
+if (!requireNamespace("sdcMicro", quietly = TRUE))
+  stop("This vignette requires the sdcMicro package. ",
+       "Install it with install.packages('sdcMicro').")
 library(sdcMicro)
 ```
 
 # Introduction
+
+*Prerequisites*: This vignette assumes familiarity with microdata and
+basic SDC concepts (quasi-identifiers, perturbation). Knowledge of R
+at the level of running functions and reading data frames is sufficient.
 
 ## Perturbative SDC and Record Linkage Risk
 
@@ -66,11 +73,11 @@ fundamentally different from fully synthetic data: every released record
 has a real individual behind it, and the attacker's task is to undo the
 perturbation and re-identify that individual.
 
-A *quasi-identifier* (QI) is a variable that is not a direct identifier
-(such as a name or social security number) but can be used in
-combination with other variables to narrow down the identity of a record
-holder. Typical quasi-identifiers include age, sex, region, education,
-and occupation. The set of quasi-identifiers available to an attacker
+A *quasi-identifier* (QI), also called a *key variable* (parameter `key`
+in the R interface), is a variable that is not a direct identifier (such
+as a name or social security number) but can be used in combination with
+other variables to narrow down the identity of a record holder. Typical
+quasi-identifiers include age, sex, region, education, and occupation. The set of quasi-identifiers available to an attacker
 determines the scope of a record linkage attack
 [@skinner2002measure; @elliot2018functional].
 
@@ -103,6 +110,10 @@ Ground truth for evaluation is taken from row alignment
 (`truth = "row"`) or a shared identifier column (`truth = "id"`).
 Note that `truth` affects only the *evaluation* of success; it is not
 an attacker capability.
+
+For example, an attacker with access to a voter registration list
+(containing age, sex, and city) attempts to link those records to a
+published health survey to learn about medical conditions.
 
 These assumptions represent a *worst-case* scenario. In practice,
 attackers rarely have perfect membership knowledge (they may not know
@@ -187,7 +198,9 @@ For the theoretical background on record linkage see @fellegi1969theory,
 @winkler2006overview, and @domingo2002validating; for empirical
 disclosure risk assessment via record linkage see
 @domingoferrer2003disclosure; for PRAM see @gouweleeuw1998post; for the
-general framework of record linkage risk see @dewolf2002framework.
+general framework of record linkage risk see @dewolf2002framework; for a
+textbook treatment of SDC risk estimation see @templ2017statistical
+(Chapter 6).
 
 
 # Mathematical Framework
@@ -224,8 +237,10 @@ Given a candidate set $C_i$ with weights $\pi_j \ge 0$,
 $\sum_{j \in C_i} \pi_j = 1$, the re-identification risk for record $i$
 is:
 $$r_i = \sum_{j \in C_i} \pi_j \cdot \mathbf{1}[j = j^*_i].$$
-When the true match is not in the candidate set, $r_i = 0$. When there
-is a single candidate and it is the true match, $r_i = 1$.
+Since the indicator is nonzero for at most one term, this simplifies to
+$r_i = \pi_{j^*_i}$ if the true match $j^*_i \in C_i$, and $r_i = 0$
+otherwise. When there is a single candidate and it is the true match,
+$r_i = 1$.
 
 The overall risk is summarized by the mean $\bar{r} = n^{-1}\sum_i r_i$,
 the maximum $r_{\max}$, and the fraction of records exceeding a threshold
@@ -240,7 +255,7 @@ distance methods (deterministic, predictive), the two perspectives
 yield similar but not identical results because the evaluation criterion
 changes (different records serve as query vs. search). For PRAM, the
 asymmetric transition matrices cause forward and reverse risks to differ
-substantially (Section 5.3).
+substantially (see the PRAM Forward vs. Reverse subsection).
 
 ## Risk Weighting Schemes
 
@@ -258,8 +273,11 @@ the true match, the risk is $1/3$ regardless of distance.
 exponentially higher weight:
 $$\pi_j = \frac{\exp(-\kappa \cdot d_j)}{\sum_{k \in C_i} \exp(-\kappa \cdot d_k)},$$
 where $d_j \equiv d(i,j)$ is the distance from query record $i$ to
-candidate $j$, and $\kappa > 0$ is a temperature parameter. If not supplied, $\kappa$
-is auto-calibrated as $2 / (\max(d) - \min(d))$. As $\kappa \to \infty$
+candidate $j$, and $\kappa > 0$ is a temperature parameter. If not
+supplied, $\kappa$ is auto-calibrated as $2 / (\max(d) - \min(d))$,
+so that the ratio of weights for the closest vs. farthest candidate is
+approximately $e^2 \approx 7.4$ -- a moderate concentration that avoids
+both winner-take-all and near-uniform behavior. As $\kappa \to \infty$
 this approaches winner-take-all; as $\kappa \to 0$ it converges to
 uniform.
 
@@ -268,8 +286,13 @@ kernel function evaluated at the scaled distance:
 $$\pi_j = \frac{K(d_j / h)}{\sum_{k \in C_i} K(d_k / h)},$$
 where $h$ is the bandwidth and $K$ is a kernel function.
 If $h$ is not supplied, it is auto-selected via Silverman's rule of
-thumb applied to the candidate distances:
-$$h = 0.9 \cdot \min\!\left(\hat\sigma,\, \frac{\text{IQR}}{1.34}\right) \cdot |C_i|^{-1/5}.$$
+thumb (a standard bandwidth selector from kernel density estimation),
+applied heuristically to the candidate distances:
+$$h = 0.9 \cdot \min\!\left(\hat\sigma,\, \frac{\widehat{\text{IQR}}}{1.34}\right) \cdot |C_i|^{-1/5}.$$
+Note that this rule was designed for density estimation with larger
+samples; for small candidate sets (e.g., $|C_i| \le 5$), the bandwidth
+may be suboptimal. Users can supply a fixed $h$ via the `kernel_h`
+parameter to override auto-selection.
 The available kernels are:
 
 - *Gaussian*: $K(u) = \exp(-u^2/2)$
@@ -279,7 +302,7 @@ The available kernels are:
 With compact kernels (Epanechnikov, tricube), candidates beyond the
 bandwidth receive exactly zero weight and are effectively excluded.
 The effect of the bandwidth and kernel choice is demonstrated
-empirically in the weighting scheme comparison (Section 6.2); readers
+empirically in the Weighting Scheme Comparison subsection below; readers
 unfamiliar with kernel density estimation may skip these details on
 first reading.
 
@@ -305,7 +328,11 @@ where the variable-specific dissimilarities are:
 
 - **Numeric / ordinal**: $\delta_v(i,j) = |x_{iv} - x^a_{jv}| / R_v$,
   where $R_v = \max(x_v \cup x^a_v) - \min(x_v \cup x^a_v)$ is the
-  range computed over both datasets
+  range computed over both datasets. Ordinal variables (ordered factors
+  in R) are treated identically to numeric variables: the integer codes
+  of the ordered levels are used as numeric values, preserving the
+  ordering. Use the `type` parameter to explicitly set a variable as
+  `"ordinal"` if automatic detection is incorrect.
 - **Nominal**: $\delta_v(i,j) = \mathbf{1}[x_{iv} \ne x^a_{jv}]$
 
 The variable weights $w_v$ control the relative importance of each
@@ -314,9 +341,14 @@ are equal ($w_v = 1$ for all $v$). Setting a higher weight for a variable
 increases its influence on the distance -- for example, setting
 $w_{\text{age}} = 2$ would make age twice as influential as variables
 with $w_v = 1$. Weights can be specified via the `weights` parameter in
-`recordLinkage()`.
+`recordLinkage()`. In practice, weights can reflect the attacker's
+likely knowledge quality (higher for variables known with certainty,
+lower for noisily known variables) or regulatory importance. In most
+cases, equal weights are a reasonable default.
 
-The resulting distance $d(i,j) \in [0, 1]$, where 0 indicates perfect
+When missing values are present, the summation in both numerator and
+denominator is restricted to variables with valid observations for both
+records. The resulting distance $d(i,j) \in [0, 1]$, where 0 indicates perfect
 agreement and 1 maximal disagreement.
 
 ## Toy Example: 6 Records
@@ -492,7 +524,7 @@ guarantee that individual records are protected -- `max_risk` may be
 examine `max_risk`, `n_high_risk`, and the risk band distribution
 alongside the pass/fail label. A custom threshold can be set via
 the `risk_threshold` parameter. For a full discussion, see
-Section 8.2 (Interpreting Risk Bands).
+the Interpreting Risk Bands subsection in Practical Guidance.
 
 ```{r det-realdata-plot, fig.height=4, fig.cap="Distribution of per-record re-identification risk (deterministic method). The red dashed line indicates the risk threshold (0.1)."}
 plot(res_real, which = 1)
@@ -568,8 +600,12 @@ and are recommended when the perturbation mechanism is well understood.
 
 ## Toy Example: 5 Records (All Categorical)
 
-We use an all-categorical toy example to avoid the complication of
-numeric tolerance.
+We use a new all-categorical toy example here to avoid the complication
+of numeric tolerance thresholds (which the deterministic section's
+6-record dataset with numeric `age` would require). The Fellegi-Sunter
+model defines agreement/disagreement per variable, and for numeric
+variables this requires a tolerance parameter that would obscure the
+core mechanism.
 
 ```{r prob-toy-data}
 orig_p <- data.frame(
@@ -644,7 +680,7 @@ knitr::kable(ht, caption = "Log-LR scores for original record 1 vs all anonymize
 
 For anonymized record 1 (all three variables agree):
 $\Lambda = 0.642 + 1.163 + 2.140 = 3.945$. This is the highest score.
-With `fs_threshold = 0` (the default -- include all pairs with positive
+With `fs_threshold = 0` (the default -- include all pairs with non-negative
 log-likelihood ratio), only anonymized record 1 qualifies, so
 $r_1 = 1.0$.
 
@@ -703,7 +739,7 @@ and fully protects record 4 (region "W" absent in the anonymized
 data, all scores negative, $r_4 = 0.0$). Compared to the deterministic
 method, the probabilistic approach automatically gives more weight to
 agreements on rare values: job agreement (with 4+ categories)
-contributes 3.3 times more evidence than sex agreement (with only 2
+contributes more than three times as much evidence as sex agreement (with only 2
 categories), reflecting the discriminative power of each variable.
 
 ## Real-World Example (n = 500)
@@ -761,10 +797,12 @@ independently to each variable.
 
 ## Toy Example: 5 Records
 
-We use abstract categorical variables (`color`, `shape`) here to focus
-attention on the PRAM transition mechanism itself, with $3 \times 3$
-matrices that exhibit richer structure than the binary quasi-identifiers
-used in the other sections.
+We use abstract categorical variables (`color`, `shape`) here with
+$3 \times 3$ transition matrices that exhibit richer structure than
+binary QIs. The abstract names make the transition matrix entries easier
+to follow without domain-specific connotations (e.g., one can see that
+$T[\text{R}, \text{G}] = 0.1$ without wondering whether "R" and "G"
+represent adjacent regions).
 
 ```{r pram-toy-data}
 orig_pram <- data.frame(
@@ -1102,9 +1140,7 @@ knitr::kable(res_pred$per_record[, c("risk", "cand_n", "true_in_set", "d_true")]
 space into a single dimension that captures discriminability between
 the two datasets. With this small toy example, the projection is
 nearly flat. With larger samples and more QIs, the 1D projection may
-capture multivariate structure that pairwise Gower distances miss,
-though this advantage has not yet been empirically established in the
-SDC literature (see Limitations).
+capture multivariate structure that pairwise Gower distances miss.
 
 ```{r pred-toy-propensity, fig.height=4, fig.cap="Propensity score densities for original and anonymized records. Well-separated distributions indicate easy-to-link records."}
 plot(res_pred, which = 4)
@@ -1174,6 +1210,12 @@ plot(res_pred_real, which = 4)
 
 # Embedding Method (Autoencoder)
 
+*This method requires the **torch** package and is most relevant for
+datasets with many high-cardinality categorical variables or complex
+nonlinear dependencies. If your data has standard census-type variables
+(age, sex, region, education) with moderate cardinality, the
+deterministic or probabilistic methods are usually sufficient.*
+
 When quasi-identifiers interact nonlinearly or include a mix of numeric
 and high-cardinality categorical variables, the Gower and Mahalanobis
 distances used by deterministic methods may miss important structure.
@@ -1211,7 +1253,7 @@ pairwise distances (a pragmatic heuristic for robustness to outlier
 embeddings; blocks with fewer than 40 records fall back to the maximum).
 Risk is then $r_i = 1 - d_z(i, j^*)$, where $j^*$ is the nearest search
 record. **Important**: Unlike the candidate-set probability used by the
-other four methods (Section 2.2), this is a distance-based similarity
+other four methods (see Re-identification Risk above), this is a distance-based similarity
 index, not a re-identification probability. Embedding risk values are
 therefore not directly comparable on the same scale as risk from the
 deterministic, probabilistic, PRAM, or predictive methods.
@@ -1247,7 +1289,7 @@ anon_emb <- data.frame(
   sex = factor(c("F", "M", "F", "M", "F", "M"))
 )
 
-set.seed(42)
+set.seed(42)  # controls R-level randomness; exact results may vary across platforms
 res_emb <- recordLinkage(orig_emb, anon_emb,
                           key = c("age", "sex"),
                           method = "embedding",
@@ -1555,6 +1597,11 @@ number of pairs. As a rough guideline:
 | $5{,}000 < n < 50{,}000$ | Use blocking; the predictive method may be faster (single model fit vs. full distance matrix) |
 | $n > 50{,}000$ | Blocking required; consider the predictive method for its lower constant factor |
 
+As a rough benchmark, the deterministic method on 500 records with
+4 QIs takes well under one second; at $n = 5{,}000$ without blocking,
+expect a few seconds; the embedding method adds autoencoder training
+overhead (typically 5--30 seconds depending on `emb_epochs`).
+
 ## Software Dependencies
 
 The core `recordLinkage()` function requires only base R and the
@@ -1674,8 +1721,9 @@ cat("Mean risk (id-based, shuffled):", round(res_id$overall$mean_risk, 4), "\n")
 
 ## The synth_pair Interface
 
-For workflows that use the `synth_pair` container, `recordLinkage()`
-has a dedicated method:
+If you are already using **riskutility**'s `synth_pair` workflow for
+other metrics (e.g., DCAP, RAPID, pMSE), you can pass the same object
+directly to `recordLinkage()`:
 
 ```{r synthpair}
 pair <- synth_pair(census, census_anon,
@@ -1718,6 +1766,13 @@ patterns. Second, when the perturbation mechanism is known exactly
 (transition matrices from PRAM, or m/u probabilities from a formal
 audit), the mechanism-specific methods (PRAM or probabilistic) give
 more accurate risk estimates than the distance-based default.
+
+When multiple perturbation methods have been applied to different
+variables (e.g., local suppression for some, microaggregation for
+income, rank swapping for age), use the deterministic method as a
+default -- it makes no assumptions about the perturbation mechanism.
+If PRAM transition matrices are available for a categorical subset,
+complement with a separate PRAM assessment on those variables.
 
 ## Interpreting Risk Bands
 
@@ -1764,7 +1819,11 @@ small fraction of records.
 When the risk assessment returns a warning, practitioners need to
 identify which records are at risk and decide on remedial action.
 The `recordLinkageRisk` object provides several per-record diagnostics
-and helper functions for this purpose.
+and helper functions for this purpose, following a natural workflow:
+(1) *which records are at risk?* (diagnostics, `top_at_risk`),
+(2) *why are they at risk?* (`inspect_record`, `var_importance`),
+(3) *which groups need attention?* (`risk_by_group`),
+(4) *how concentrated is the risk?* (Lorenz/Gini).
 
 ### Per-record diagnostics
 
@@ -1885,6 +1944,44 @@ Common remedial actions include:
 In an iterative SDC workflow, the risk assessment is repeated after
 each additional protection step until the risk profile is acceptable.
 
+### QI sensitivity
+
+Risk estimates are conditional on the assumed set of quasi-identifiers.
+Running the assessment with different QI sets provides a sensitivity
+check:
+
+```{r qi-sensitivity}
+qi_sets <- list(
+  "age + sex"         = c("age", "sex"),
+  "age + sex + region" = c("age", "sex", "region"),
+  "all 4 QIs"          = c("age", "sex", "region", "educ")
+)
+qi_sens <- data.frame(
+  QI_set = names(qi_sets),
+  Mean_risk = vapply(qi_sets, function(qi)
+    recordLinkage(census, census_anon, key = qi)$overall$mean_risk,
+    numeric(1))
+)
+knitr::kable(qi_sens, digits = 4, row.names = FALSE,
+             caption = "Effect of QI set on mean risk")
+```
+
+Adding `region` and `educ` progressively increases the attacker's
+discriminatory power. Practitioners should consider the broadest
+plausible set of QIs that an attacker might access.
+
+### Sample surveys vs. census data
+
+`recordLinkage()` assumes the attacker has *membership knowledge* --
+they know the target individual is in the dataset. For census or
+administrative data, this is a reasonable assumption. For sample surveys,
+the attacker may not know whether the target was sampled, and the
+computed risk is an upper bound. In such cases, combine
+`recordLinkage()` with `population_uniqueness()` to estimate
+population-level risk. As a rule of thumb, for a sampling fraction $f$,
+the actual re-identification probability is approximately $f \cdot r_i$
+[@franconi2004individual].
+
 ## Common Pitfalls
 
 1. **All records flagged as high risk**: This often happens with
@@ -1909,7 +2006,8 @@ each additional protection step until the risk profile is acceptable.
    meaningless scaled distances (factor levels are arbitrary integers);
    numeric variables treated as nominal ignore the ordering and distance
    structure. Always verify with `str()` and use the `type` parameter
-   to override incorrect automatic detection.
+   to override incorrect automatic detection, e.g.,
+   `recordLinkage(..., type = c(zip = "nominal", educ = "ordinal"))`.
 
 4. **Blocking too aggressively**: Blocking restricts candidate search
    to records sharing the same blocking variable value. If the blocking
@@ -1990,8 +2088,8 @@ framework of @domingoferrer2003disclosure.
 @herranz2016gdbrl introduced *Global DBRL* (GDBRL), which models
 a stronger attacker who enforces a one-to-one (bijective) assignment
 between original and anonymized records. The attacker solves a global
-optimization problem---minimizing total cost across all records
-simultaneously---using the Hungarian algorithm (linear sum assignment).
+optimization problem -- minimizing total cost across all records
+simultaneously -- using the Hungarian algorithm (linear sum assignment).
 Because the bijective constraint prevents multiple original records from
 being matched to the same anonymized record, the resulting risk
 estimates are typically higher than independent scoring: the attacker
@@ -2012,7 +2110,7 @@ bijective (hard) assignments, controlled by the `ot_epsilon` parameter.
 
 ## Comparison Example
 
-```{r bijective-comparison, cache=TRUE}
+```{r bijective-comparison}
 # Independent matching (default) -- reuses census / census_anon from above
 res_ind <- recordLinkage(census, census_anon,
                          key = c("age", "sex", "region", "educ"),
@@ -2040,7 +2138,7 @@ Bijective (and OT) matching works with all eight methods and with blocking. When
 blocking is enabled, the Hungarian algorithm runs independently within
 each block:
 
-```{r bijective-blocking, cache=TRUE}
+```{r bijective-blocking}
 res_blk <- recordLinkage(census, census_anon,
                          key = c("age", "sex", "region", "educ"),
                          block = "region",
@@ -2118,14 +2216,16 @@ Several limitations should be noted:
 
 ## Future Directions
 
-Planned extensions include integration with Franconi-Polettini
-population frequency estimation [@franconi2004individual] for
-population-level risk, household-level matching for hierarchical
-microdata, and attribute disclosure assessment (extending the function
-to evaluate whether an attacker could infer sensitive attributes after
-successful linkage). Performance improvements through parallel
-computation and approximate nearest-neighbor search are also planned
-for large-scale applications.
+Planned extensions include:
+
+- Integration with Franconi-Polettini population frequency estimation
+  [@franconi2004individual] for population-level risk.
+- Household-level matching for hierarchical microdata.
+- Attribute disclosure assessment: extending the function to evaluate
+  whether an attacker could infer sensitive attributes after successful
+  linkage.
+- Performance improvements through parallel computation and approximate
+  nearest-neighbor search for large-scale applications.
 
 
 # References
