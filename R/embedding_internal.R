@@ -436,13 +436,16 @@
 #'
 #' @param emb_query numeric matrix (n_q x latent_dim)
 #' @param emb_search numeric matrix (n_s x latent_dim)
+#' @param threshold numeric or NULL. If provided, skip threshold computation
+#'   and use this value for normalization (useful for emb_global mode where
+#'   a single threshold is computed from all query data).
 #' @return list with:
 #'   \describe{
 #'     \item{dist_mat}{numeric matrix (n_q x n_s) of normalized distances}
 #'     \item{threshold}{numeric, normalization threshold used}
 #'   }
 #' @keywords internal
-.ae_distance <- function(emb_query, emb_search) {
+.ae_distance <- function(emb_query, emb_search, threshold = NULL) {
   n_q <- nrow(emb_query)
   n_s <- nrow(emb_search)
 
@@ -458,8 +461,11 @@
   cross_sq[cross_sq < 0] <- 0  # numerical cleanup
   cross_dist <- sqrt(cross_sq)
 
-  # Within-query distances for threshold
-  if (n_q > 1) {
+  # Within-query distances for threshold (skip if pre-computed)
+  if (!is.null(threshold)) {
+    # Use externally provided threshold (e.g., from global embedding)
+    if (threshold <= 0) threshold <- 1
+  } else if (n_q > 1) {
     q_sq_mat <- outer(q_sq, q_sq, "+") - 2 * tcrossprod(emb_query)
     q_sq_mat[q_sq_mat < 0] <- 0
     q_dist <- sqrt(q_sq_mat)

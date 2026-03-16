@@ -1450,14 +1450,19 @@ recordLinkage.default <- function(X,
                 emb_original = emb_all_query
             )
 
+            # Global threshold for consistent cross-block normalization
+            global_dist <- .ae_distance(emb_all_query, emb_all_query)
+            global_threshold <- global_dist$threshold
+
             for (blk in all_blocks) {
                 s_idx <- split_search[[blk]]
                 q_idx <- which(blk_query == blk)
                 if (length(q_idx) == 0 || length(s_idx) == 0) next
 
-                # Within-block distances from global embeddings
+                # Within-block distances, using global threshold
                 dist_res <- .ae_distance(emb_all_query[q_idx, , drop = FALSE],
-                                         emb_all_search[s_idx, , drop = FALSE])
+                                         emb_all_search[s_idx, , drop = FALSE],
+                                         threshold = global_threshold)
                 .emb_process_block(q_idx, s_idx, dist_res$dist_mat)
             }
 
