@@ -148,6 +148,7 @@ Series Generation with Recurrent Conditional GANs. arXiv:1706.02633.
 Other utility: 
 \code{\link{chisq_utility}()},
 \code{\link{ci_proximity}()},
+\code{\link{copula_fidelity}()},
 \code{\link{energy_distance}()},
 \code{\link{gower}()},
 \code{\link{hellinger}()},
@@ -156,7 +157,8 @@ Other utility:
 \code{\link{pMSE}()},
 \code{\link{propscore}()},
 \code{\link{rumap}()},
-\code{\link{specks}()}
+\code{\link{specks}()},
+\code{\link{tail_fidelity}()}
 }
 \author{
 Matthias Templ

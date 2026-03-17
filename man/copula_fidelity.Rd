@@ -126,6 +126,7 @@ Other utility:
 \code{\link{propscore}()},
 \code{\link{rumap}()},
 \code{\link{specks}()},
+\code{\link{tail_fidelity}()},
 \code{\link{tstr}()}
 }
 \author{

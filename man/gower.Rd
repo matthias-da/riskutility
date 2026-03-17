@@ -55,6 +55,7 @@ Properties. \emph{Biometrics}, 27(4), 857--871.
 Other utility: 
 \code{\link{chisq_utility}()},
 \code{\link{ci_proximity}()},
+\code{\link{copula_fidelity}()},
 \code{\link{energy_distance}()},
 \code{\link{hellinger}()},
 \code{\link{mmd}()},
@@ -63,6 +64,7 @@ Other utility:
 \code{\link{propscore}()},
 \code{\link{rumap}()},
 \code{\link{specks}()},
+\code{\link{tail_fidelity}()},
 \code{\link{tstr}()}
 }
 \author{

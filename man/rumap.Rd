@@ -175,6 +175,7 @@ Synthetic Data. Journal of Official Statistics.
 Other utility: 
 \code{\link{chisq_utility}()},
 \code{\link{ci_proximity}()},
+\code{\link{copula_fidelity}()},
 \code{\link{energy_distance}()},
 \code{\link{gower}()},
 \code{\link{hellinger}()},
@@ -183,6 +184,7 @@ Other utility:
 \code{\link{pMSE}()},
 \code{\link{propscore}()},
 \code{\link{specks}()},
+\code{\link{tail_fidelity}()},
 \code{\link{tstr}()}
 }
 \author{

@@ -128,6 +128,7 @@ and the square root. \emph{Annals of Mathematical Statistics}, 21, 607-611.
 
 Other utility: 
 \code{\link{ci_proximity}()},
+\code{\link{copula_fidelity}()},
 \code{\link{energy_distance}()},
 \code{\link{gower}()},
 \code{\link{hellinger}()},
@@ -137,6 +138,7 @@ Other utility:
 \code{\link{propscore}()},
 \code{\link{rumap}()},
 \code{\link{specks}()},
+\code{\link{tail_fidelity}()},
 \code{\link{tstr}()}
 }
 \author{

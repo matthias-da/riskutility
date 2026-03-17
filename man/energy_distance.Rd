@@ -125,6 +125,7 @@ WIREs Computational Statistics, 8(1), 27-38.
 Other utility: 
 \code{\link{chisq_utility}()},
 \code{\link{ci_proximity}()},
+\code{\link{copula_fidelity}()},
 \code{\link{gower}()},
 \code{\link{hellinger}()},
 \code{\link{mmd}()},
@@ -133,6 +134,7 @@ Other utility:
 \code{\link{propscore}()},
 \code{\link{rumap}()},
 \code{\link{specks}()},
+\code{\link{tail_fidelity}()},
 \code{\link{tstr}()}
 }
 \author{
