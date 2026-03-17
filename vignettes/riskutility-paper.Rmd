@@ -1,0 +1,1307 @@
+---
+title: "riskutility: Comprehensive Disclosure Risk and Data Utility Assessment for Anonymized and Synthetic Data in R"
+author:
+  - name: Matthias Templ
+    affiliation: "Institute of Data Analysis and Process Design, Zurich University of Applied Sciences"
+  - name: Oscar Thees
+    affiliation: "Institute of Data Analysis and Process Design, Zurich University of Applied Sciences"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+bibliography: references.bib
+vignette: >
+  %\VignetteIndexEntry{riskutility: Comprehensive Disclosure Risk and Data Utility Assessment for Anonymized and Synthetic Data in R}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5,
+  message = FALSE,
+  warning = FALSE
+)
+library(riskutility)
+```
+
+# Introduction {#sec-intro}
+
+Statistical agencies and data custodians face a fundamental challenge: releasing
+data that is useful for analysis while protecting individual privacy. Two main
+approaches exist: (i) traditional anonymization methods such as perturbation,
+suppression, and generalization [@hundepool2012statistical;
+@templ2017statistical], and (ii) synthetic data generation via statistical
+models [@nowok2016synthpop; @templ2017simulation]. Both require rigorous
+evaluation of *disclosure risk* and *data utility* --- yet existing tools
+assess these two dimensions in isolation or cover only a narrow subset of the
+relevant metrics.
+
+The R package sdcMicro [@templ2015sdcmicro] provides frequency-based risk
+estimation but limited utility assessment. synthpop [@nowok2016synthpop]
+offers the CAP disclosure metric and propensity-score utility but not
+distance-based or membership inference methods. In Python, SDMetrics covers
+distance-based metrics and Anonymeter implements GDPR failure criteria, but
+neither addresses attribution risk. No existing tool provides a unified
+framework that spans all risk families and supports multivariate comparison
+of multiple synthesis approaches.
+
+The **riskutility** package for R [@R2025] fills this gap. It implements
+over 30 risk measures spanning six paradigms --- frequency-based privacy
+models, attribution-based (CAP), ML-based (RAPID), distance-based, record
+linkage, and membership inference --- alongside 12 utility functions covering
+global, distributional, structural, and predictive assessment. All functions
+share a consistent S3 API with `print()`, `summary()`, and `plot()` methods
+and accept a `synth_pair` container that bundles data and metadata.
+
+**Quick start.** A comprehensive risk assessment requires just a few lines:
+
+```{r intro-hook, eval=FALSE}
+library(riskutility)
+pair <- synth_pair(original, synthetic,
+                   key_vars = c("age", "sex", "region"),
+                   target_var = "income")
+report <- disclosure_report(pair)
+print(report)
+```
+
+This single call computes attribution-based risk (DCAP, TCAP, WEAP, DiSCO,
+RAPID), distance-based risk (DCR, NNDR, IMS), privacy models ($k$-anonymity,
+$l$-diversity, $t$-closeness), and membership inference measures (singling
+out, linkability, NNAA) --- producing a pass/fail summary across all families.
+For comparing multiple synthesis approaches, `rumap()` computes risk and
+utility measures simultaneously, normalizes them to a common scale, and
+identifies Pareto-optimal methods (Section \@ref(sec-case-rumap)).
+
+**Paper overview.** Section \@ref(sec-background) introduces the disclosure
+threat taxonomy and reviews related software. Section \@ref(sec-design)
+describes the package architecture and the `synth_pair` container.
+Sections \@ref(sec-risk) and \@ref(sec-utility) present the risk and utility
+measures with mathematical formulations and worked examples.
+Section \@ref(sec-comprehensive) demonstrates the complete practitioner
+workflow on a realistic case study, comparing three synthesis approaches
+with `disclosure_report()` and `rumap()`. Section \@ref(sec-discussion)
+discusses limitations and future work. Section \@ref(sec-computational)
+provides computational details.
+
+```{r table1-scope, echo=FALSE}
+scope <- data.frame(
+  Category = c("Privacy models", "Attribution (CAP)",
+                "ML-based (RAPID)", "Distance-based", "Record linkage",
+                "Membership inference", "Utility measures", "Frameworks"),
+  Functions = c(8, 4, 4, 6, "1 (4 methods)", 6, 12, 3),
+  Paradigm = c("Equivalence class", "Matching", "Prediction",
+                "Nearest neighbor", "Linkage", "Attack simulation",
+                "Various", "Composite"),
+  `Applicable to` = c(rep("Both", 8)),
+  check.names = FALSE
+)
+knitr::kable(scope, caption = "Package scope at a glance.
+             Both = applicable to traditionally anonymized and synthetic data.")
+```
+
+
+# Background: Threat Taxonomy and Related Software {#sec-background}
+
+## Disclosure Threat Taxonomy {#sec-threats}
+
+Every risk measure in riskutility addresses one or more of four disclosure
+threats. The classical SDC taxonomy [@hundepool2012statistical;
+@templ2017statistical] recognizes three types: identity, attribute, and
+inferential disclosure. We extend this to four threats by separating
+*membership disclosure* (from the ML privacy literature,
+@shokri2017membership) and *memorization* (relevant to generative models)
+as distinct categories, reflecting the broader scope of modern synthetic
+data evaluation:
+
+- **Identity disclosure**: An attacker links a released record to a specific
+  individual. Measured by: `recordLinkage()`, `kanonymity()`,
+  `individual_risk()`, `hitting_rate()`.
+- **Attribute disclosure**: An attacker learns a sensitive attribute value
+  through quasi-identifier matching. Measured by: `dcap()`, `tcap()`,
+  `weap()`, `disco()`, `rapid()`.
+- **Membership disclosure**: An attacker determines whether an individual's
+  data was used to create the released dataset. Measured by:
+  `mia_classifier()`, `domias()`, `nnaa()`, `singling_out()`,
+  `delta_presence()`.
+- **Memorization**: A generative model reproduces training records verbatim
+  or near-verbatim. Measured by: `ims()`, `dcr()`, `nndr()`.
+
+```{r table2-threats, echo=FALSE}
+threats <- data.frame(
+  Threat = c("Identity", "Attribute", "Membership", "Memorization"),
+  Definition = c(
+    "Attacker links record to individual",
+    "Attacker learns sensitive value via linkage",
+    "Attacker determines if individual is in dataset",
+    "Generator reproduces training records"
+  ),
+  `Key measures` = c(
+    "recordLinkage, kanonymity, individual_risk",
+    "dcap, tcap, weap, disco, rapid",
+    "mia_classifier, domias, nnaa, singling_out",
+    "ims, dcr, nndr"
+  ),
+  check.names = FALSE
+)
+knitr::kable(threats, caption = "Disclosure threat taxonomy.")
+```
+
+## Risk Assessment Paradigms
+
+riskutility implements six risk assessment paradigms, each addressing different
+threats from the taxonomy above. We summarize each here; full definitions and
+worked examples are in Section \@ref(sec-risk).
+
+**Frequency-based (privacy models).** These methods assess privacy properties
+of a single dataset based on quasi-identifier frequencies.
+$k$-Anonymity [@samarati1998protecting] requires each combination of
+quasi-identifiers to appear at least $k$ times. $l$-Diversity
+[@machanavajjhala2007ldiversity] and $t$-closeness [@li2007tcloseness]
+progressively strengthen the protection of sensitive attributes within
+equivalence classes. See Section \@ref(sec-privacy-models).
+
+**Attribution-based (CAP family).** The Correct Attribution Probability
+framework [@taub2018differential] measures whether an attacker can infer
+sensitive attribute values by matching quasi-identifiers between original and
+released data. DCAP provides an aggregate measure; TCAP gives per-record
+risk scores. See Section \@ref(sec-cap).
+
+**ML-based (RAPID).** Risk of Attribute Prediction-Induced Disclosure
+[@thees2026beyond] trains predictive models on the released data and evaluates
+them on the original. Accurate predictions indicate information leakage. RAPID
+captures complex non-linear relationships and variable interactions that the
+CAP matching approach may miss. See Section \@ref(sec-rapid).
+
+**Distance-based.** The holdout method compares distances from synthetic records
+to training data vs. holdout data. If synthetic records are systematically
+closer to training records, the generator has memorized rather than generalized.
+However, @yao2025dcr demonstrate that passing distance-based tests does
+not guarantee privacy (the "DCR Delusion"). See Section \@ref(sec-distance).
+
+**Record linkage.** Directly simulates a re-identification attack using
+deterministic (Gower distance), probabilistic (Fellegi-Sunter), PRAM-aware,
+or propensity-score-based linkage [@fellegi1969theory;
+@domingoferrer2003disclosure]. See Section \@ref(sec-recordlinkage) and the
+companion vignette `vignette("recordLinkage")`.
+
+**Membership inference.** Shadow model attacks [@shokri2017membership],
+density-based detection [@hu2023domias], and GDPR failure criteria
+[@stadler2022synthetic] assess whether an attacker can determine if a specific
+individual's data was used during synthesis. See Section \@ref(sec-membership).
+
+## Utility Assessment Paradigms
+
+Utility measures quantify how well the released data preserves the
+statistical properties of the original. We organize them into four groups
+(details in Section \@ref(sec-utility)):
+
+**Global utility** measures use propensity scores to quantify how
+distinguishable the released data is from the original [@woo2009global;
+@snoke2018general]. A single number summarizes overall data quality.
+
+**Distributional utility** measures (Wasserstein, Hellinger, KS test) compare
+marginal distributions variable by variable, identifying which specific
+variables are poorly reproduced.
+
+**Structural utility** measures (energy distance, PCA comparison, correlation
+matrix comparison) assess whether multivariate relationships --- the
+correlations and interactions that analysts depend on --- are preserved.
+
+**Predictive utility** measures (feature importance stability, model
+performance comparison) test whether models trained on released data
+generalize to real-world predictions.
+
+## Related Software
+
+**In R.** sdcMicro [@templ2015sdcmicro] provides the most comprehensive
+SDC toolkit, including frequency-based risk estimation, but focuses
+primarily on *applying* anonymization methods. synthpop [@nowok2016synthpop]
+provides the CAP disclosure metric and propensity-score utility, but does
+not cover distance-based or membership inference methods. Neither package
+provides a unified framework for comparing multiple risk and utility
+measures simultaneously.
+
+**In Python.** SDMetrics (part of the Synthetic Data Vault) provides
+distance-based and statistical metrics for synthetic data quality. Anonymeter
+[@giomi2023anonymeter] implements the three GDPR failure criteria from
+@stadler2022synthetic (singling out, linkability, inference). Neither covers
+attribution-based metrics (CAP, RAPID) or traditional privacy models
+($k$-anonymity, $l$-diversity).
+
+```{r table3-comparison, echo=FALSE}
+comp <- data.frame(
+  Measure = c("k-Anonymity", "l-Diversity", "t-Closeness",
+              "DCAP/TCAP", "RAPID", "DCR/NNDR", "Record linkage",
+              "MIA / GDPR criteria", "pMSE / SPECKS",
+              "R-U map"),
+  sdcMicro = c("freq()", "ldiversity()", "--",
+               "--", "--", "dRisk()", "--",
+               "--", "--", "--"),
+  synthpop = c("--", "--", "--",
+               "disclosure()", "--", "--", "--",
+               "--", "utility.gen()", "--"),
+  `SDMetrics (Py)` = c("--", "--", "--",
+                        "--", "--", "Yes", "--",
+                        "--", "--", "--"),
+  `Anonymeter (Py)` = c("--", "--", "--",
+                         "--", "--", "--", "--",
+                         "Yes", "--", "--"),
+  riskutility = c("kanonymity()", "ldiversity()", "tcloseness()",
+                   "dcap(), tcap()", "rapid()", "dcr(), nndr()",
+                   "recordLinkage()",
+                   "mia_classifier(), singling_out()", "propscore(), specks()",
+                   "rumap()"),
+  check.names = FALSE
+)
+knitr::kable(comp,
+             caption = "Risk/utility measures across R and Python packages.")
+```
+
+Py = Python.
+
+
+# Software Design and Architecture {#sec-design}
+
+## Design Philosophy
+
+Existing R packages for statistical disclosure control --- sdcMicro
+[@templ2015sdcmicro], synthpop [@nowok2016synthpop], and simPop
+[@templ2017simulation] --- focus primarily on *applying* protection methods,
+with risk and utility assessment provided as secondary features. riskutility
+inverts this emphasis: it is a dedicated evaluation package, designed to be
+used *after* protection has been applied, regardless of which tool generated
+the released data.
+
+The package follows four design principles:
+
+1. **Consistent S3 architecture.** Every major function returns a typed S3
+   object with `print()`, `summary()`, and `plot()` methods. We chose S3
+   over S4 classes for three reasons: lighter memory footprint, simpler
+   method dispatch for the typical R user, and easier interoperability with
+   data.table and ggplot2 objects. All 24 risk/utility classes follow
+   the same pattern, making the API predictable once one class is learned.
+
+2. **Direction conventions.** Risk measures are oriented so that higher
+   values always indicate higher disclosure risk. Utility measures are
+   oriented so that higher values indicate higher utility (better
+   preservation of statistical properties). Some measures (e.g., pMSE,
+   Wasserstein distance) naturally use a "lower is better" scale; their
+   interpretation is noted in the documentation, and `rumap()` applies
+   the necessary direction transformation when normalizing to $[0, 1]$.
+
+3. **Minimal core dependencies.** Frequency-based privacy models, CAP
+   metrics, and distance-based measures require only base R, data.table, and
+   ggplot2. ML-based methods require optional packages --- ranger for random
+   forests in RAPID, xgboost for gradient boosting, and rpart for
+   classification trees. These are loaded conditionally via
+   `requireNamespace()` and produce informative error messages when absent.
+
+4. **Integration over competition.** Rather than reimplementing synthesis or
+   anonymization, the package provides `from_synthpop()`, `from_simPop()`,
+   and `from_sdcMicro()` constructors that extract original and released
+   data from objects created by these packages, wrapping them in the
+   `synth_pair` container (Section \@ref(sec-synth-pair)). This ensures
+   users can evaluate any protection method with a single consistent
+   interface.
+
+## The synth_pair Container {#sec-synth-pair}
+
+The central data structure in riskutility is the `synth_pair` object, which
+bundles original data, released data, variable roles, and metadata into a
+single container:
+
+```{r synth-pair-demo, eval=FALSE}
+pair <- synth_pair(original, synthetic,
+                   key_vars = c("age", "gender", "region"),
+                   target_var = "income",
+                   holdout = holdout_data)
+```
+
+The constructor stores the original and synthetic data frames alongside
+their dimensions, automatically detects categorical (`cat_vars`) and numeric
+(`num_vars`) columns, and retains user-specified quasi-identifiers
+(`key_vars`), sensitive attribute (`target_var`), and optional holdout data.
+This metadata elimination avoids a common source of error: specifying
+different `key_vars` for different risk measures on the same dataset.
+
+Once constructed, every risk and utility function in the package accepts a
+`synth_pair` object as its first argument via S3 dispatch:
+
+```{r synth-pair-dispatch, eval=FALSE}
+# All functions accept synth_pair --- no parameter repetition:
+dcap(pair)                    # Attribution risk
+rapid(pair, model_type = "rf") # ML-based risk
+propscore(pair)                # Propensity score utility
+disclosure_report(pair)        # Full risk report
+rumap(pair)                    # Risk-Utility map
+```
+
+This design means a practitioner sets up the data once and evaluates it
+with as many measures as needed, confident that all analyses use the same
+variable roles and data splits.
+
+## S3 Method Pattern {#sec-s3-pattern}
+
+Every exported risk/utility class follows an identical three-part pattern:
+
+```{r s3-pattern, eval=FALSE}
+# 1. Two equivalent calling conventions:
+result <- dcap(pair)                                      # synth_pair method
+result <- dcap(X, Y, key_vars = ..., target_var = ...)    # default method
+
+# 2. Inspection:
+print(result)                # One-screen summary with key statistic
+s <- summary(result)         # Detailed statistics (returns summary.dcap)
+print(s)                     # Formatted multi-line output
+
+# 3. Visualization:
+plot(result, which = 1)      # Plot type 1
+plot(result, which = 1:2)    # Multiple plot types
+```
+
+The generic function dispatches via `UseMethod()`. The `synth_pair` method
+extracts `original`, `synthetic`, `key_vars`, and `target_var` from the
+container and delegates to the default method, which performs the actual
+computation. The return object is a list with a class attribute (e.g.,
+`"dcap"`). The `summary()` method returns a typed summary object (e.g.,
+`"summary.dcap"`) with its own `print()` method, separating computation from
+display.
+
+Plot methods use an integer `which` parameter to select among multiple
+visualization types. The number of available plot types varies by class,
+from one (simple measures) to seven (`rumap`):
+
+```{r table4-s3, echo=FALSE}
+s3 <- data.frame(
+  Class = c("dcap", "tcap", "weap", "disco", "rapid", "dcr", "nndr",
+            "recordLinkageRisk", "kanonymity", "ldiversity",
+            "tcloseness", "singling_out", "linkability",
+            "propscore", "disclosure_report", "rumap"),
+  `print` = rep("Yes", 16),
+  `summary` = rep("Yes", 16),
+  `plot (which)` = c("1--2", "1--3", "1--3", "1--3", "1--6", "1--3", "1--3",
+                      "1--4", "1--2", "1--2",
+                      "1--2", "1--2", "1--2",
+                      "1--2", "1--2", "1--7"),
+  check.names = FALSE
+)
+knitr::kable(s3, caption = "S3 classes and available methods (selected).")
+```
+
+This consistent API means that the code for evaluating one metric
+generalizes directly to any other. A practitioner who has used `dcap()` can
+immediately use `tcap()`, `rapid()`, or any other measure without consulting
+the documentation for basic usage.
+
+## Integration with the R Ecosystem {#sec-integration}
+
+The `from_*` family of constructors bridges riskutility with the three main
+R packages for statistical disclosure control and synthetic data generation:
+
+```{r integration, eval=FALSE}
+# From synthpop: pass synds object + original data
+pair <- from_synthpop(synds_object, original_data,
+                      key_vars = c("age", "sex"),
+                      target_var = "income")
+
+# From simPop: original data extracted automatically from simPopObj
+pair <- from_simPop(simPopObj,
+                    key_vars = c("age", "sex"),
+                    target_var = "income")
+
+# From sdcMicro: variable roles extracted from sdcMicroObj
+pair <- from_sdcMicro(sdcMicroObj)
+```
+
+Each constructor returns a standard `synth_pair` object. `from_sdcMicro()`
+additionally extracts variable roles (quasi-identifiers, sensitive
+attributes, sample weights) from the sdcMicro S4 object, so that
+`key_vars` and `target_var` need not be specified manually.
+`from_synthpop()` supports multiple syntheses via the `m` parameter,
+selecting a specific synthetic dataset from a `synds` object.
+`from_simPop()` extracts sample weights when available, enabling
+weighted risk calculations.
+
+
+# Risk Measures {#sec-risk}
+
+This section presents the six risk measure families, each illustrated with a
+worked example using the same running dataset.
+
+```{r running-data}
+set.seed(42)
+n <- 500
+original <- data.frame(
+  age = sample(18:85, n, replace = TRUE),
+  sex = factor(sample(c("M", "F"), n, replace = TRUE)),
+  education = factor(sample(c("Primary", "Secondary", "Tertiary"), n,
+                            replace = TRUE, prob = c(0.3, 0.5, 0.2))),
+  region = factor(sample(paste0("R", 1:5), n, replace = TRUE)),
+  income = round(rlnorm(n, log(40000), 0.5))
+)
+
+# Synthetic: independent draws (low risk expected)
+synthetic <- data.frame(
+  age = sample(18:85, n, replace = TRUE),
+  sex = factor(sample(c("M", "F"), n, replace = TRUE)),
+  education = factor(sample(c("Primary", "Secondary", "Tertiary"), n,
+                            replace = TRUE, prob = c(0.3, 0.5, 0.2))),
+  region = factor(sample(paste0("R", 1:5), n, replace = TRUE)),
+  income = round(rlnorm(n, log(40000), 0.5))
+)
+
+key_vars <- c("age", "sex", "education", "region")
+target_var <- "income"
+
+pair <- synth_pair(original, synthetic,
+                   key_vars = key_vars, target_var = target_var)
+```
+
+
+## Privacy Models and Frequency-Based Risk {#sec-privacy-models}
+
+These methods assess privacy properties of a *single* dataset based on
+quasi-identifier frequencies. Originally developed for traditionally
+anonymized data, they apply equally to synthetic data. They do not compare
+original and released data; instead, they evaluate structural properties of
+the released data alone.
+
+**k-Anonymity** [@samarati1998protecting] partitions records into
+equivalence classes (ECs) based on quasi-identifier values. The dataset
+satisfies $k$-anonymity if every EC contains at least $k$ records:
+$k = \min_i |\text{EC}(\mathbf{q}_i)|$, where $\mathbf{q}_i$ is the
+quasi-identifier vector of record $i$. Small ECs are vulnerable to identity
+disclosure because an attacker who knows a target's quasi-identifiers can
+narrow them to fewer than $k$ candidates.
+
+**l-Diversity** [@machanavajjhala2007ldiversity] strengthens $k$-anonymity by
+requiring that each EC contains at least $l$ distinct values of the sensitive
+attribute. This prevents attribute disclosure even when all records in an EC
+share the same sensitive value (homogeneity attack).
+
+**t-Closeness** [@li2007tcloseness] further requires that the distribution of
+the sensitive attribute within each EC is close to its overall distribution.
+The distance is measured by the Earth Mover's Distance (EMD), and $t$ is the
+maximum EMD across all ECs.
+
+```{r privacy-models}
+# k-Anonymity: minimum equivalence class size
+k_res <- kanonymity(synthetic, key_vars = key_vars)
+print(k_res)
+
+# l-Diversity: sensitive attribute diversity per EC
+l_res <- ldiversity(synthetic, key_vars = key_vars,
+                    sensitive_var = target_var)
+print(l_res)
+
+# t-Closeness: EMD between EC and overall distribution
+t_res <- tcloseness(synthetic, key_vars = key_vars,
+                    sensitive_var = target_var)
+print(t_res)
+```
+
+With 68 unique age values, 2 sex levels, 3 education levels, and 5 regions,
+there are up to $68 \times 2 \times 3 \times 5 = 2040$ possible QI
+combinations for only $n = 500$ records. Most equivalence classes are
+singletons, yielding $k = 1$ --- this is expected for fine-grained
+quasi-identifiers and does not by itself indicate a problem with the
+synthetic data. The $l$-diversity and $t$-closeness results should be
+interpreted similarly.
+
+The three models form a hierarchy of increasing protection: $k$-anonymity
+guards against identity disclosure, $l$-diversity against homogeneity
+attacks on sensitive attributes, and $t$-closeness against skewness attacks
+where the EC distribution differs substantially from the population. In
+practice, $k \geq 5$, $l \geq 2$, and $t \leq 0.15$ are common
+thresholds, though appropriate values depend on the application context.
+
+```{r table5-privacy, echo=FALSE}
+privacy <- data.frame(
+  Function = c("kanonymity()", "ldiversity()", "tcloseness()",
+               "suda()", "individual_risk()", "population_uniqueness()",
+               "attacker_risk()", "systemAnonymityLevel()"),
+  Input = rep("Single dataset", 8),
+  `Key output` = c("Min EC size", "Min distinct values per EC",
+                    "Max EMD across ECs", "SUDA scores",
+                    "Per-record frequency risk", "Estimated pop. uniques",
+                    "Scenario-based risk", "Composite assessment"),
+  `Threats` = c("Identity", "Attribute", "Attribute", "Identity",
+                "Identity", "Identity", "Identity", "Identity"),
+  check.names = FALSE
+)
+knitr::kable(privacy,
+             caption = "Privacy models overview.")
+```
+
+
+## Attribution-Based Risk: The CAP Family {#sec-cap}
+
+The Correct Attribution Probability framework [@taub2018differential] measures
+attribute disclosure: can an attacker infer a sensitive value by matching
+quasi-identifiers between original and released data?
+
+For each original record $i$ with quasi-identifier values $\mathbf{q}_i$,
+the attacker finds all records in the released data whose quasi-identifiers
+match $\mathbf{q}_i$ (the *equivalence class*). If the sensitive attribute
+is homogeneous within this class, the attacker learns the true value. The
+**Targeted CAP** (TCAP) gives each record a risk score between 0 and 1:
+$\text{TCAP}_i = \Pr(\text{correct attribution} \mid \mathbf{q}_i)$. The
+**Differential CAP** (DCAP) is the mean CAP across all records:
+$\text{DCAP} = n^{-1} \sum_i \text{CAP}_i$. The `summary()` method
+computes a risk ratio $\text{DCAP} / \text{baseline}$ to contextualize
+the result against random guessing.
+
+The **WEAP** (Within-EC Attribution Probability) evaluates risk from the
+released data alone, without access to the original, making it suitable
+for data custodians who cannot share the original data with an auditor.
+**DiSCO** (Disclosive in Synthetic, Correct in Original) identifies records
+that are both confidently attributed in the released data and correctly
+attributed in the original.
+
+```{r cap-demo}
+# TCAP: per-record risk (most informative member of CAP family)
+tcap_res <- tcap(pair)
+summary(tcap_res)
+plot(tcap_res)
+```
+
+Since our running example uses independently generated synthetic data (no
+relationship to the original), TCAP values should be close to the baseline
+attribution probability. Records with TCAP above 0.1 warrant closer
+inspection --- they may represent rare quasi-identifier combinations where
+even random data can produce spurious matches.
+
+```{r cap-table, echo=FALSE}
+cap <- data.frame(
+  Metric = c("DCAP", "TCAP", "WEAP", "DiSCO"),
+  `Requires original?` = c("Yes", "Yes", "No", "Yes"),
+  `Per-record?` = c("No", "Yes", "Yes", "Yes"),
+  `Measures` = c("Mean attribution probability",
+                 "Individual attribution risk",
+                 "Within-EC homogeneity",
+                 "Correct + confident attribution"),
+  `Low risk` = c("ratio < 1.5", "< 0.1 per record",
+                 "< 0.1", "< 5%"),
+  check.names = FALSE
+)
+knitr::kable(cap,
+             caption = "CAP family comparison with interpretation thresholds.")
+```
+
+
+## ML-Based Risk: RAPID {#sec-rapid}
+
+Risk of Attribute Prediction-Induced Disclosure [@thees2026beyond] takes a
+fundamentally different approach to attribute disclosure. Instead of matching
+quasi-identifiers, RAPID trains a predictive model $\hat{f}$ on the released
+data $(Y_{\mathcal{K}}, Y_s)$ and evaluates its predictions on the original
+data: $\hat{s}_i = \hat{f}(X_{\mathcal{K},i})$. For numeric targets, a
+record is *at risk* when the prediction error falls below a threshold
+$\epsilon$: $e(s_i, \hat{s}_i) < \epsilon$, where $e(\cdot, \cdot)$ is
+a configurable error metric (symmetric percentage error by default). The
+RAPID score is the fraction of at-risk records:
+$\text{RAPID} = n^{-1} \sum_i \mathbf{1}(e(s_i, \hat{s}_i) < \epsilon)$.
+For categorical targets, a different evaluation applies: a record is at risk
+when a gain or ratio score exceeds a threshold.
+
+```{r rapid-demo}
+rapid_res <- rapid(pair, model_type = "lm")
+summary(rapid_res)
+plot(rapid_res, which = c(1, 3))
+```
+
+With independently generated synthetic data, we expect the RAPID score to
+be close to the baseline (random prediction accuracy). The threshold
+sensitivity plot (`which = 3`) shows how the at-risk fraction changes
+across threshold values, helping practitioners choose a threshold
+appropriate for their context.
+
+RAPID complements the CAP family in two ways. First, it captures non-linear
+relationships and variable interactions --- a tree-based model can detect
+that the combination of age and education jointly predicts income, even when
+neither variable alone is informative. Second, it provides inferential tools
+that the CAP family lacks: `rapid_test()` computes a permutation-based
+$p$-value testing whether the RAPID score exceeds the null expectation,
+`confint()` provides bootstrap confidence intervals, and
+`rapid_threshold_select()` optimizes the threshold $\tau$ in a data-driven
+manner.
+
+Five model backends are available:
+
+```{r rapid-models, echo=FALSE}
+models <- data.frame(
+  Model = c("lm", "rf", "cart", "gbm", "logit"),
+  Package = c("stats", "ranger", "rpart", "xgboost", "stats"),
+  Numeric = c("Yes", "Yes", "Yes", "Yes", "No"),
+  Categorical = c("No", "Yes", "Yes", "Yes", "Yes"),
+  Interactions = c("Manual", "Automatic", "Automatic", "Automatic", "Manual"),
+  check.names = FALSE
+)
+knitr::kable(models, caption = "RAPID model backends.")
+```
+
+
+## Distance-Based Risk {#sec-distance}
+
+Distance-based methods detect *memorization*: the failure mode where a
+generative model reproduces training records verbatim or near-verbatim. The
+key idea is the **holdout method** --- split the original data into a
+training set $T$ (used for synthesis) and a holdout set $H$ (unseen by the
+generator). For each synthetic record $y_j$, compute the Distance to
+Closest Record in $T$ ($d_T$) and in $H$ ($d_H$). If the generator has
+generalized, $d_T$ and $d_H$ should be comparable. If it has memorized,
+$d_T$ will be systematically smaller:
+
+$$\text{DCR\_share} = n^{-1} \sum_j \mathbf{1}\bigl(d_T(y_j) < d_H(y_j)\bigr), \qquad \text{DCR\_ratio} = \frac{\bar{d}_T}{\bar{d}_H}$$
+
+A DCR share above 0.5 (or ratio below 1) indicates that synthetic records
+are systematically closer to training data than holdout data, suggesting
+memorization. The **NNDR** (Nearest
+Neighbor Distance Ratio) provides a complementary view, and **IMS**
+(Identical Match Share) counts exact copies. When an explicit holdout is
+unavailable, `holdout_fraction` automatically splits the original data.
+
+```{r distance-demo}
+dcr_res <- dcr(pair, holdout_fraction = 0.2)
+summary(dcr_res)
+plot(dcr_res, which = 1)
+```
+
+**The DCR Delusion.** @yao2025dcr demonstrate that DCR can fail to
+detect privacy leakage. Datasets deemed "private" by DCR may still be
+vulnerable to membership inference attacks. The core problem is that DCR
+measures distance in feature space, not in information space --- a record
+can be far from any training record yet still leak information about
+training individuals through learned correlations. Distance-based metrics
+should always be complemented with other risk families, particularly
+attribution and membership inference measures.
+
+```{r distance-table, echo=FALSE}
+dist <- data.frame(
+  Metric = c("DCR", "NNDR", "IMS", "dRisk", "Hitting rate", "Epsilon ID"),
+  Holdout = c("Yes", "Yes", "No", "No", "No", "No"),
+  Detects = c("Memorization", "Memorization", "Exact copies",
+              "Close records", "Close records", "Identifiability"),
+  Limitation = c("DCR Delusion", "Assumes metric", "Misses near-copies",
+                 "Continuous only", "Threshold-dependent", "Entropy estimation"),
+  check.names = FALSE
+)
+knitr::kable(dist,
+             caption = "Distance-based risk measures.")
+```
+
+
+## Record Linkage Risk {#sec-recordlinkage}
+
+The `recordLinkage()` function directly simulates a re-identification attack by
+linking each original record to the most similar record(s) in the anonymized
+dataset. Four methods are implemented:
+
+1. **Deterministic** (Gower distance): mixed-type distance with variable
+   weighting and three candidate selection strategies.
+2. **Probabilistic** (Fellegi-Sunter): agreement/disagreement weights via
+   m/u-probabilities [@fellegi1969theory].
+3. **PRAM-aware**: uses known transition matrices from Post-Randomization;
+   supports forward and reverse risk perspectives.
+4. **Predictive** (propensity score): logistic regression captures variable
+   interactions that distance-based methods cannot detect. Note: this method
+   is novel to riskutility; propensity scores are standard in causal
+   inference but their use for disclosure risk assessment is not yet
+   established in the SDC literature.
+
+```{r recordlinkage-demo}
+rl_res <- recordLinkage(pair, method = "deterministic")
+print(rl_res)
+```
+
+For full details, see the companion vignette `vignette("recordLinkage")`.
+
+```{r recordlinkage-table, echo=FALSE}
+rl <- data.frame(
+  Method = c("Deterministic", "Probabilistic", "PRAM", "Predictive"),
+  Distance = c("Gower", "Fellegi-Sunter", "Transition prob.", "Propensity"),
+  `Mixed types` = c("Yes", "Yes", "Categorical", "Yes"),
+  Interactions = c("No", "No", "No", "Yes"),
+  Requires = c("--", "--", "Transition matrix", "--"),
+  check.names = FALSE
+)
+knitr::kable(rl,
+             caption = "Record linkage methods.")
+```
+
+
+## Membership Inference and Anonymization Failure Criteria {#sec-membership}
+
+This section groups two related but distinct concerns. The first three
+measures (MIA, DOMIAS, NNAA) assess *membership disclosure* --- whether an
+attacker can determine if a specific individual's data was used during
+synthesis. The singling out and linkability attacks implement GDPR
+anonymization failure criteria [@stadler2022synthetic]; singling out is
+more precisely an *identity disclosure* test (does a predicate uniquely
+identify an individual?), while linkability tests cross-dataset record
+matching. We group them here because both originate from the same
+regulatory framework.
+
+```{r membership-demo, eval=FALSE}
+# Membership inference attack (requires holdout + ranger)
+mia_res <- mia_classifier(pair, holdout = holdout)
+
+# GDPR singling out criterion (requires holdout)
+so_res <- singling_out(pair, holdout = holdout, mode = "multivariate")
+```
+
+These examples are not evaluated because membership inference attacks require
+a holdout dataset disjoint from both the training and synthetic data, and the
+running example does not include one.
+
+```{r membership-table, echo=FALSE}
+mia <- data.frame(
+  Metric = c("MIA classifier", "DOMIAS", "NNAA",
+             "Singling out", "Linkability", "delta-Presence"),
+  `Attack type` = c("Shadow model", "Density overfitting",
+                     "Nearest neighbor", "Predicate-based",
+                     "Record linkage", "Membership bounds"),
+  Holdout = c("Yes", "Yes", "Yes", "Yes", "Yes", "No"),
+  `GDPR criterion` = c("--", "--", "--",
+                        "Art. 29 WP", "Art. 29 WP", "--"),
+  `Low risk` = c("< 0.55", "< 0.6", "< 0.05",
+                 "< 0.1", "< 0.1", "> 0.5"),
+  check.names = FALSE
+)
+knitr::kable(mia,
+             caption = "Membership inference and GDPR measures.")
+```
+
+
+## Cross-Family Comparison {#sec-rosetta}
+
+No single metric tells the full story. Applying all families to the same
+dataset reveals complementary and sometimes contradictory information.
+Consider the contrast between our independently generated synthetic data
+(which should be safe) and a near-copy:
+
+```{r rosetta}
+# Near-copy: original + small noise (high risk expected)
+set.seed(99)
+near_copy <- original
+near_copy$age <- near_copy$age + sample(-1:1, n, replace = TRUE)
+near_copy$income <- near_copy$income + round(rnorm(n, 0, 500))
+pair_risky <- synth_pair(original, near_copy,
+                         key_vars = key_vars, target_var = target_var)
+
+# Compare key metrics across the two datasets
+comparison <- data.frame(
+  Metric = c("DCAP", "RAPID (lm)", "IMS"),
+  Safe = c(
+    dcap(pair)$dcap,
+    rapid(pair, model_type = "lm", verbose = FALSE)$rapid,
+    ims(pair)$ims
+  ),
+  Risky = c(
+    dcap(pair_risky)$dcap,
+    rapid(pair_risky, model_type = "lm", verbose = FALSE)$rapid,
+    ims(pair_risky)$ims
+  )
+)
+comparison$Safe <- round(comparison$Safe, 4)
+comparison$Risky <- round(comparison$Risky, 4)
+knitr::kable(comparison,
+             caption = "Cross-family comparison: safe vs. risky synthetic data.")
+```
+
+The near-copy shows elevated risk across all families, but the magnitude
+and interpretation differ. Attribution measures (DCAP) and ML-based measures
+(RAPID) quantify *information leakage*: how much can an attacker learn about
+sensitive attributes? Distance-based measures (IMS) quantify *memorization*:
+are training records reproduced? These complementary perspectives mean
+that a dataset can pass one family's tests while failing another's ---
+a thorough evaluation uses at least one measure from each family.
+
+
+# Data Utility Measures {#sec-utility}
+
+A dataset that passes all risk checks but destroys the analytical value of
+the data is useless. Utility measures quantify how well the released data
+preserves the statistical properties of the original, completing the other
+half of the risk-utility equation. We organize them by the practitioner
+question they answer.
+
+## "Is my synthetic data any good?" --- Quick Assessment {#sec-utility-quick}
+
+Global utility measures give a single-number verdict by asking: *can a
+classifier tell original and synthetic records apart?*
+
+The propensity score method [@woo2009global; @snoke2018general] pools
+original ($X$, $n_X$ records) and synthetic ($Y$, $n_Y$ records) data,
+labels them (0/1), and fits a classifier (random forest by default;
+logistic regression optionally). The **pMSE** (propensity score Mean
+Squared Error) measures how well the model discriminates:
+
+$$\text{pMSE} = \frac{1}{N} \sum_{i=1}^{N} \left(\hat{p}_i - c\right)^2$$
+
+where $N = n_X + n_Y$ and $c = n_Y / N$ is the class ratio (equal to
+0.5 when datasets are the same size). If original and synthetic records
+are indistinguishable, $\hat{p}_i \approx c$ for all records and
+pMSE $\approx 0$. The **SPECKS** variant applies the Kolmogorov-Smirnov
+test statistic to the propensity score distributions, providing a
+nonparametric alternative to pMSE.
+
+```{r utility-quick}
+# Propensity score utility
+prop_res <- propscore(pair)
+summary(prop_res)
+plot(prop_res)
+```
+
+A pMSE below 0.1 generally indicates good utility. The propensity score
+plot reveals *where* the synthetic data differs: if the density of
+propensity scores is shifted rightward for original records, the classifier
+has found systematic differences.
+
+## "Which variables are poorly reproduced?" --- Univariate Diagnostics {#sec-utility-univariate}
+
+When global utility is poor, per-variable measures identify which variables
+are responsible. For **numeric** variables, the Wasserstein distance
+(earth mover's distance) measures the cost of transforming one distribution
+into another. For **categorical** variables, the Hellinger distance measures
+distributional overlap:
+
+$$H(p, q) = \frac{1}{\sqrt{2}} \sqrt{\sum_{k=1}^{K} \left(\sqrt{p_k} - \sqrt{q_k}\right)^2}$$
+
+where $p$ and $q$ are the probability vectors over $K$ categories. $H = 0$
+indicates identical distributions; $H = 1$ indicates disjoint support.
+
+```{r utility-univariate}
+# Wasserstein distance for numeric variables
+w_res <- compare_wasserstein(original, synthetic, num_var = "income",
+                             var_type = "continuous")
+print(w_res)
+
+# Hellinger distance for categorical variables
+h_res <- hellinger(original, synthetic, vars = c("sex", "education"))
+print(h_res)
+```
+
+Since both datasets are drawn from the same distributions, we expect small
+Wasserstein distances and Hellinger distances close to 0. In practice, a
+Hellinger distance above 0.1 for a categorical variable signals that the
+synthesis has distorted that variable's marginal distribution.
+
+## "Are multivariate relationships preserved?" --- Structural Utility {#sec-utility-structural}
+
+Marginal distributions can match perfectly while joint distributions diverge.
+The **energy distance** provides a multivariate two-sample test that is
+sensitive to differences in both location and scale:
+
+```{r utility-structural}
+# Energy distance: multivariate two-sample test
+e_res <- energy_distance(original[, c("age", "income")],
+                         synthetic[, c("age", "income")])
+print(e_res)
+```
+
+A non-significant $p$-value ($p > 0.05$, obtained via permutation test)
+indicates that the multivariate distributions are not distinguishable. Additional structural measures test
+specific aspects: `compare_pca()` compares the principal component structure,
+`compare_correlation_matrices()` tests whether bivariate associations are
+preserved, `compare_embedding()` visualizes distributional overlap via
+t-SNE or UMAP, and `compare_multivariate_distribution()` provides a joint
+assessment based on density ratios.
+
+## "Can I still fit models on the synthetic data?" --- Predictive Utility {#sec-utility-predictive}
+
+For many users, the ultimate test of synthetic data is whether models trained
+on it generalize to real-world predictions. `compare_feature_importance()`
+fits a random forest on both original and synthetic data and compares the
+variable importance rankings --- if the same variables are important in both,
+the synthetic data preserves the predictive structure.
+`compare_model_performance()` goes further, comparing actual predictive
+accuracy (RMSE, AUC) between models trained on original vs. synthetic data.
+
+```{r utility-predictive, eval=FALSE}
+# Feature importance stability
+fi_res <- compare_feature_importance(original, synthetic,
+                                     formula = income ~ age + sex + education + region,
+                                     method = "rpart")
+print(fi_res)
+```
+
+```{r table7-utility, echo=FALSE}
+util <- data.frame(
+  `Use case` = c(rep("Quick assessment", 3),
+                 rep("Univariate", 4),
+                 rep("Multivariate", 3),
+                 rep("Predictive", 2)),
+  Function = c("propscore()", "specks()", "mqs()",
+               "compare_wasserstein()", "hellinger()",
+               "ci_proximity()", "compare_ks_test()",
+               "energy_distance()", "compare_pca()",
+               "compare_correlation_matrices()",
+               "compare_feature_importance()",
+               "compare_model_performance()"),
+  `Data type` = c("Mixed", "Mixed", "Mixed",
+                   "Numeric", "Categorical", "Numeric", "Numeric",
+                   "Numeric", "Numeric", "Numeric",
+                   "Mixed", "Mixed"),
+  Interpretation = c("< 0.1: good", "< 0.05: good", "Higher = better",
+                     "Lower = better", "< 0.1: good",
+                     "> 0.8: good", "p > 0.05: good",
+                     "p > 0.05: good", "High overlap: good",
+                     "High corr: good",
+                     "High corr: good", "Small gap: good"),
+  check.names = FALSE
+)
+knitr::kable(util,
+             caption = "Utility measures by use case.")
+```
+
+
+# Comprehensive Assessment: A Case Study {#sec-comprehensive}
+
+This section demonstrates the complete practitioner workflow on a realistic
+dataset, comparing three synthesis approaches with different privacy-utility
+trade-offs.
+
+## Scenario and Data {#sec-case-data}
+
+Consider a statistical agency that wants to release a survey dataset ($n = 1000$)
+containing demographic variables (age, sex, education, region) and a sensitive
+income variable. The agency must evaluate three candidate release strategies
+before choosing one.
+
+```{r case-data}
+# Original data with realistic correlations
+set.seed(123)
+N <- 1000
+edu_levels <- c("Primary", "Secondary", "Tertiary")
+age_groups <- c("20-29", "30-39", "40-49", "50-59", "60-69")
+orig <- data.frame(
+  age_group = factor(sample(age_groups, N, replace = TRUE)),
+  sex = factor(sample(c("M", "F"), N, replace = TRUE)),
+  education = factor(sample(edu_levels, N, replace = TRUE,
+                            prob = c(0.25, 0.50, 0.25))),
+  region = factor(sample(paste0("R", 1:4), N, replace = TRUE))
+)
+# Income depends on age group and education (realistic structure)
+edu_effect <- c(Primary = 0, Secondary = 0.3, Tertiary = 0.7)
+age_effect <- c("20-29" = 0, "30-39" = 0.15, "40-49" = 0.3,
+                "50-59" = 0.4, "60-69" = 0.35)
+orig$income <- round(exp(
+  10 + age_effect[as.character(orig$age_group)] +
+    edu_effect[as.character(orig$education)] + rnorm(N, 0, 0.4)
+))
+
+qi <- c("age_group", "sex", "education", "region")
+sens <- "income"
+```
+
+We create three synthetic datasets that span the privacy-utility spectrum:
+
+```{r case-synthesis}
+set.seed(456)
+
+# Method A: Independent marginals (safest, but destroys correlations)
+synA <- data.frame(
+  age_group = factor(sample(age_groups, N, replace = TRUE)),
+  sex = factor(sample(c("M", "F"), N, replace = TRUE)),
+  education = factor(sample(edu_levels, N, replace = TRUE,
+                            prob = c(0.25, 0.50, 0.25))),
+  region = factor(sample(paste0("R", 1:4), N, replace = TRUE)),
+  income = sample(orig$income, N, replace = TRUE)
+)
+
+# Method B: Category-preserving bootstrap with income noise
+idx_B <- sample(N, N, replace = TRUE)
+synB <- orig[idx_B, ]
+rownames(synB) <- NULL
+synB$income <- round(synB$income * exp(rnorm(N, 0, 0.15)))
+# Swap some age groups to add noise to QIs
+swap_idx <- sample(N, round(0.2 * N))
+synB$age_group[swap_idx] <- factor(sample(age_groups,
+                                          length(swap_idx), replace = TRUE))
+
+# Method C: Near-copy with minimal perturbation (risky)
+synC <- orig
+synC$income <- round(synC$income * exp(rnorm(N, 0, 0.03)))
+```
+
+Method A draws each variable independently, destroying the income-education
+relationship. Method B resamples records with bootstrap, adds income noise,
+and perturbs 20% of age groups. Method C perturbs only income minimally,
+preserving the full QI structure.
+
+## Step 1: Quick Risk Screening with disclosure_report() {#sec-case-report}
+
+The `disclosure_report()` function automates the cross-family risk comparison
+from Section \@ref(sec-rosetta). It computes multiple risk measures, evaluates
+each against a threshold, and produces an overall pass/fail assessment. The
+`compute` parameter selects which families to include: `"attribution"` (DCAP,
+TCAP, WEAP, DiSCO, RAPID), `"distance"` (DCR, NNDR, IMS, dRisk, hitting
+rate), `"privacy"` ($k$-anonymity, $l$-diversity, $t$-closeness, individual risk),
+`"membership"` (singling out, linkability, NNAA, DOMIAS), or `"all"` for
+every available metric.
+
+```{r case-report}
+# Screen each method with attribution + privacy measures
+pair_A <- synth_pair(orig, synA, key_vars = qi, target_var = sens)
+pair_B <- synth_pair(orig, synB, key_vars = qi, target_var = sens)
+pair_C <- synth_pair(orig, synC, key_vars = qi, target_var = sens)
+
+rep_A <- disclosure_report(pair_A, compute = c("attribution", "privacy"),
+                           seed = 42, verbose = FALSE)
+rep_B <- disclosure_report(pair_B, compute = c("attribution", "privacy"),
+                           seed = 42, verbose = FALSE)
+rep_C <- disclosure_report(pair_C, compute = c("attribution", "privacy"),
+                           seed = 42, verbose = FALSE)
+
+# Compare overall verdicts
+verdicts <- data.frame(
+  Method = c("A: Independent", "B: Bootstrap+noise", "C: Near-copy"),
+  Overall = c(rep_A$overall_risk, rep_B$overall_risk, rep_C$overall_risk),
+  Pass = c(rep_A$n_pass, rep_B$n_pass, rep_C$n_pass),
+  Warn = c(rep_A$n_warn, rep_B$n_warn, rep_C$n_warn)
+)
+knitr::kable(verdicts, caption = "Quick risk screening across three methods.")
+```
+
+Two patterns emerge. First, the attribution metrics (DCAP, RAPID)
+differentiate the three methods in the expected order: Method A (independent)
+has the lowest attribution risk, Method C (near-copy) the highest. Second,
+the privacy models ($k$-anonymity, $l$-diversity) flag all three methods
+because they evaluate the *released data's structure alone* --- with 120
+possible QI combinations ($5 \times 2 \times 3 \times 4$) and $n = 1000$
+records, some equivalence classes will inevitably be small regardless of how
+the data was generated. This illustrates a key lesson: privacy models and
+attribution metrics answer different questions and should be interpreted
+together, not in isolation.
+
+## Step 2: Comparative Assessment with rumap() {#sec-case-rumap}
+
+The `rumap()` function implements the multivariate Risk-Utility framework of
+@thees2026beyond. Traditional R-U analysis plots a single risk measure against
+a single utility measure, producing a two-dimensional trade-off curve. This
+can be misleading: a method may appear optimal on one pair of measures while
+performing poorly on another.
+
+`rumap()` computes multiple risk and utility measures simultaneously,
+normalizes all measures to $[0, 1]$ (with consistent direction: higher =
+more risk or more utility), and identifies the **Pareto-optimal** methods ---
+those not dominated on any dimension.
+
+```{r case-rumap}
+ru <- rumap(orig,
+            list("A: Independent" = synA,
+                 "B: Bootstrap+noise" = synB,
+                 "C: Near-copy" = synC),
+            risk_measures = c("dcap", "tcap", "ims"),
+            utility_measures = c("pmse", "wasserstein"),
+            key_vars = qi, target_var = sens,
+            seed = 42)
+print(ru)
+```
+
+```{r case-rumap-scatter, fig.width=8, fig.height=6}
+plot(ru, which = 1)  # R-U scatterplot with Pareto front
+```
+
+The R-U scatterplot places each method in the composite risk-utility plane.
+Methods in the lower-right corner (low risk, high utility) are preferred.
+Method B occupies the middle ground --- moderate risk and moderate utility ---
+making it the natural compromise candidate.
+
+```{r case-rumap-heatmap, fig.width=8, fig.height=5}
+plot(ru, which = 2)  # Heatmap of individual measures
+```
+
+The heatmap reveals *why* the methods differ. Method A achieves low risk
+across all measures but has poor utility (high pMSE, large Wasserstein
+distance). Method C has excellent utility but elevated attribution risk.
+Method B balances the two, though its exact acceptability depends on the
+agency's risk tolerance.
+
+## Step 3: Decision {#sec-case-decision}
+
+The analysis supports a structured decision:
+
+- **Method A** is appropriate when the data is released to the general
+  public and any re-identification would be unacceptable. The utility loss
+  is the price of maximum safety.
+- **Method B** is appropriate for controlled-access research environments
+  where moderate risk is acceptable in exchange for preserving analytical
+  relationships.
+- **Method C** should be rejected --- its risk profile is too close to the
+  original data to provide meaningful protection.
+
+This iterative workflow --- screen with `disclosure_report()`, compare with
+`rumap()`, and refine the synthesis parameters --- is the core use case that
+riskutility is designed to support.
+
+
+# Summary and Discussion {#sec-discussion}
+
+## Contributions
+
+The riskutility package makes five contributions to the R ecosystem for
+statistical disclosure control:
+
+1. **Comprehensive coverage.** It is the first R package to unify all six
+   risk assessment paradigms --- frequency-based privacy models, attribution
+   (CAP), ML-based (RAPID), distance-based, record linkage, and membership
+   inference --- under a single API. No existing R or Python package provides
+   this breadth.
+
+2. **Novel implementations.** It provides the first R implementations of
+   RAPID (Risk of Attribute Prediction-Induced Disclosure), two of the three
+   GDPR failure criteria from @stadler2022synthetic (singling out and
+   linkability; the third criterion, inference, is addressed by RAPID via a
+   complementary ML-based approach), $t$-closeness, DOMIAS density-based
+   membership inference, and four-method record linkage with predictive
+   (propensity-score) matching.
+
+3. **Unified API.** The `synth_pair` container and consistent S3 class
+   pattern (Section \@ref(sec-design)) eliminate parameter repetition and
+   ensure that practitioners can switch between risk measures without
+   learning new interfaces.
+
+4. **Multivariate R-U mapping.** The `rumap()` function
+   (Section \@ref(sec-case-rumap)) implements the framework of
+   @thees2026beyond for comparing multiple synthesis approaches on multiple
+   risk and utility dimensions simultaneously, with Pareto frontier
+   identification and seven visualization types.
+
+5. **Ecosystem integration.** The `from_sdcMicro()`, `from_synthpop()`, and
+   `from_simPop()` constructors allow practitioners to evaluate data
+   produced by any of the three main R packages for SDC and synthesis
+   without manual data extraction.
+
+## Limitations and Recommendations
+
+**riskutility evaluates but does not generate protected data.** It is
+designed to work alongside synthesis and anonymization tools, not to replace
+them. The package cannot tell users *how* to improve a failing synthesis ---
+only *that* it fails and *where*.
+
+**Computational scalability.** Most measures scale linearly or quadratically
+with $n$. The main bottlenecks are RAPID with random forests ($O(n \log n)$
+per tree), energy distance ($O(n^2)$), and membership inference attacks
+(requiring model training). For datasets exceeding $n = 50{,}000$ records,
+we recommend using the faster model backends (RAPID with `model_type = "lm"`)
+and sampling-based approximations.
+
+**No formal privacy guarantees.** All measures in riskutility provide
+*empirical* risk assessment, not *formal* guarantees such as differential
+privacy (DP). A low DCAP score does not prove that no attacker can
+succeed --- it only shows that the specific attack simulated by DCAP did
+not succeed. Empirical and formal approaches are complementary: DP
+provides worst-case guarantees independent of the attacker's capabilities,
+while empirical measures reveal the *actual* risk profile for specific
+attack scenarios and help practitioners interpret whether formal guarantees
+translate into meaningful protection in their context.
+
+**Key variable selection.** Results depend heavily on the choice of
+quasi-identifiers. Including too few QIs underestimates risk (the attacker
+may know more than assumed). Including too many QIs overestimates risk
+(most equivalence classes become singletons). Practitioners should base QI
+selection on a realistic threat model, not on convenience.
+
+**Threshold interpretation.** The pass/fail thresholds used by
+`disclosure_report()` are pragmatic defaults, not universal standards.
+Different application contexts (public release vs. controlled access,
+health data vs. economic surveys) require different thresholds.
+Practitioners should calibrate thresholds to their specific risk tolerance.
+
+## Practitioner Guide
+
+```{r table9-guide, echo=FALSE}
+guide <- data.frame(
+  Question = c(
+    "Can an attacker infer sensitive values?",
+    "Did the generator memorize training records?",
+    "Can an attacker determine membership?",
+    "Are small groups exposed?",
+    "How distinguishable is the released data?",
+    "Are variable distributions preserved?",
+    "Are multivariate relationships preserved?",
+    "Which synthesis method is best overall?"
+  ),
+  Family = c(
+    "Attribution (CAP, RAPID)",
+    "Distance (DCR, IMS)",
+    "Membership (MIA, NNAA)",
+    "Privacy models (k-anon, l-div)",
+    "Global utility (pMSE)",
+    "Univariate (Wasserstein, Hellinger)",
+    "Structural (energy, PCA)",
+    "Framework (rumap)"
+  ),
+  `Key functions` = c(
+    "dcap(), rapid()",
+    "dcr(), ims()",
+    "mia_classifier(), nnaa()",
+    "kanonymity(), ldiversity()",
+    "propscore()",
+    "compare_wasserstein(), hellinger()",
+    "energy_distance(), compare_pca()",
+    "rumap(), disclosure_report()"
+  ),
+  check.names = FALSE
+)
+knitr::kable(guide,
+             caption = "Practitioner guide: matching questions to metric families.")
+```
+
+We recommend the following minimal evaluation protocol:
+
+1. **Always run** `disclosure_report()` with `compute = "all"` as a first
+   screening. This takes seconds and covers all metric families.
+2. **For publication-quality assessment**, use `rumap()` to compare multiple
+   synthesis approaches and identify Pareto-optimal methods.
+3. **For regulatory compliance** (e.g., GDPR), include singling out and
+   linkability tests, which implement the Article 29 Working Party criteria.
+4. **Interpret distance-based metrics cautiously.** Following @yao2025dcr,
+   do not rely on DCR/NNDR alone for privacy assessment.
+
+## Future Work
+
+Four extensions are planned: (i) a Shiny dashboard for interactive
+evaluation, making the package accessible to non-programmers;
+(ii) integration with differential privacy frameworks, enabling comparison
+of empirical risk scores against formal privacy budgets;
+(iii) computational optimizations for large datasets ($n > 50{,}000$),
+including sampling-based approximations for quadratic-cost measures; and
+(iv) population-level risk estimation from sample data, connecting to the
+super-population models used in survey statistics.
+
+
+# Computational Details {#sec-computational}
+
+All computations in this paper were performed using R `r getRversion()`
+[@R2025] with the riskutility package version `r packageVersion("riskutility")`.
+The package is available from GitHub and will be submitted to CRAN upon
+publication.
+
+Core dependencies include data.table for efficient data manipulation and
+ggplot2 for all visualizations. ML-based methods require optional packages:
+ranger (random forests for RAPID), rpart (CART), xgboost (gradient boosting),
+and caret (model training for propensity scores and MIA). These are loaded
+conditionally via `requireNamespace()` and produce informative error messages
+when absent.
+
+The running examples in Sections \@ref(sec-risk) and \@ref(sec-utility) use
+a synthetic dataset with $n = 500$ records and five variables. The case study
+in Section \@ref(sec-comprehensive) uses $n = 1000$ records. On a standard
+laptop (Apple M1, 16 GB RAM), the full `disclosure_report()` with all metric
+families completes in under 30 seconds for $n = 1000$.
+
+```{r session-info}
+sessionInfo()
+```
+
+
+# References {-}
