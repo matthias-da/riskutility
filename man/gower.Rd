@@ -62,7 +62,8 @@ Other utility:
 \code{\link{pMSE}()},
 \code{\link{propscore}()},
 \code{\link{rumap}()},
-\code{\link{specks}()}
+\code{\link{specks}()},
+\code{\link{tstr}()}
 }
 \author{
 Matthias Templ. Based on the gowerD function from Alexander Kowarik

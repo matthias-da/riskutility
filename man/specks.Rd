@@ -152,7 +152,8 @@ Other utility:
 \code{\link{mqs}()},
 \code{\link{pMSE}()},
 \code{\link{propscore}()},
-\code{\link{rumap}()}
+\code{\link{rumap}()},
+\code{\link{tstr}()}
 }
 \author{
 Matthias Templ

@@ -182,7 +182,8 @@ Other utility:
 \code{\link{mqs}()},
 \code{\link{pMSE}()},
 \code{\link{propscore}()},
-\code{\link{specks}()}
+\code{\link{specks}()},
+\code{\link{tstr}()}
 }
 \author{
 Matthias Templ
