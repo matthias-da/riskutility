@@ -209,7 +209,8 @@ rumap.default <- function(X,
   }
 
   # Validate utility measures
-  valid_utility <- c("pmse", "wasserstein", "hellinger", "energy", "ci_proximity")
+  valid_utility <- c("pmse", "wasserstein", "hellinger", "energy", "ci_proximity",
+                     "mmd", "tstr", "copula", "tail")
   invalid_utility <- setdiff(utility_measures, valid_utility)
   if (length(invalid_utility) > 0) {
     warning(paste("Unknown utility measures ignored:", paste(invalid_utility, collapse = ", ")))
@@ -451,6 +452,52 @@ rumap.default <- function(X,
       }, error = function(e) {
         warning(paste("ci_proximity failed for", sdg_name, ":", e$message))
         utility_results[i, "ci_proximity"] <<- NA
+      })
+    }
+
+    # MMD
+    if ("mmd" %in% utility_measures && length(num_vars) > 0) {
+      tryCatch({
+        res <- mmd(original, Y, vars = num_vars, standardize = TRUE,
+                   seed = seed, na.rm = na.rm)
+        utility_results[i, "mmd"] <- res$utility_score
+      }, error = function(e) {
+        warning(paste("mmd failed for", sdg_name, ":", e$message))
+        utility_results[i, "mmd"] <<- NA
+      })
+    }
+
+    # TSTR
+    if ("tstr" %in% utility_measures && !is.null(target_var)) {
+      tryCatch({
+        res <- tstr(original, Y, target_var = target_var,
+                    seed = seed, na.rm = na.rm)
+        utility_results[i, "tstr"] <- res$utility_score
+      }, error = function(e) {
+        warning(paste("tstr failed for", sdg_name, ":", e$message))
+        utility_results[i, "tstr"] <<- NA
+      })
+    }
+
+    # Copula fidelity
+    if ("copula" %in% utility_measures && length(num_vars) >= 2) {
+      tryCatch({
+        res <- copula_fidelity(original, Y, vars = num_vars, na.rm = na.rm)
+        utility_results[i, "copula"] <- res$utility_score
+      }, error = function(e) {
+        warning(paste("copula_fidelity failed for", sdg_name, ":", e$message))
+        utility_results[i, "copula"] <<- NA
+      })
+    }
+
+    # Tail fidelity
+    if ("tail" %in% utility_measures && length(num_vars) > 0) {
+      tryCatch({
+        res <- tail_fidelity(original, Y, vars = num_vars, na.rm = na.rm)
+        utility_results[i, "tail"] <- res$utility_score
+      }, error = function(e) {
+        warning(paste("tail_fidelity failed for", sdg_name, ":", e$message))
+        utility_results[i, "tail"] <<- NA
       })
     }
   }
