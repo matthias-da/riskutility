@@ -230,7 +230,7 @@ contingency_fidelity.default <- function(X, Y,
 #' @param x2_orig factor, variable 2 from original data
 #' @param x1_synth factor, variable 1 from synthetic data
 #' @param x2_synth factor, variable 2 from synthetic data
-#' @return scalar TV distance in [0, 1], or NA if either variable has < 2 levels
+#' @return scalar TV distance in the unit interval, or NA if either variable has < 2 levels
 #' @keywords internal
 .contingency_tv <- function(x1_orig, x2_orig, x1_synth, x2_synth) {
   # Skip pairs where either variable has fewer than 2 observed levels

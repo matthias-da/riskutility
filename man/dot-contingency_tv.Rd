@@ -16,7 +16,7 @@
 \item{x2_synth}{factor, variable 2 from synthetic data}
 }
 \value{
-scalar TV distance in \link{0, 1}, or NA if either variable has < 2 levels
+scalar TV distance in the unit interval, or NA if either variable has < 2 levels
 }
 \description{
 Computes TV = 0.5 * sum(|P_orig - P_synth|) where P is the proportion
