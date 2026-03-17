@@ -112,6 +112,7 @@ Other utility:
 \code{\link{ci_proximity}()},
 \code{\link{energy_distance}()},
 \code{\link{gower}()},
+\code{\link{mmd}()},
 \code{\link{mqs}()},
 \code{\link{pMSE}()},
 \code{\link{propscore}()},

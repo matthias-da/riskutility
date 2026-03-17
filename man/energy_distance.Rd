@@ -127,6 +127,7 @@ Other utility:
 \code{\link{ci_proximity}()},
 \code{\link{gower}()},
 \code{\link{hellinger}()},
+\code{\link{mmd}()},
 \code{\link{mqs}()},
 \code{\link{pMSE}()},
 \code{\link{propscore}()},

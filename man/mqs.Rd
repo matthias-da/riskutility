@@ -108,6 +108,7 @@ Other utility:
 \code{\link{energy_distance}()},
 \code{\link{gower}()},
 \code{\link{hellinger}()},
+\code{\link{mmd}()},
 \code{\link{pMSE}()},
 \code{\link{propscore}()},
 \code{\link{rumap}()},

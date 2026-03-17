@@ -621,6 +621,9 @@ datasets. Data & Knowledge Engineering, 100, 78-93.
 
 Cuturi, M. (2013). Sinkhorn Distances: Lightspeed Computation of Optimal
 Transport. Advances in Neural Information Processing Systems, 26.
+
+Guo, C., & Berkhahn, F. (2016). Entity Embeddings of Categorical Variables.
+arXiv preprint arXiv:1604.06737.
 }
 \seealso{
 \code{\link{individual_risk}}, \code{\link{dcr}},

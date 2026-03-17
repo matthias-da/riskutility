@@ -131,6 +131,7 @@ Other utility:
 \code{\link{energy_distance}()},
 \code{\link{gower}()},
 \code{\link{hellinger}()},
+\code{\link{mmd}()},
 \code{\link{mqs}()},
 \code{\link{pMSE}()},
 \code{\link{propscore}()},

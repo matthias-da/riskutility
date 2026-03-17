@@ -57,6 +57,7 @@ Other utility:
 \code{\link{ci_proximity}()},
 \code{\link{energy_distance}()},
 \code{\link{hellinger}()},
+\code{\link{mmd}()},
 \code{\link{mqs}()},
 \code{\link{pMSE}()},
 \code{\link{propscore}()},
