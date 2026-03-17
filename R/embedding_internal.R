@@ -47,7 +47,7 @@
     }
   }
 
-  # Numeric: min-max scale to \eqn{[0, 1]}
+  # Numeric: min-max scale to [0, 1]
   num_mat <- NULL
   if (length(num_keys) > 0) {
     if (is.null(num_ranges)) {
@@ -68,7 +68,7 @@
       } else {
         num_mat[, j] <- 0.5
       }
-      # Clamp to \eqn{[0, 1]} for out-of-range values in new data
+      # Clamp to [0, 1] for out-of-range values in new data
       num_mat[, j] <- pmin(pmax(num_mat[, j], 0), 1)
     }
   } else {

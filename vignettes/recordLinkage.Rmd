@@ -1248,7 +1248,7 @@ while heavily perturbed records will project further away.
 After training, both query and search records are encoded. The pairwise
 Euclidean distance in latent space is computed:
 $$d_z(i,j) = \lVert z_i^\text{orig} - z_j^\text{anon} \rVert_2,$$
-normalized to $\eqn{[0,1]}$ using the 97.5th percentile of within-query
+normalized to $[0,1]$ using the 97.5th percentile of within-query
 pairwise distances (a pragmatic heuristic for robustness to outlier
 embeddings; blocks with fewer than 40 records fall back to the maximum).
 Risk is then $r_i = 1 - d_z(i, j^*)$, where $j^*$ is the nearest search
@@ -2105,7 +2105,7 @@ The `clue` package is required.
 
 A third option, `matching = "ot"`, uses entropy-regularized optimal
 transport (Sinkhorn-Knopp algorithm) to produce continuous risk in
-$\eqn{[0,1]}$ that interpolates between independent (smooth) and
+$[0,1]$ that interpolates between independent (smooth) and
 bijective (hard) assignments, controlled by the `ot_epsilon` parameter.
 
 ## Comparison Example
