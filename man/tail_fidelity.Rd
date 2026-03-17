@@ -33,7 +33,7 @@ If NULL (default), all common numeric variables are used; categoricals
 are skipped with a message.}
 
 \item{percentile}{Numeric, the percentile threshold defining the tail region.
-Default 95, meaning the upper 5\\% and lower 5\\% of observations.}
+Default 95, meaning the upper 5 percent and lower 5 percent of observations.}
 
 \item{tails}{Character, which tails to assess. One of \code{"both"} (default),
 \code{"upper"}, or \code{"lower"}.}

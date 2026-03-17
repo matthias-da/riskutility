@@ -128,6 +128,10 @@ Current utility functions for comparing original vs synthetic data:
 - `energy_distance()` - Energy distance for multivariate numeric data
 - `ci_proximity()` - CI proximity/relative error measure
 - `repu()` - Replicated Uniques
+- `mmd()` - Maximum Mean Discrepancy (kernel-based, exact + RFF)
+- `tstr()` - Train on Synthetic, Test on Real (downstream ML utility)
+- `copula_fidelity()` - Empirical copula dependence comparison
+- `tail_fidelity()` - Tail preservation (QQ divergence + density ratio + Hill)
 
 ### rumap() - Multivariate R-U Framework
 
@@ -136,7 +140,8 @@ The `rumap()` function provides comprehensive multivariate Risk-Utility evaluati
 ```r
 rumap(original, synthetic,
       risk_measures = c("dcap", "tcap", "disco", "rapid", "ims"),
-      utility_measures = c("pmse", "wasserstein", "hellinger", "energy"),
+      utility_measures = c("pmse", "wasserstein", "hellinger", "energy",
+                           "ci_proximity", "mmd", "tstr", "copula", "tail"),
       key_vars = NULL, target_var = NULL,
       holdout = NULL, holdout_fraction = 0.2,
       normalize = TRUE, ...)
@@ -270,7 +275,7 @@ The RAPID implementation in riskutility is the canonical version, ported and imp
 ## Package Status
 
 - **Authors**: Matthias Templ (maintainer), Oscar Thees
-- **Tests**: 55 test files, 2625+ tests passing
+- **Tests**: 60 test files, 3660+ tests passing
 - **R CMD check**: 0 errors, 0 notes (2 expected vignette warnings from missing inst/doc)
 - **Vignettes**: Main vignette (`riskutility.Rmd`) + record linkage deep-dive (`recordLinkage.Rmd`)
 - **CITATION**: Available in `inst/CITATION`
