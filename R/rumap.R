@@ -210,7 +210,7 @@ rumap.default <- function(X,
 
   # Validate utility measures
   valid_utility <- c("pmse", "wasserstein", "hellinger", "energy", "ci_proximity",
-                     "mmd", "tstr", "copula", "tail")
+                     "mmd", "tstr", "copula", "tail", "contingency")
   invalid_utility <- setdiff(utility_measures, valid_utility)
   if (length(invalid_utility) > 0) {
     warning(paste("Unknown utility measures ignored:", paste(invalid_utility, collapse = ", ")))
@@ -498,6 +498,17 @@ rumap.default <- function(X,
       }, error = function(e) {
         warning(paste("tail_fidelity failed for", sdg_name, ":", e$message))
         utility_results[i, "tail"] <<- NA
+      })
+    }
+
+    # Contingency fidelity
+    if ("contingency" %in% utility_measures && length(cat_vars) >= 2) {
+      tryCatch({
+        res <- contingency_fidelity(original, Y, vars = cat_vars)
+        utility_results[i, "contingency"] <- res$utility_score
+      }, error = function(e) {
+        warning(paste("contingency_fidelity failed for", sdg_name, ":", e$message))
+        utility_results[i, "contingency"] <<- NA
       })
     }
   }

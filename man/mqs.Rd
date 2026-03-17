@@ -105,6 +105,7 @@ m2
 Other utility: 
 \code{\link{chisq_utility}()},
 \code{\link{ci_proximity}()},
+\code{\link{contingency_fidelity}()},
 \code{\link{copula_fidelity}()},
 \code{\link{energy_distance}()},
 \code{\link{gower}()},
@@ -112,8 +113,10 @@ Other utility:
 \code{\link{mmd}()},
 \code{\link{pMSE}()},
 \code{\link{propscore}()},
+\code{\link{regression_fidelity}()},
 \code{\link{rumap}()},
 \code{\link{specks}()},
+\code{\link{subgroup_utility}()},
 \code{\link{tail_fidelity}()},
 \code{\link{tstr}()}
 }
