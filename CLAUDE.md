@@ -68,6 +68,9 @@ All major functions return S3 objects with `print()`, `summary()`, and `plot()` 
 | Class | Function | Purpose |
 |-------|----------|---------|
 | `propscore` | `propscore()` | Propensity score utility (pMSE) |
+| `subgroup_utility` | `subgroup_utility()` | Stratified utility across subgroups |
+| `regression_fidelity` | `regression_fidelity()` | Regression coefficient comparison |
+| `contingency_fidelity` | `contingency_fidelity()` | Bivariate categorical dependence (TV distance) |
 | `rumap` | `rumap()` | Multivariate R-U map |
 
 Each class follows the pattern:
@@ -132,6 +135,9 @@ Current utility functions for comparing original vs synthetic data:
 - `tstr()` - Train on Synthetic, Test on Real (downstream ML utility)
 - `copula_fidelity()` - Empirical copula dependence comparison
 - `tail_fidelity()` - Tail preservation (QQ divergence + density ratio + Hill)
+- `subgroup_utility()` - Stratified utility assessment across subgroups
+- `regression_fidelity()` - Regression coefficient comparison (bias, CI overlap, significance)
+- `contingency_fidelity()` - Bivariate contingency table TV distance (categorical complement to copula_fidelity)
 
 ### rumap() - Multivariate R-U Framework
 
@@ -141,7 +147,8 @@ The `rumap()` function provides comprehensive multivariate Risk-Utility evaluati
 rumap(original, synthetic,
       risk_measures = c("dcap", "tcap", "disco", "rapid", "ims"),
       utility_measures = c("pmse", "wasserstein", "hellinger", "energy",
-                           "ci_proximity", "mmd", "tstr", "copula", "tail"),
+                           "ci_proximity", "mmd", "tstr", "copula", "tail",
+                           "contingency"),
       key_vars = NULL, target_var = NULL,
       holdout = NULL, holdout_fraction = 0.2,
       normalize = TRUE, ...)
@@ -189,6 +196,9 @@ rumap(original, synthetic,
 - `R/embedding_internal.R`: Torch autoencoder engine for embedding-based record linkage (~580 lines; `.ae_model`, `.ae_train`, `.ae_encode`, `.ae_distance`, `.ae_var_importance`)
 - `R/sinkhorn_internal.R`: Sinkhorn optimal transport engine (`.sinkhorn()` and `.solve_ot()`)
 - `R/mahalanobis_internal.R`: Robust Mahalanobis distance helpers (`.mahal_prepare`, `.mahal_dist`)
+- `R/subgroup_utility.R`: Stratified utility assessment (~358 lines)
+- `R/regression_fidelity.R`: Regression coefficient comparison (~472 lines; forest plot + CI overlap bar chart)
+- `R/contingency_fidelity.R`: Bivariate contingency table fidelity (~423 lines; TV distance heatmap)
 - `vignettes/riskutility.Rmd`: Comprehensive JSS-style vignette (main package vignette)
 - `vignettes/recordLinkage.Rmd`: Deep-dive vignette on record linkage risk (~2240 lines; JSS paper candidate)
 - `vignettes/references.bib`: Shared bibliography for all vignettes
@@ -270,12 +280,14 @@ The RAPID implementation in riskutility is the canonical version, ported and imp
 - RAPID implementation based on Thees, Müller & Templ (2026) - Risk of Attribute Prediction-Induced Disclosure
 - Herranz, J., Nin, J., Rodriguez, P., & Tassa, T. (2016). "Revisiting Distance-Based Record Linkage for Privacy-Preserving Release of Statistical Datasets." Data & Knowledge Engineering, 100, 78-93.
 - Guo, C., & Berkhahn, F. (2016). "Entity Embeddings of Categorical Variables." arXiv:1604.06737.
+- Karr, A. F., et al. (2006). "A Framework for Evaluating the Utility of Data Altered to Protect Confidentiality." The American Statistician, 60(3), 224-232.
+- Snoke, J., et al. (2018). "General and Specific Utility Measures for Synthetic Data." JRSS-A, 181(3), 663-688.
 - Related research code: `/Users/matthias/workspace25/PCA_RU/`, `/Users/matthias/workspace26/RAPID/`
 
 ## Package Status
 
 - **Authors**: Matthias Templ (maintainer), Oscar Thees
-- **Tests**: 60 test files, 3660+ tests passing
+- **Tests**: 63 test files, 3815+ tests passing
 - **R CMD check**: 0 errors, 0 notes (2 expected vignette warnings from missing inst/doc)
 - **Vignettes**: Main vignette (`riskutility.Rmd`) + record linkage deep-dive (`recordLinkage.Rmd`)
 - **CITATION**: Available in `inst/CITATION`
