@@ -6,8 +6,9 @@
 #' mean TV distance across all pairs summarizes how well the synthetic data
 #' preserves the bivariate categorical dependence structure.
 #'
-#' This measure complements \code{\link{copula_fidelity}}, which handles only
-#' numeric variable pairs.
+#' Use this when the data contains multiple categorical variables and you want
+#' to check whether their bivariate dependence structure is preserved. This
+#' complements \code{\link{copula_fidelity}}, which handles numeric pairs.
 #'
 #' @param X A data.frame or data.table containing the original dataset.
 #' @param Y A data.frame or data.table containing the synthetic/anonymized dataset.
@@ -51,12 +52,30 @@
 #'
 #' Total variation distance is bounded in \eqn{[0, 1]}: 0 means identical
 #' joint distributions and 1 means completely non-overlapping distributions.
-#' Pairs where one or both variables have only a single level are skipped and
-#' receive \code{NA}.
+#' Pairs where a variable has only a single level in both datasets are skipped
+#' and receive \code{NA}.
+#'
+#' \strong{Interpretation (heuristic thresholds):}
+#' \itemize{
+#'   \item utility_score > 0.95: EXCELLENT -- dependence structure very well preserved
+#'   \item utility_score > 0.80: GOOD -- reasonably preserved
+#'   \item utility_score > 0.50: MODERATE -- some differences
+#'   \item utility_score <= 0.50: POOR -- significant differences
+#' }
+#'
+#' Note that this measure only captures bivariate (pairwise) categorical
+#' associations. Higher-order interactions (3-way or more) are not assessed.
 #'
 #' @seealso \code{\link{copula_fidelity}} for numeric dependence comparison,
 #'   \code{\link{compare_chisq_gof}} for univariate categorical comparison,
-#'   \code{\link{hellinger}} for univariate Hellinger distance
+#'   \code{\link{hellinger}} for univariate Hellinger distance,
+#'   \code{\link{regression_fidelity}} for analysis-specific fidelity,
+#'   \code{\link{subgroup_utility}} for stratified utility assessment
+#'
+#' @references
+#' Snoke, J., Raab, G. M., Nowok, B., Dibben, C., and Slavkovic, A. (2018).
+#' General and Specific Utility Measures for Synthetic Data. Journal of the
+#' Royal Statistical Society: Series A, 181(3), 663-688.
 #'
 #' @author Matthias Templ
 #' @family utility
@@ -90,6 +109,13 @@
 #' result <- contingency_fidelity(X, Y_good)
 #' print(result)
 #' summary(result)
+#'
+#' # Using synth_pair
+#' pair <- synth_pair(X, Y_good)
+#' result2 <- contingency_fidelity(pair)
+#'
+#' # Selecting specific variables
+#' result3 <- contingency_fidelity(X, Y_good, vars = c("gender", "education"))
 #'
 #' \donttest{
 #' plot(result)
@@ -221,19 +247,12 @@ contingency_fidelity.default <- function(X, Y,
 
 # ---- Internal helpers --------------------------------------------------------
 
-#' Total variation distance between two bivariate contingency tables
-#'
-#' Computes TV = 0.5 * sum(|P_orig - P_synth|) where P is the proportion
-#' table (cross-tabulation normalized to sum to 1).
-#'
-#' @param x1_orig factor, variable 1 from original data
-#' @param x2_orig factor, variable 2 from original data
-#' @param x1_synth factor, variable 1 from synthetic data
-#' @param x2_synth factor, variable 2 from synthetic data
-#' @return scalar TV distance in the unit interval, or NA if either variable has < 2 levels
-#' @keywords internal
+# Total variation distance between two bivariate contingency tables.
+# Computes TV = 0.5 * sum(|P_orig - P_synth|) where P is the proportion
+# table (cross-tabulation normalized to sum to 1).
+# Returns NA if a variable has < 2 observed levels in both datasets.
 .contingency_tv <- function(x1_orig, x2_orig, x1_synth, x2_synth) {
-  # Skip pairs where either variable has fewer than 2 observed levels
+  # Skip pairs where a variable has < 2 levels in both datasets
   if (nlevels(droplevels(x1_orig)) < 2 && nlevels(droplevels(x1_synth)) < 2) return(NA_real_)
   if (nlevels(droplevels(x2_orig)) < 2 && nlevels(droplevels(x2_synth)) < 2) return(NA_real_)
 
@@ -312,7 +331,7 @@ summary.contingency_fidelity <- function(object, ...) {
     pairwise = object$pairwise,
     max_tv = if (length(valid_tv) > 0) max(valid_tv) else NA_real_,
     min_tv = if (length(valid_tv) > 0) min(valid_tv) else NA_real_,
-    sd_tv = if (length(valid_tv) > 1) sd(valid_tv) else 0,
+    sd_tv = if (length(valid_tv) > 1) sd(valid_tv) else NA_real_,
     n_pairs = nrow(object$pairwise),
     n_valid_pairs = length(valid_tv),
     n_vars = object$n_vars,
@@ -374,7 +393,7 @@ plot.contingency_fidelity <- function(x, y = NULL, ..., which = 1) {
     # Build a symmetric matrix of TV distances
     vars <- x$vars
     n_v <- length(vars)
-    mat <- matrix(0, nrow = n_v, ncol = n_v,
+    mat <- matrix(NA_real_, nrow = n_v, ncol = n_v,
                   dimnames = list(vars, vars))
 
     for (i in seq_len(nrow(x$pairwise))) {
@@ -393,10 +412,11 @@ plot.contingency_fidelity <- function(x, y = NULL, ..., which = 1) {
     valid_tv <- x$pairwise$tv_distance[!is.na(x$pairwise$tv_distance)]
     mid <- if (length(valid_tv) > 0) median(valid_tv) else 0
 
-    p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$Var1, y = .data$Var2,
-                                           fill = .data$TV)) +
+    p <- ggplot2::ggplot(df, ggplot2::aes(x = Var1, y = Var2,
+                                           fill = TV)) +
       ggplot2::geom_tile(color = "white") +
-      ggplot2::geom_text(ggplot2::aes(label = sprintf("%.4f", .data$TV)),
+      ggplot2::geom_text(ggplot2::aes(label = ifelse(is.na(TV), "",
+                                                      sprintf("%.4f", TV))),
                          size = 3.5) +
       ggplot2::scale_fill_gradient2(
         low = "steelblue", mid = "white", high = "firebrick",

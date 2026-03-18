@@ -6,8 +6,8 @@
 #'
 #' @param X A data.frame containing the original dataset.
 #' @param Y A data.frame containing the synthetic/anonymized dataset.
-#' @param formula An R formula specifying the regression model (REQUIRED).
-#'   For example, \code{y ~ x1 + x2}.
+#' @param formula An R formula specifying the regression model. Required;
+#'   an error is raised if not provided. For example, \code{y ~ x1 + x2}.
 #' @param model Character, the type of model to fit. One of \code{"lm"}
 #'   (default) or \code{"glm"}.
 #' @param family A family object for GLM fitting (e.g., \code{binomial()}).
@@ -44,8 +44,8 @@
 #'     (\code{synth - orig})
 #'   \item \strong{Standardized bias}: bias divided by the original standard
 #'     error (\code{bias / SE_orig})
-#'   \item \strong{CI overlap}: proportion of the wider interval that overlaps
-#'     with the narrower interval
+#'   \item \strong{CI overlap}: overlap length divided by the average of the
+#'     two interval widths, clamped to \eqn{[0, 1]}
 #'   \item \strong{Significance agreement}: whether both models agree on
 #'     statistical significance at the given confidence level
 #' }
@@ -53,13 +53,30 @@
 #' The CI overlap for two intervals \eqn{[lo_1, hi_1]} and \eqn{[lo_2, hi_2]}
 #' is:
 #' \deqn{overlap = \frac{\max(0, \min(hi_1, hi_2) - \max(lo_1, lo_2))}
-#'   {\max(hi_1 - lo_1, hi_2 - lo_2)}}
+#'   {0.5 \cdot (w_1 + w_2)}}
+#' where \eqn{w_k = hi_k - lo_k}. The result is clamped to \eqn{[0, 1]}.
+#'
+#' For \code{model = "lm"}, confidence intervals use the t-distribution with
+#' the appropriate residual degrees of freedom. For \code{model = "glm"},
+#' Wald intervals based on the normal distribution are used.
 #'
 #' A utility score of 1 indicates perfect overlap (coefficients are identical),
-#' while 0 indicates no overlap at all.
+#' while 0 indicates no overlap at all. The \code{utility_score} field provides
+#' a standard interface compatible with \code{\link{subgroup_utility}} and
+#' \code{\link{rumap}}.
+#'
+#' \strong{Interpretation (heuristic thresholds):}
+#' \itemize{
+#'   \item utility_score > 0.9: EXCELLENT -- regression results very well preserved
+#'   \item utility_score > 0.7: GOOD -- reasonably preserved
+#'   \item utility_score > 0.4: MODERATE -- some differences
+#'   \item utility_score <= 0.4: POOR -- significant differences
+#' }
 #'
 #' @seealso \code{\link{propscore}} for propensity score utility,
-#'   \code{\link{compare_model_performance}} for predictive performance comparison
+#'   \code{\link{compare_model_performance}} for predictive performance comparison,
+#'   \code{\link{contingency_fidelity}} for categorical dependence comparison,
+#'   \code{\link{subgroup_utility}} for stratified utility assessment
 #'
 #' @references
 #' Karr, A. F., Kohnen, C. N., Oganian, A., Reiter, J. P., and Sanil, A. P.
@@ -73,7 +90,7 @@
 #' @author Matthias Templ
 #' @family utility
 #' @export
-#' @importFrom stats lm glm confint coef summary.lm vcov binomial
+#' @importFrom stats lm glm confint coef summary.lm vcov binomial qnorm qt
 #'
 #' @examples
 #' set.seed(123)
@@ -92,6 +109,10 @@
 #' result <- regression_fidelity(X, Y_good, formula = y ~ x1 + x2)
 #' print(result)
 #' summary(result)
+#'
+#' # Using synth_pair
+#' pair <- synth_pair(X, Y_good)
+#' result2 <- regression_fidelity(pair, formula = y ~ x1 + x2)
 #'
 #' \donttest{
 #' # Poor synthetic data (wrong coefficients)
@@ -202,21 +223,27 @@ regression_fidelity.default <- function(X, Y,
   se_orig   <- coef_orig[, 2]
   se_synth  <- coef_synth[, 2]
 
-  # Compute CIs
+  # Compute CIs (t-distribution for lm, normal for glm)
   alpha <- 1 - conf_level
-  z <- qnorm(1 - alpha / 2)
+  if (model == "lm") {
+    q_orig  <- qt(1 - alpha / 2, df = fit_orig$df.residual)
+    q_synth <- qt(1 - alpha / 2, df = fit_synth$df.residual)
+  } else {
+    q_orig  <- qnorm(1 - alpha / 2)
+    q_synth <- q_orig
+  }
 
-  lo_orig  <- est_orig  - z * se_orig
-  hi_orig  <- est_orig  + z * se_orig
-  lo_synth <- est_synth - z * se_synth
-  hi_synth <- est_synth + z * se_synth
+  lo_orig  <- est_orig  - q_orig  * se_orig
+  hi_orig  <- est_orig  + q_orig  * se_orig
+  lo_synth <- est_synth - q_synth * se_synth
+  hi_synth <- est_synth + q_synth * se_synth
 
-  # CI overlap: max(0, min(hi1,hi2) - max(lo1,lo2)) / max(width1, width2)
+  # CI overlap: overlap length / average width, clamped to [0, 1]
   width_orig  <- hi_orig  - lo_orig
   width_synth <- hi_synth - lo_synth
+  avg_width   <- 0.5 * (width_orig + width_synth)
   overlap_num <- pmax(0, pmin(hi_orig, hi_synth) - pmax(lo_orig, lo_synth))
-  max_width   <- pmax(width_orig, width_synth)
-  ci_overlap  <- ifelse(max_width > 0, overlap_num / max_width, 1)
+  ci_overlap  <- ifelse(avg_width > 0, pmin(overlap_num / avg_width, 1), 1)
 
   # Bias and standardized bias
   bias <- est_synth - est_orig
@@ -293,7 +320,7 @@ print.regression_fidelity <- function(x, ...) {
   cat("  Utility score (mean CI overlap):", sprintf("%.4f", x$utility_score), "\n")
   cat("  Mean |std. bias|:               ", sprintf("%.4f", x$mean_abs_std_bias), "\n")
   cat("  Significance agreement rate:    ", sprintf("%.4f", x$sig_agreement_rate),
-      sprintf("(%d/%d)", sum(x$coefficients$sig_agreement), x$n_coef), "\n\n")
+      sprintf(" (%d/%d)", sum(x$coefficients$sig_agreement), x$n_coef), "\n\n")
 
   # Show disagreements
   disagree <- x$coefficients[!x$coefficients$sig_agreement, ]
@@ -394,7 +421,7 @@ print.summary.regression_fidelity <- function(x, ...) {
 #' @param which integer, which plot(s) to produce:
 #'   1 = forest plot comparing original and synthetic coefficients with CIs,
 #'   2 = CI overlap bar chart per coefficient
-#' @importFrom graphics arrows axis barplot legend mtext par points segments
+#' @importFrom graphics abline arrows axis barplot legend mtext par plot points segments
 #' @export
 plot.regression_fidelity <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

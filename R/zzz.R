@@ -26,7 +26,9 @@ utils::globalVariables(c(
   # rapid plot variables
   "at_risk",
   # torch nn_module self reference
-  "self"
+  "self",
+  # contingency_fidelity / copula_fidelity heatmap variables
+  "Var1", "Var2", "TV"
 ))
 
 #' @importFrom grDevices rgb

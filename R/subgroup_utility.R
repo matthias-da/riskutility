@@ -6,6 +6,8 @@
 #' subgroup and identifies groups with low utility.
 #'
 #' @param X A data.frame or data.table containing the original dataset.
+#'   For the \code{synth_pair} method, a list with \code{$original} and
+#'   \code{$synthetic} elements.
 #' @param Y A data.frame or data.table containing the synthetic/anonymized dataset.
 #' @param group_var Character string naming the column to stratify by. Must be
 #'   present in both datasets. If the column is numeric, it is converted to a
@@ -17,7 +19,8 @@
 #'   Default 0.5.
 #' @param na.rm Logical, whether to remove rows where \code{group_var} is NA.
 #'   Default TRUE.
-#' @param ... Additional arguments passed to \code{utility_fun}.
+#' @param ... Additional arguments passed to \code{utility_fun} (e.g.,
+#'   \code{seed} for functions that accept it).
 #'
 #' @return An object of class \code{"subgroup_utility"} containing:
 #' \itemize{
@@ -43,9 +46,24 @@
 #' of worst to overall utility helps identify whether particular subgroups
 #' are disproportionately affected.
 #'
+#' \strong{Interpretation guidelines:}
+#' \itemize{
+#'   \item Ratio near 1: utility is homogeneous across subgroups
+#'   \item Ratio below 0.5: substantial disparity; the worst subgroup has
+#'     less than half the overall utility
+#'   \item Flagged subgroups (below \code{threshold}) warrant investigation
+#'     and potential re-synthesis
+#' }
+#'
+#' @references
+#' Snoke, J., Raab, G. M., Nowok, B., Dibben, C., & Slavkovic, A. (2018).
+#' General and specific utility measures for synthetic data.
+#' \emph{Journal of the Royal Statistical Society: Series A}, 181(3), 663--688.
+#'
 #' @seealso \code{\link{energy_distance}}, \code{\link{mmd}},
 #'   \code{\link{hellinger}} for utility functions that can be passed as
-#'   \code{utility_fun}
+#'   \code{utility_fun}; \code{\link{regression_fidelity}} and
+#'   \code{\link{contingency_fidelity}} for other utility measures
 #'
 #' @author Matthias Templ
 #' @family utility
@@ -67,6 +85,10 @@
 #' result <- subgroup_utility(X, Y, group_var = "group", seed = 42)
 #' print(result)
 #' summary(result)
+#'
+#' # Using synth_pair interface
+#' pair <- structure(list(original = X, synthetic = Y), class = "synth_pair")
+#' result2 <- subgroup_utility(pair, group_var = "group")
 #'
 #' \donttest{
 #' plot(result)
@@ -134,6 +156,9 @@ subgroup_utility.default <- function(X, Y,
   Y_full <- Y[, analysis_vars, drop = FALSE]
   overall_result <- utility_fun(X_full, Y_full, ...)
   overall_score <- overall_result$utility_score
+  if (is.null(overall_score)) {
+    stop("utility_fun must return an object with a $utility_score element.")
+  }
 
   # Get all levels present in either dataset
   all_levels <- sort(unique(c(levels(X[[group_var]]), levels(Y[[group_var]]))))
@@ -141,29 +166,36 @@ subgroup_utility.default <- function(X, Y,
   all_levels <- all_levels[all_levels %in% c(as.character(X[[group_var]]),
                                               as.character(Y[[group_var]]))]
 
-  # Per-group computation
-  group_names <- character(0)
-  n_orig_vec <- integer(0)
-  n_synth_vec <- integer(0)
-  utility_vec <- numeric(0)
+  # Per-group computation (pre-allocated)
+  n_levels <- length(all_levels)
+  group_names <- character(n_levels)
+  n_orig_vec <- integer(n_levels)
+  n_synth_vec <- integer(n_levels)
+  utility_vec <- rep(NA_real_, n_levels)
 
-  for (lev in all_levels) {
+  for (k in seq_along(all_levels)) {
+    lev <- all_levels[k]
     X_sub <- X[X[[group_var]] == lev, analysis_vars, drop = FALSE]
     Y_sub <- Y[Y[[group_var]] == lev, analysis_vars, drop = FALSE]
     n_x <- nrow(X_sub)
     n_y <- nrow(Y_sub)
 
-    group_names <- c(group_names, lev)
-    n_orig_vec <- c(n_orig_vec, n_x)
-    n_synth_vec <- c(n_synth_vec, n_y)
+    group_names[k] <- lev
+    n_orig_vec[k] <- n_x
+    n_synth_vec[k] <- n_y
 
     if (n_x < 5 || n_y < 5) {
       warning(paste0("Subgroup '", lev, "' has fewer than 5 observations ",
                      "(n_orig=", n_x, ", n_synth=", n_y, "). Skipping."))
-      utility_vec <- c(utility_vec, NA_real_)
     } else {
       sub_result <- utility_fun(X_sub, Y_sub, ...)
-      utility_vec <- c(utility_vec, sub_result$utility_score)
+      score <- sub_result$utility_score
+      if (is.null(score)) {
+        warning(paste0("utility_fun returned NULL $utility_score for subgroup '",
+                       lev, "'. Setting to NA."))
+      } else {
+        utility_vec[k] <- score
+      }
     }
   }
 
@@ -183,7 +215,13 @@ subgroup_utility.default <- function(X, Y,
     worst_idx <- which.min(utility_vec)
     worst_group <- group_names[worst_idx]
     worst_score <- utility_vec[worst_idx]
-    ratio <- if (overall_score > 0) worst_score / overall_score else NA_real_
+    ratio <- if (overall_score > 0) {
+      worst_score / overall_score
+    } else if (worst_score == 0) {
+      1
+    } else {
+      NA_real_
+    }
   } else {
     worst_group <- NA_character_
     worst_score <- NA_real_

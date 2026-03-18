@@ -46,8 +46,9 @@ mean TV distance across all pairs summarizes how well the synthetic data
 preserves the bivariate categorical dependence structure.
 }
 \details{
-This measure complements \code{\link{copula_fidelity}}, which handles only
-numeric variable pairs.
+Use this when the data contains multiple categorical variables and you want
+to check whether their bivariate dependence structure is preserved. This
+complements \code{\link{copula_fidelity}}, which handles numeric pairs.
 
 The algorithm proceeds as follows:
 \enumerate{
@@ -70,8 +71,19 @@ pairwise TV distances. The utility score is \code{1 - mean_tv}.
 
 Total variation distance is bounded in \eqn{[0, 1]}: 0 means identical
 joint distributions and 1 means completely non-overlapping distributions.
-Pairs where one or both variables have only a single level are skipped and
-receive \code{NA}.
+Pairs where a variable has only a single level in both datasets are skipped
+and receive \code{NA}.
+
+\strong{Interpretation (heuristic thresholds):}
+\itemize{
+\item utility_score > 0.95: EXCELLENT -- dependence structure very well preserved
+\item utility_score > 0.80: GOOD -- reasonably preserved
+\item utility_score > 0.50: MODERATE -- some differences
+\item utility_score <= 0.50: POOR -- significant differences
+}
+
+Note that this measure only captures bivariate (pairwise) categorical
+associations. Higher-order interactions (3-way or more) are not assessed.
 }
 \examples{
 set.seed(42)
@@ -101,14 +113,28 @@ result <- contingency_fidelity(X, Y_good)
 print(result)
 summary(result)
 
+# Using synth_pair
+pair <- synth_pair(X, Y_good)
+result2 <- contingency_fidelity(pair)
+
+# Selecting specific variables
+result3 <- contingency_fidelity(X, Y_good, vars = c("gender", "education"))
+
 \donttest{
 plot(result)
 }
 }
+\references{
+Snoke, J., Raab, G. M., Nowok, B., Dibben, C., and Slavkovic, A. (2018).
+General and Specific Utility Measures for Synthetic Data. Journal of the
+Royal Statistical Society: Series A, 181(3), 663-688.
+}
 \seealso{
 \code{\link{copula_fidelity}} for numeric dependence comparison,
 \code{\link{compare_chisq_gof}} for univariate categorical comparison,
-\code{\link{hellinger}} for univariate Hellinger distance
+\code{\link{hellinger}} for univariate Hellinger distance,
+\code{\link{regression_fidelity}} for analysis-specific fidelity,
+\code{\link{subgroup_utility}} for stratified utility assessment
 
 Other utility: 
 \code{\link{chisq_utility}()},

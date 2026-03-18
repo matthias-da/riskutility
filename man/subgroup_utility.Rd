@@ -21,9 +21,12 @@ subgroup_utility(X, ...)
 )
 }
 \arguments{
-\item{X}{A data.frame or data.table containing the original dataset.}
+\item{X}{A data.frame or data.table containing the original dataset.
+For the \code{synth_pair} method, a list with \code{$original} and
+\code{$synthetic} elements.}
 
-\item{...}{Additional arguments passed to \code{utility_fun}.}
+\item{...}{Additional arguments passed to \code{utility_fun} (e.g.,
+\code{seed} for functions that accept it).}
 
 \item{Y}{A data.frame or data.table containing the synthetic/anonymized dataset.}
 
@@ -71,6 +74,15 @@ The conservative \code{utility_score} returned is the minimum across all
 evaluated subgroups, reflecting a worst-case perspective. The \code{ratio}
 of worst to overall utility helps identify whether particular subgroups
 are disproportionately affected.
+
+\strong{Interpretation guidelines:}
+\itemize{
+\item Ratio near 1: utility is homogeneous across subgroups
+\item Ratio below 0.5: substantial disparity; the worst subgroup has
+less than half the overall utility
+\item Flagged subgroups (below \code{threshold}) warrant investigation
+and potential re-synthesis
+}
 }
 \examples{
 set.seed(123)
@@ -89,14 +101,24 @@ result <- subgroup_utility(X, Y, group_var = "group", seed = 42)
 print(result)
 summary(result)
 
+# Using synth_pair interface
+pair <- structure(list(original = X, synthetic = Y), class = "synth_pair")
+result2 <- subgroup_utility(pair, group_var = "group")
+
 \donttest{
 plot(result)
 }
 }
+\references{
+Snoke, J., Raab, G. M., Nowok, B., Dibben, C., & Slavkovic, A. (2018).
+General and specific utility measures for synthetic data.
+\emph{Journal of the Royal Statistical Society: Series A}, 181(3), 663--688.
+}
 \seealso{
 \code{\link{energy_distance}}, \code{\link{mmd}},
 \code{\link{hellinger}} for utility functions that can be passed as
-\code{utility_fun}
+\code{utility_fun}; \code{\link{regression_fidelity}} and
+\code{\link{contingency_fidelity}} for other utility measures
 
 Other utility: 
 \code{\link{chisq_utility}()},

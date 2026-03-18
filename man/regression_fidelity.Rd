@@ -29,8 +29,8 @@ regression_fidelity(X, ...)
 
 \item{Y}{A data.frame containing the synthetic/anonymized dataset.}
 
-\item{formula}{An R formula specifying the regression model (REQUIRED).
-For example, \code{y ~ x1 + x2}.}
+\item{formula}{An R formula specifying the regression model. Required;
+an error is raised if not provided. For example, \code{y ~ x1 + x2}.}
 
 \item{model}{Character, the type of model to fit. One of \code{"lm"}
 (default) or \code{"glm"}.}
@@ -75,8 +75,8 @@ For each coefficient, the following quantities are computed:
 (\code{synth - orig})
 \item \strong{Standardized bias}: bias divided by the original standard
 error (\code{bias / SE_orig})
-\item \strong{CI overlap}: proportion of the wider interval that overlaps
-with the narrower interval
+\item \strong{CI overlap}: overlap length divided by the average of the
+two interval widths, clamped to \eqn{[0, 1]}
 \item \strong{Significance agreement}: whether both models agree on
 statistical significance at the given confidence level
 }
@@ -84,10 +84,25 @@ statistical significance at the given confidence level
 The CI overlap for two intervals \eqn{[lo_1, hi_1]} and \eqn{[lo_2, hi_2]}
 is:
 \deqn{overlap = \frac{\max(0, \min(hi_1, hi_2) - \max(lo_1, lo_2))}
-  {\max(hi_1 - lo_1, hi_2 - lo_2)}}
+  {0.5 \cdot (w_1 + w_2)}}
+where \eqn{w_k = hi_k - lo_k}. The result is clamped to \eqn{[0, 1]}.
+
+For \code{model = "lm"}, confidence intervals use the t-distribution with
+the appropriate residual degrees of freedom. For \code{model = "glm"},
+Wald intervals based on the normal distribution are used.
 
 A utility score of 1 indicates perfect overlap (coefficients are identical),
-while 0 indicates no overlap at all.
+while 0 indicates no overlap at all. The \code{utility_score} field provides
+a standard interface compatible with \code{\link{subgroup_utility}} and
+\code{\link{rumap}}.
+
+\strong{Interpretation (heuristic thresholds):}
+\itemize{
+\item utility_score > 0.9: EXCELLENT -- regression results very well preserved
+\item utility_score > 0.7: GOOD -- reasonably preserved
+\item utility_score > 0.4: MODERATE -- some differences
+\item utility_score <= 0.4: POOR -- significant differences
+}
 }
 \examples{
 set.seed(123)
@@ -106,6 +121,10 @@ Y_good <- data.frame(y = ys, x1 = x1s, x2 = x2s)
 result <- regression_fidelity(X, Y_good, formula = y ~ x1 + x2)
 print(result)
 summary(result)
+
+# Using synth_pair
+pair <- synth_pair(X, Y_good)
+result2 <- regression_fidelity(pair, formula = y ~ x1 + x2)
 
 \donttest{
 # Poor synthetic data (wrong coefficients)
@@ -135,7 +154,9 @@ Royal Statistical Society: Series A, 181(3), 663-688.
 }
 \seealso{
 \code{\link{propscore}} for propensity score utility,
-\code{\link{compare_model_performance}} for predictive performance comparison
+\code{\link{compare_model_performance}} for predictive performance comparison,
+\code{\link{contingency_fidelity}} for categorical dependence comparison,
+\code{\link{subgroup_utility}} for stratified utility assessment
 
 Other utility: 
 \code{\link{chisq_utility}()},
