@@ -220,8 +220,7 @@ delta_presence.default <- function(X, Y,
   all_combos_X <- names(F_k_table)
   combo_df <- data.frame(
     combination = all_combos_X,
-    F_k = as.integer(F_k_table[all_combos_X]),
-    stringsAsFactors = FALSE
+    F_k = as.integer(F_k_table[all_combos_X])
   )
 
   # Match f_k: combos in X that also appear in Y get their Y count, else 0

@@ -204,8 +204,7 @@ subgroup_utility.default <- function(X, Y,
     n_orig = n_orig_vec,
     n_synth = n_synth_vec,
     utility_score = utility_vec,
-    flagged = ifelse(is.na(utility_vec), NA, utility_vec < threshold),
-    stringsAsFactors = FALSE
+    flagged = ifelse(is.na(utility_vec), NA, utility_vec < threshold)
   )
 
   # Worst subgroup (among non-NA)

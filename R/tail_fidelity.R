@@ -217,8 +217,7 @@ tail_fidelity.default <- function(X, Y,
     data.frame(
       variable = v,
       qq_tail_div = qq_div,
-      jsd_tail = jsd_tail,
-      stringsAsFactors = FALSE
+      jsd_tail = jsd_tail
     )
   })
 

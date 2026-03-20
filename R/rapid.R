@@ -787,8 +787,7 @@ rapid.default <- function(X, Y,
     error_metric = error_values,
     threshold = num_epsilon,
     threshold_type = num_epsilon_type,
-    at_risk = at_risk,
-    stringsAsFactors = FALSE
+    at_risk = at_risk
   )
   colnames(result_df)[colnames(result_df) == "error_metric"] <- metric_name
 
@@ -848,8 +847,7 @@ rapid.default <- function(X, Y,
       baseline = b_i,
       relative_score = r_i,
       threshold = cat_tau,
-      at_risk = at_risk,
-      stringsAsFactors = FALSE
+      at_risk = at_risk
     )
 
   } else if (cat_eval_method == "RCS_marginal") {
@@ -868,8 +866,7 @@ rapid.default <- function(X, Y,
       baseline = b_i,
       normalized_gain = normalized_gain,
       threshold = cat_tau,
-      at_risk = at_risk,
-      stringsAsFactors = FALSE
+      at_risk = at_risk
     )
 
   } else { # NCE
@@ -887,8 +884,7 @@ rapid.default <- function(X, Y,
       true_prob = g_i,
       risk_score = risk_score,
       threshold = cat_tau,
-      at_risk = at_risk,
-      stringsAsFactors = FALSE
+      at_risk = at_risk
     )
   }
 
@@ -1205,8 +1201,7 @@ print.summary.rapid <- function(x, ...) {
   coef_df <- data.frame(
     term = rownames(coefs),
     estimate = coefs[, "Estimate"],
-    se = coefs[, "Std. Error"],
-    stringsAsFactors = FALSE
+    se = coefs[, "Std. Error"]
   )
 
   # Remove intercept
@@ -1235,8 +1230,7 @@ print.summary.rapid <- function(x, ...) {
     coef_df <- rbind(coef_df, data.frame(
       term = paste0(qi, "_ref"),
       estimate = ref_est,
-      se = ref_se,
-      stringsAsFactors = FALSE
+      se = ref_se
     ))
   }
 

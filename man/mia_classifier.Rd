@@ -26,7 +26,8 @@ mia_classifier(X, ...)
 )
 }
 \arguments{
-\item{X}{data.frame or synth_pair. Records used to train the synthetic generator.}
+\item{X}{synth_pair object, or (for the default method) a data.frame of
+records used to train the synthetic generator.}
 
 \item{...}{additional arguments passed to methods}
 

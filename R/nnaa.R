@@ -120,9 +120,9 @@ nnaa <- function(X, ...) {
 #' @export
 nnaa.synth_pair <- function(X, ...) {
   if (!is.null(X$source) && X$source == "sdcMicro") {
-    stop("nnaa is designed for synthetic data evaluation and is not applicable to ",
-         "traditionally anonymized data (sdcMicro objects). ",
-         "Use dcr, nndr, or ims for distance-based privacy evaluation instead.",
+    stop("Package 'sdcMicro' is required for nnaa() but is only loaded for ecosystem integration.\n",
+         "Please install it: install.packages('sdcMicro')\n",
+         "Alternatives: dcr(), nndr(), ims() for distance-based privacy evaluation",
          call. = FALSE)
   }
   nnaa.default(
@@ -145,81 +145,20 @@ nnaa.default <- function(X, Y,
                          seed = NULL,
                          ...) {
 
-  # Input validation
-  if (!is.data.frame(X)) stop("X must be a data frame.")
-  if (!is.data.frame(Y)) stop("Y must be a data frame.")
-  if (!is.null(holdout) && !is.data.frame(holdout)) {
-    stop("holdout must be a data frame or NULL.")
-  }
-
   method <- match.arg(method)
 
-  # Determine variables to use
-  if (is.null(vars)) {
-    vars <- intersect(names(X), names(Y))
-    if (!is.null(holdout)) {
-      vars <- intersect(vars, names(holdout))
-    }
-  }
-
-  if (length(vars) == 0) {
-    stop("No common variables found between datasets.")
-  }
-
-  # Check variables exist
-  missing_X <- setdiff(vars, names(X))
-  missing_Y <- setdiff(vars, names(Y))
-  if (length(missing_X) > 0) {
-    stop(paste("Variables missing in X:", paste(missing_X, collapse = ", ")))
-  }
-  if (length(missing_Y) > 0) {
-    stop(paste("Variables missing in Y:", paste(missing_Y, collapse = ", ")))
-  }
-
-  # Check variable types match
-  for (var in vars) {
-    if (!identical(class(X[[var]]), class(Y[[var]]))) {
-      stop(paste("Variable", var, "has different class in X and Y."))
-    }
-  }
-
-  # Subset to selected variables
-  X <- X[, vars, drop = FALSE]
-  Y <- Y[, vars, drop = FALSE]
-
-  # Handle missing values
-  if (na.rm) {
-    complete_X <- complete.cases(X)
-    complete_Y <- complete.cases(Y)
-    X <- X[complete_X, , drop = FALSE]
-    Y <- Y[complete_Y, , drop = FALSE]
-  }
-
-  if (nrow(X) == 0) stop("No complete cases in X after removing NAs.")
-  if (nrow(Y) == 0) stop("No complete cases in Y after removing NAs.")
-
-  # Create or validate holdout
-  if (is.null(holdout)) {
-    if (!is.null(seed)) set.seed(seed)
-    n_holdout <- max(1, floor(nrow(X) * holdout_fraction))
-    holdout_idx <- sample(nrow(X), n_holdout)
-    holdout <- X[holdout_idx, , drop = FALSE]
-    train <- X[-holdout_idx, , drop = FALSE]
-  } else {
-    holdout <- holdout[, vars, drop = FALSE]
-    if (na.rm) {
-      complete_H <- complete.cases(holdout)
-      holdout <- holdout[complete_H, , drop = FALSE]
-    }
-    if (nrow(holdout) == 0) stop("No complete cases in holdout after removing NAs.")
-    train <- X
-  }
+  # Shared input validation, variable intersection, NA removal, holdout split
+  v <- .validate_pair_inputs(X, Y, holdout = holdout,
+                             holdout_fraction = holdout_fraction,
+                             vars = vars, na.rm = na.rm, seed = seed)
+  Y       <- v$Y
+  vars    <- v$vars
+  train   <- v$train
+  holdout <- v$holdout
 
   n_synthetic <- nrow(Y)
   n_train <- nrow(train)
   n_holdout <- nrow(holdout)
-
-  # .normalize_minmax is defined in R/utils_internal.R
 
   # Helper: get min distance per row from a distance matrix
   row_min <- function(mat) {
@@ -264,20 +203,11 @@ nnaa.default <- function(X, Y,
     # Reuse d_SS for holdout AA right component
 
   } else if (method == "euclidean") {
-    # Check all variables are numeric
-    if (!all(sapply(Y, is.numeric))) {
-      stop("method='euclidean' requires all variables to be numeric. Use method='gower' for mixed types.")
-    }
-
-    # Combine all data for consistent normalization
-    all_data <- rbind(train, holdout, Y)
-    all_data_norm <- as.data.frame(lapply(all_data, .normalize_minmax))
-
-    train_norm <- as.matrix(all_data_norm[seq_len(n_train), , drop = FALSE])
-    holdout_norm <- as.matrix(all_data_norm[n_train + seq_len(n_holdout), , drop = FALSE])
-    Y_norm <- as.matrix(all_data_norm[(n_train + n_holdout + 1):nrow(all_data_norm), , drop = FALSE])
-
-    # .euclidean_dist is defined in R/utils_internal.R
+    # .normalize_and_split / .euclidean_dist are defined in R/utils_internal.R
+    norms <- .normalize_and_split(train, holdout, Y)
+    train_norm <- norms[[1]]
+    holdout_norm <- norms[[2]]
+    Y_norm <- norms[[3]]
 
     # Training AA distances
     dist_TS <- .euclidean_dist(train_norm, Y_norm)

@@ -44,7 +44,8 @@ test_that("gower result has expected fields", {
   X <- make_mixed_data(n = 30, seed = 1)
   Y <- make_mixed_data(n = 30, seed = 2)
   result <- gower(X, Y)
-  expect_named(result, c("gower_distance", "n", "n_vars"))
+  expect_named(result, c("gower_distance", "utility_score",
+                          "n_records", "n_variables", "n", "n_vars"))
 })
 
 test_that("gower_distance is numeric", {
@@ -52,6 +53,29 @@ test_that("gower_distance is numeric", {
   Y <- make_mixed_data(n = 20, seed = 2)
   result <- gower(X, Y)
   expect_type(result$gower_distance, "double")
+})
+
+test_that("utility_score is 1 - gower_distance", {
+  X <- make_mixed_data(n = 25, seed = 1)
+  Y <- make_mixed_data(n = 25, seed = 2)
+  result <- gower(X, Y)
+  expect_equal(result$utility_score, 1 - result$gower_distance)
+})
+
+test_that("n_records and n alias are correct", {
+  X <- make_mixed_data(n = 25, seed = 1)
+  Y <- make_mixed_data(n = 25, seed = 2)
+  result <- gower(X, Y)
+  expect_equal(result$n_records, 25)
+  expect_equal(result$n, 25)
+})
+
+test_that("n_variables and n_vars alias are correct", {
+  X <- make_mixed_data(n = 20, seed = 1)
+  Y <- make_mixed_data(n = 20, seed = 2)
+  result <- gower(X, Y)
+  expect_equal(result$n_variables, 4)
+  expect_equal(result$n_vars, 4)
 })
 
 test_that("n is correct", {
@@ -192,6 +216,13 @@ test_that("print.gower shows observation count", {
   expect_output(print(result), "Observations:")
 })
 
+test_that("print.gower shows utility score", {
+  X <- make_mixed_data(n = 20, seed = 1)
+  Y <- make_mixed_data(n = 20, seed = 2)
+  result <- gower(X, Y)
+  expect_output(print(result), "Utility score:")
+})
+
 test_that("print.gower shows variable count", {
   X <- make_mixed_data(n = 20, seed = 1)
   Y <- make_mixed_data(n = 20, seed = 2)
@@ -222,7 +253,8 @@ test_that("summary.gower has expected fields", {
   Y <- make_mixed_data(n = 20, seed = 2)
   result <- gower(X, Y)
   s <- summary(result)
-  expect_named(s, c("gower_distance", "n", "n_vars"))
+  expect_named(s, c("gower_distance", "utility_score",
+                      "n_records", "n_variables", "n", "n_vars"))
 })
 
 test_that("summary.gower preserves values from result", {
@@ -231,6 +263,9 @@ test_that("summary.gower preserves values from result", {
   result <- gower(X, Y)
   s <- summary(result)
   expect_equal(s$gower_distance, result$gower_distance)
+  expect_equal(s$utility_score, result$utility_score)
+  expect_equal(s$n_records, result$n_records)
+  expect_equal(s$n_variables, result$n_variables)
   expect_equal(s$n, result$n)
   expect_equal(s$n_vars, result$n_vars)
 })
@@ -263,6 +298,13 @@ test_that("print.summary.gower shows variables", {
   Y <- make_mixed_data(n = 20, seed = 2)
   result <- gower(X, Y)
   expect_output(print(summary(result)), "Variables:")
+})
+
+test_that("print.summary.gower shows utility score", {
+  X <- make_mixed_data(n = 20, seed = 1)
+  Y <- make_mixed_data(n = 20, seed = 2)
+  result <- gower(X, Y)
+  expect_output(print(summary(result)), "Utility score:")
 })
 
 test_that("print.summary.gower returns object invisibly", {
@@ -426,4 +468,21 @@ test_that("identical categorical data has non-negative distance", {
   # gowerD computes all pairwise distances, so off-diagonal elements
   # contribute even when X and Y are identical
   expect_true(result$gower_distance >= 0)
+})
+
+# --- S3 methods: plot ---
+
+test_that("plot.gower runs without error", {
+  X <- make_mixed_data(n = 20, seed = 1)
+  Y <- make_mixed_data(n = 20, seed = 2)
+  result <- gower(X, Y)
+  expect_silent(plot(result))
+})
+
+test_that("plot.gower returns object invisibly", {
+  X <- make_mixed_data(n = 20, seed = 1)
+  Y <- make_mixed_data(n = 20, seed = 2)
+  result <- gower(X, Y)
+  ret <- plot(result)
+  expect_identical(ret, result)
 })

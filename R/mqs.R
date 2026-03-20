@@ -306,4 +306,78 @@ print.summary.mqs <- function(x, ...) {
 }
 
 
+#' Plot method for mqs objects
+#'
+#' Visualizes the model performance comparison between original (X) and
+#' synthetic (Y) data.
+#'
+#' @param x an object of class \code{"mqs"}
+#' @param y not used
+#' @param ... additional arguments passed to plotting functions
+#' @param which integer, which plot: 1 = grouped bar chart of per-model
+#'   performance, 2 = MQS ratio dot plot
+#' @importFrom graphics barplot abline legend axis par mtext text
+#' @export
+plot.mqs <- function(x, y = NULL, ..., which = 1) {
+  show <- rep(FALSE, 2)
+  show[which] <- TRUE
+
+  if (show[1]) {
+    # Grouped bar chart: per-model performance for X and Y
+    tbl <- x$mqs_table
+    measure <- as.character(tbl$measure[1])
+    method_cols <- setdiff(names(tbl), c("data", "measure"))
+
+    mat <- as.matrix(tbl[, method_cols, drop = FALSE])
+    rownames(mat) <- c("Original (X)", "Synthetic (Y)")
+
+    bp <- barplot(mat,
+                  beside = TRUE,
+                  col = c("steelblue", "coral"),
+                  ylab = measure,
+                  main = paste("Model Performance Comparison:", measure),
+                  las = 1,
+                  ...)
+
+    legend("topright",
+           legend = c("Original (X)", "Synthetic (Y)"),
+           fill = c("steelblue", "coral"),
+           bty = "n",
+           cex = 0.9)
+
+    # Annotate bars
+    for (i in seq_along(mat)) {
+      text(bp[i], mat[i] + max(mat) * 0.02,
+           labels = sprintf("%.3f", mat[i]), cex = 0.7)
+    }
+  }
+
+  if (show[2]) {
+    # MQS ratio dot plot
+    ratio <- x$mqs_ratio
+    xlim <- c(min(0.5, ratio - 0.1), max(1.5, ratio + 0.1))
+
+    plot(ratio, 1, pch = 19, cex = 2, col = "steelblue",
+         xlim = xlim, ylim = c(0.5, 1.5),
+         xlab = "MQS Ratio", ylab = "",
+         main = "Model Quality Score Ratio",
+         yaxt = "n", ...)
+
+    abline(v = 1, lty = 2, col = "grey50", lwd = 1.5)
+    abline(v = 0.95, lty = 3, col = "coral", lwd = 1)
+    abline(v = 1.05, lty = 3, col = "coral", lwd = 1)
+
+    text(ratio, 1.15, labels = sprintf("%.4f", ratio), cex = 1.1)
+
+    legend("topright",
+           legend = c("MQS ratio", "Reference (1.0)", "Tolerance band"),
+           col = c("steelblue", "grey50", "coral"),
+           lty = c(NA, 2, 3),
+           pch = c(19, NA, NA),
+           bty = "n",
+           cex = 0.8)
+  }
+
+  invisible(x)
+}
 

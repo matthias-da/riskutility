@@ -256,8 +256,7 @@ ci_proximity.default <- function(X, Y,
       proximity = proximity,
       contains_orig_mean = contains_original_mean,
       n_X = ci_X$n,
-      n_Y = ci_Y$n,
-      stringsAsFactors = FALSE
+      n_Y = ci_Y$n
     )
   }
 

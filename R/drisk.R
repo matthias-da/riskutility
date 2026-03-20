@@ -135,7 +135,9 @@ drisk <- function(X, ...) {
 #' @rdname drisk
 #' @export
 drisk.synth_pair <- function(X, ...) {
-  # Uses num_vars (not vars) because dRisk only works with numeric variables
+  # Intentionally X$num_vars (not X$vars): dRisk interval widths and Robust
+  # Mahalanobis Distances are defined only for numeric variables; categorical
+  # columns would cause errors in IQR() and cov.rob().
   drisk.default(
     X = X$original,
     Y = X$synthetic,

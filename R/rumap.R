@@ -261,8 +261,8 @@ rumap.default <- function(X,
   }
 
   # Initialize result storage
-  risk_results <- data.frame(sdg = sdg_names, stringsAsFactors = FALSE)
-  utility_results <- data.frame(sdg = sdg_names, stringsAsFactors = FALSE)
+  risk_results <- data.frame(sdg = sdg_names)
+  utility_results <- data.frame(sdg = sdg_names)
 
   # Compute measures for each SDG
   for (i in seq_along(synthetic)) {
@@ -519,7 +519,7 @@ rumap.default <- function(X,
 
   # Normalize measures to [0,1] if requested
   if (normalize) {
-    normalized <- data.frame(sdg = sdg_names, stringsAsFactors = FALSE)
+    normalized <- data.frame(sdg = sdg_names)
 
     # Min-max normalize risk measures
     for (col in risk_cols) {
@@ -557,7 +557,7 @@ rumap.default <- function(X,
   }
 
   # Compute composite scores
-  composites <- data.frame(sdg = sdg_names, stringsAsFactors = FALSE)
+  composites <- data.frame(sdg = sdg_names)
 
   # Use normalized values if available, otherwise raw
   if (!is.null(normalized)) {

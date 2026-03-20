@@ -254,7 +254,7 @@ disclosure_report.default <- function(X, Y,
 
   if ("dcap" %in% metrics_to_compute && can_compute_attribution) {
     if (verbose) message("Computing DCAP...")
-    tryCatch({
+    err <- tryCatch({
       results$dcap <- dcap(X, Y, key_vars, target_var, na.rm = na.rm)
       risk_ratio <- results$dcap$dcap / results$dcap$baseline
       pass <- !is.na(risk_ratio) && risk_ratio <= 1.5
@@ -264,21 +264,22 @@ disclosure_report.default <- function(X, Y,
         reference = round(results$dcap$baseline, 4),
         ratio = round(risk_ratio, 2),
         status = ifelse(is.na(pass), "N/A",
-                        ifelse(pass, "PASS", "WARNING")),
-        stringsAsFactors = FALSE
+                        ifelse(pass, "PASS", "WARNING"))
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  DCAP failed: ", e$message)
-      summary_rows$dcap <<- data.frame(
+      data.frame(
         metric = "DCAP", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$dcap <- err
   }
 
   if ("tcap" %in% metrics_to_compute && can_compute_attribution) {
     if (verbose) message("Computing TCAP...")
-    tryCatch({
+    err <- tryCatch({
       results$tcap <- tcap(X, Y, key_vars, target_var, na.rm = na.rm)
       risk_ratio <- results$tcap$tcap_mean / results$tcap$baseline
       pass <- !is.na(risk_ratio) && risk_ratio <= 1.5
@@ -289,21 +290,22 @@ disclosure_report.default <- function(X, Y,
         reference = round(results$tcap$baseline, 4),
         ratio = round(risk_ratio, 2),
         status = ifelse(is.na(pass), "N/A",
-                        ifelse(pass, "PASS", "WARNING")),
-        stringsAsFactors = FALSE
+                        ifelse(pass, "PASS", "WARNING"))
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  TCAP failed: ", e$message)
-      summary_rows$tcap <<- data.frame(
+      data.frame(
         metric = "TCAP", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$tcap <- err
   }
 
   if ("weap" %in% metrics_to_compute && can_compute_attribution) {
     if (verbose) message("Computing WEAP...")
-    tryCatch({
+    err <- tryCatch({
       results$weap <- weap(Y, key_vars, target_var, na.rm = na.rm)
       pass <- results$weap$pct_disclosive <= 5
       summary_rows$weap <- data.frame(
@@ -311,21 +313,22 @@ disclosure_report.default <- function(X, Y,
         value = round(results$weap$weap_mean, 4),
         reference = paste0(results$weap$n_disclosive, " disclosive"),
         ratio = round(results$weap$pct_disclosive, 1),
-        status = ifelse(pass, "PASS", "WARNING"),
-        stringsAsFactors = FALSE
+        status = ifelse(pass, "PASS", "WARNING")
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  WEAP failed: ", e$message)
-      summary_rows$weap <<- data.frame(
+      data.frame(
         metric = "WEAP", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$weap <- err
   }
 
   if ("disco" %in% metrics_to_compute && can_compute_attribution) {
     if (verbose) message("Computing DiSCO...")
-    tryCatch({
+    err <- tryCatch({
       results$disco <- disco(X, Y, key_vars, target_var, na.rm = na.rm)
       pass <- is.na(results$disco$disco_ratio) || results$disco$disco_ratio <= 1.5
       summary_rows$disco <- data.frame(
@@ -334,16 +337,17 @@ disclosure_report.default <- function(X, Y,
         reference = round(results$disco$baseline_disco, 1),
         ratio = round(results$disco$disco_ratio, 2),
         status = ifelse(is.na(results$disco$disco_ratio), "N/A",
-                        ifelse(pass, "PASS", "WARNING")),
-        stringsAsFactors = FALSE
+                        ifelse(pass, "PASS", "WARNING"))
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  DiSCO failed: ", e$message)
-      summary_rows$disco <<- data.frame(
+      data.frame(
         metric = "DiSCO", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$disco <- err
   }
 
   if ("rapid" %in% metrics_to_compute && can_compute_attribution) {
@@ -353,10 +357,10 @@ disclosure_report.default <- function(X, Y,
       if (verbose) message("  RAPID skipped: 'ranger' package not installed")
       summary_rows$rapid <- data.frame(
         metric = "RAPID", value = NA, reference = NA, ratio = NA,
-        status = "SKIPPED", stringsAsFactors = FALSE
+        status = "SKIPPED"
       )
     } else {
-      tryCatch({
+      err <- tryCatch({
         results$rapid <- rapid(X, Y, key_vars, target_var,
                                model_type = rapid_model, verbose = FALSE)
         pass <- results$rapid$rapid < 0.15
@@ -365,16 +369,17 @@ disclosure_report.default <- function(X, Y,
           value = round(results$rapid$rapid, 4),
           reference = paste0(results$rapid$n_at_risk, " at risk"),
           ratio = round(results$rapid$pct_at_risk, 1),
-          status = ifelse(pass, "PASS", "WARNING"),
-          stringsAsFactors = FALSE
+          status = ifelse(pass, "PASS", "WARNING")
         )
+        NULL
       }, error = function(e) {
         if (verbose) message("  RAPID failed: ", e$message)
-        summary_rows$rapid <<- data.frame(
+        data.frame(
           metric = "RAPID", value = NA, reference = NA, ratio = NA,
-          status = "ERROR", stringsAsFactors = FALSE
+          status = "ERROR"
         )
       })
+      if (!is.null(err)) summary_rows$rapid <- err
     }
   }
 
@@ -384,7 +389,7 @@ disclosure_report.default <- function(X, Y,
 
   if ("dcr" %in% metrics_to_compute) {
     if (verbose) message("Computing DCR...")
-    tryCatch({
+    err <- tryCatch({
       results$dcr <- dcr(train_data, Y, holdout = holdout_data,
                          vars = distance_vars, method = distance_method,
                          na.rm = na.rm)
@@ -393,21 +398,22 @@ disclosure_report.default <- function(X, Y,
         value = round(results$dcr$dcr_ratio, 4),
         reference = paste0(round(100 * results$dcr$dcr_share, 1), "% closer"),
         ratio = round(results$dcr$dcr_ratio, 2),
-        status = ifelse(results$dcr$privacy_pass, "PASS", "WARNING"),
-        stringsAsFactors = FALSE
+        status = ifelse(results$dcr$privacy_pass, "PASS", "WARNING")
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  DCR failed: ", e$message)
-      summary_rows$dcr <<- data.frame(
+      data.frame(
         metric = "DCR", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$dcr <- err
   }
 
   if ("nndr" %in% metrics_to_compute) {
     if (verbose) message("Computing NNDR...")
-    tryCatch({
+    err <- tryCatch({
       results$nndr <- nndr(train_data, Y, holdout = holdout_data,
                           vars = distance_vars, method = distance_method,
                           na.rm = na.rm)
@@ -416,37 +422,39 @@ disclosure_report.default <- function(X, Y,
         value = round(results$nndr$nndr_ratio, 4),
         reference = paste0(results$nndr$n_suspicious, " suspicious"),
         ratio = round(results$nndr$nndr_ratio, 2),
-        status = ifelse(results$nndr$privacy_pass, "PASS", "WARNING"),
-        stringsAsFactors = FALSE
+        status = ifelse(results$nndr$privacy_pass, "PASS", "WARNING")
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  NNDR failed: ", e$message)
-      summary_rows$nndr <<- data.frame(
+      data.frame(
         metric = "NNDR", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$nndr <- err
   }
 
   if ("ims" %in% metrics_to_compute) {
     if (verbose) message("Computing IMS...")
-    tryCatch({
+    err <- tryCatch({
       results$ims <- ims(X, Y, vars = distance_vars, na.rm = na.rm)
       summary_rows$ims <- data.frame(
         metric = "IMS",
         value = sprintf("%.2f%%", results$ims$ims_pct),
         reference = paste0(results$ims$n_identical, " copies"),
         ratio = results$ims$ims_pct,
-        status = ifelse(results$ims$privacy_pass, "PASS", "WARNING"),
-        stringsAsFactors = FALSE
+        status = ifelse(results$ims$privacy_pass, "PASS", "WARNING")
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  IMS failed: ", e$message)
-      summary_rows$ims <<- data.frame(
+      data.frame(
         metric = "IMS", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$ims <- err
   }
 
   # ============================================
@@ -455,7 +463,7 @@ disclosure_report.default <- function(X, Y,
 
   if ("drisk" %in% metrics_to_compute) {
     if (verbose) message("Computing dRisk...")
-    tryCatch({
+    err <- tryCatch({
       results$drisk <- drisk(X, Y, vars = distance_vars, method = "both",
                              na.rm = na.rm)
       drisk_val <- if (!is.null(results$drisk$drisk_interval)) {
@@ -469,21 +477,22 @@ disclosure_report.default <- function(X, Y,
         value = round(drisk_val, 4),
         reference = "< 0.05",
         ratio = round(drisk_val, 4),
-        status = ifelse(pass, "PASS", "WARNING"),
-        stringsAsFactors = FALSE
+        status = ifelse(pass, "PASS", "WARNING")
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  dRisk failed: ", e$message)
-      summary_rows$drisk <<- data.frame(
+      data.frame(
         metric = "dRisk", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$drisk <- err
   }
 
   if ("hitting_rate" %in% metrics_to_compute) {
     if (verbose) message("Computing Hitting Rate...")
-    tryCatch({
+    err <- tryCatch({
       results$hitting_rate <- hitting_rate(X, Y, vars = distance_vars,
                                            method = distance_method,
                                            na.rm = na.rm)
@@ -493,22 +502,23 @@ disclosure_report.default <- function(X, Y,
         value = round(results$hitting_rate$rate, 4),
         reference = "< 0.05",
         ratio = round(results$hitting_rate$rate, 4),
-        status = ifelse(pass, "PASS", "WARNING"),
-        stringsAsFactors = FALSE
+        status = ifelse(pass, "PASS", "WARNING")
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  Hitting Rate failed: ", e$message)
-      summary_rows$hitting_rate <<- data.frame(
+      data.frame(
         metric = "Hitting Rate", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$hitting_rate <- err
   }
 
   if ("rf_privacy" %in% metrics_to_compute) {
     if (verbose) message("Computing RF Privacy...")
     if (requireNamespace("ranger", quietly = TRUE)) {
-      tryCatch({
+      err <- tryCatch({
         results$rf_privacy <- rf_privacy(train_data, Y,
                                           holdout = holdout_data,
                                           vars = distance_vars,
@@ -518,21 +528,22 @@ disclosure_report.default <- function(X, Y,
           value = round(results$rf_privacy$max_prox_share, 4),
           reference = paste0("ratio: ", round(results$rf_privacy$max_prox_ratio, 2)),
           ratio = round(results$rf_privacy$max_prox_ratio, 2),
-          status = ifelse(results$rf_privacy$privacy_pass, "PASS", "WARNING"),
-          stringsAsFactors = FALSE
+          status = ifelse(results$rf_privacy$privacy_pass, "PASS", "WARNING")
         )
+        NULL
       }, error = function(e) {
         if (verbose) message("  RF Privacy failed: ", e$message)
-        summary_rows$rf_privacy <<- data.frame(
+        data.frame(
           metric = "RF Privacy", value = NA, reference = NA, ratio = NA,
-          status = "ERROR", stringsAsFactors = FALSE
+          status = "ERROR"
         )
       })
+      if (!is.null(err)) summary_rows$rf_privacy <- err
     } else {
       if (verbose) message("  Skipping RF Privacy (ranger not installed)")
       summary_rows$rf_privacy <- data.frame(
         metric = "RF Privacy", value = NA, reference = NA, ratio = NA,
-        status = "SKIPPED", stringsAsFactors = FALSE
+        status = "SKIPPED"
       )
     }
   }
@@ -543,7 +554,7 @@ disclosure_report.default <- function(X, Y,
 
   if ("kanonymity" %in% metrics_to_compute && can_compute_privacy) {
     if (verbose) message("Computing k-Anonymity...")
-    tryCatch({
+    err <- tryCatch({
       results$kanonymity <- kanonymity(Y, key_vars = key_vars, na.rm = na.rm)
       k_val <- results$kanonymity$k_level
       pass <- k_val >= 5
@@ -552,21 +563,22 @@ disclosure_report.default <- function(X, Y,
         value = k_val,
         reference = ">= 5",
         ratio = k_val,
-        status = ifelse(pass, "PASS", ifelse(k_val >= 2, "WARNING", "FAIL")),
-        stringsAsFactors = FALSE
+        status = ifelse(pass, "PASS", ifelse(k_val >= 2, "WARNING", "FAIL"))
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  k-Anonymity failed: ", e$message)
-      summary_rows$kanonymity <<- data.frame(
+      data.frame(
         metric = "k-Anonymity", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$kanonymity <- err
   }
 
   if ("ldiversity" %in% metrics_to_compute && can_compute_privacy) {
     if (verbose) message("Computing l-Diversity...")
-    tryCatch({
+    err <- tryCatch({
       results$ldiversity <- ldiversity(Y, key_vars = key_vars,
                                        sensitive_var = target_var,
                                        na.rm = na.rm)
@@ -577,21 +589,22 @@ disclosure_report.default <- function(X, Y,
         value = l_val,
         reference = ">= 2",
         ratio = l_val,
-        status = ifelse(pass, "PASS", "WARNING"),
-        stringsAsFactors = FALSE
+        status = ifelse(pass, "PASS", "WARNING")
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  l-Diversity failed: ", e$message)
-      summary_rows$ldiversity <<- data.frame(
+      data.frame(
         metric = "l-Diversity", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$ldiversity <- err
   }
 
   if ("tcloseness" %in% metrics_to_compute && can_compute_privacy) {
     if (verbose) message("Computing t-Closeness...")
-    tryCatch({
+    err <- tryCatch({
       results$tcloseness <- tcloseness(Y, key_vars = key_vars,
                                        sensitive_var = target_var,
                                        na.rm = na.rm)
@@ -602,21 +615,22 @@ disclosure_report.default <- function(X, Y,
         value = round(t_val, 4),
         reference = "<= 0.2",
         ratio = round(t_val, 4),
-        status = ifelse(pass, "PASS", "WARNING"),
-        stringsAsFactors = FALSE
+        status = ifelse(pass, "PASS", "WARNING")
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  t-Closeness failed: ", e$message)
-      summary_rows$tcloseness <<- data.frame(
+      data.frame(
         metric = "t-Closeness", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$tcloseness <- err
   }
 
   if ("individual_risk" %in% metrics_to_compute && can_compute_privacy) {
     if (verbose) message("Computing Individual Risk...")
-    tryCatch({
+    err <- tryCatch({
       results$individual_risk <- individual_risk(Y, key_vars = key_vars,
                                                  na.rm = na.rm)
       mean_risk <- mean(results$individual_risk$risk, na.rm = TRUE)
@@ -628,16 +642,17 @@ disclosure_report.default <- function(X, Y,
         value = round(mean_risk, 4),
         reference = paste0(n_high, " high-risk (max=", round(max_risk, 3), ")"),
         ratio = round(mean_risk, 4),
-        status = ifelse(pass, "PASS", "WARNING"),
-        stringsAsFactors = FALSE
+        status = ifelse(pass, "PASS", "WARNING")
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  Individual Risk failed: ", e$message)
-      summary_rows$individual_risk <<- data.frame(
+      data.frame(
         metric = "Individual Risk", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$individual_risk <- err
   }
 
   # ============================================
@@ -646,7 +661,7 @@ disclosure_report.default <- function(X, Y,
 
   if ("singling_out" %in% metrics_to_compute) {
     if (verbose) message("Computing Singling Out Risk...")
-    tryCatch({
+    err <- tryCatch({
       results$singling_out <- singling_out(train_data, Y,
                                            holdout = holdout_data,
                                            n_attacks = 500,
@@ -658,21 +673,22 @@ disclosure_report.default <- function(X, Y,
         value = round(risk_val, 4),
         reference = "< 0.1",
         ratio = round(risk_val, 4),
-        status = ifelse(pass, "PASS", "WARNING"),
-        stringsAsFactors = FALSE
+        status = ifelse(pass, "PASS", "WARNING")
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  Singling Out failed: ", e$message)
-      summary_rows$singling_out <<- data.frame(
+      data.frame(
         metric = "Singling Out", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$singling_out <- err
   }
 
   if ("linkability" %in% metrics_to_compute) {
     if (verbose) message("Computing Linkability Risk...")
-    tryCatch({
+    err <- tryCatch({
       results$linkability <- linkability(train_data, Y,
                                          holdout = holdout_data,
                                          n_attacks = 500,
@@ -684,21 +700,22 @@ disclosure_report.default <- function(X, Y,
         value = round(risk_val, 4),
         reference = "< 0.1",
         ratio = round(risk_val, 4),
-        status = ifelse(pass, "PASS", "WARNING"),
-        stringsAsFactors = FALSE
+        status = ifelse(pass, "PASS", "WARNING")
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  Linkability failed: ", e$message)
-      summary_rows$linkability <<- data.frame(
+      data.frame(
         metric = "Linkability", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$linkability <- err
   }
 
   if ("nnaa" %in% metrics_to_compute) {
     if (verbose) message("Computing NNAA...")
-    tryCatch({
+    err <- tryCatch({
       results$nnaa <- nnaa(train_data, Y,
                            holdout = holdout_data,
                            vars = distance_vars,
@@ -711,16 +728,17 @@ disclosure_report.default <- function(X, Y,
         value = round(pl_val, 4),
         reference = "< 0.05",
         ratio = round(pl_val, 4),
-        status = ifelse(pass, "PASS", "WARNING"),
-        stringsAsFactors = FALSE
+        status = ifelse(pass, "PASS", "WARNING")
       )
+      NULL
     }, error = function(e) {
       if (verbose) message("  NNAA failed: ", e$message)
-      summary_rows$nnaa <<- data.frame(
+      data.frame(
         metric = "NNAA", value = NA, reference = NA, ratio = NA,
-        status = "ERROR", stringsAsFactors = FALSE
+        status = "ERROR"
       )
     })
+    if (!is.null(err)) summary_rows$nnaa <- err
   }
 
   if ("domias" %in% metrics_to_compute) {
@@ -729,10 +747,10 @@ disclosure_report.default <- function(X, Y,
       if (verbose) message("  DOMIAS skipped: 'ranger' package not installed")
       summary_rows$domias <- data.frame(
         metric = "DOMIAS", value = NA, reference = NA, ratio = NA,
-        status = "SKIPPED", stringsAsFactors = FALSE
+        status = "SKIPPED"
       )
     } else {
-      tryCatch({
+      err <- tryCatch({
         results$domias <- domias(train_data, Y,
                                  holdout = holdout_data,
                                  vars = distance_vars,
@@ -744,16 +762,17 @@ disclosure_report.default <- function(X, Y,
           value = round(auc_val, 4),
           reference = "< 0.6",
           ratio = round(auc_val, 4),
-          status = ifelse(pass, "PASS", "WARNING"),
-          stringsAsFactors = FALSE
+          status = ifelse(pass, "PASS", "WARNING")
         )
+        NULL
       }, error = function(e) {
         if (verbose) message("  DOMIAS failed: ", e$message)
-        summary_rows$domias <<- data.frame(
+        data.frame(
           metric = "DOMIAS", value = NA, reference = NA, ratio = NA,
-          status = "ERROR", stringsAsFactors = FALSE
+          status = "ERROR"
         )
       })
+      if (!is.null(err)) summary_rows$domias <- err
     }
   }
 

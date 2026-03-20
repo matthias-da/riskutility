@@ -81,8 +81,7 @@ compare_missing_values.default <- function(X, Y, method = "percentage", ...) {
       Total_X = nrow(X),
       Total_Y = nrow(Y),
       Percent_X = colSums(is.na(X)) / nrow(X),
-      Percent_Y = colSums(is.na(Y)) / nrow(Y),
-      stringsAsFactors = FALSE
+      Percent_Y = colSums(is.na(Y)) / nrow(Y)
     )
     res$summary <- summary_df
   } else if (method == "pattern") {

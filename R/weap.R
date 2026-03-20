@@ -153,8 +153,7 @@ weap.default <- function(X,
   # Build equivalence class summary
   eq_classes <- data.frame(
     key = names(key_counts),
-    size = as.numeric(key_counts),
-    stringsAsFactors = FALSE
+    size = as.numeric(key_counts)
   )
 
   # For each equivalence class, count unique target values

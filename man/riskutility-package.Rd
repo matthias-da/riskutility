@@ -30,6 +30,9 @@ distances to training vs. holdout data.
 preserves the statistical properties of the original, including
 \code{\link{pMSE}}, \code{\link{specks}}, \code{\link{hellinger}},
 \code{\link{energy_distance}}, \code{\link{ci_proximity}},
+\code{\link{mmd}}, \code{\link{tstr}}, \code{\link{copula_fidelity}},
+\code{\link{tail_fidelity}}, \code{\link{subgroup_utility}},
+\code{\link{regression_fidelity}}, \code{\link{contingency_fidelity}},
 \code{\link{propscore}}, \code{\link{gower}}, and \code{\link{mqs}}.
 
 \strong{Privacy models:} Classical privacy model assessments including

@@ -13,5 +13,6 @@
 ^CLAUDE\.md$
 ^JSS_REVIEW_NOTES\.md$
 ^JSS_TODO\.md$
-^recordLinkage_discussion\.md$
+^recordLinkage_discussion
+^TODO\.md$
 ^jss-paper-plan\.md$

@@ -204,8 +204,7 @@ tcloseness.default <- function(X,
       key = key,
       size = ec_size,
       emd = emd,
-      violates_t = emd > t,
-      stringsAsFactors = FALSE
+      violates_t = emd > t
     )
   })
 

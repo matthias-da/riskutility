@@ -43,6 +43,8 @@
 #'     \item{n_synthetic, n_train, n_holdout, vars}{dataset metadata}
 #'   }
 #'
+#' @author Matthias Templ
+#'
 #' @details
 #' RF proximity measures how often two records land in the same terminal node
 #' across all trees. A proximity of 1 means they always co-terminate; 0 means

@@ -210,8 +210,7 @@ contingency_fidelity.default <- function(X, Y,
   pairwise_results <- data.frame(
     var1 = character(n_pairs),
     var2 = character(n_pairs),
-    tv_distance = numeric(n_pairs),
-    stringsAsFactors = FALSE
+    tv_distance = numeric(n_pairs)
   )
 
   for (p in seq_len(n_pairs)) {

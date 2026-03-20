@@ -198,6 +198,7 @@ Other utility:
 \code{\link{hellinger}()},
 \code{\link{mmd}()},
 \code{\link{mqs}()},
+\code{\link{plot.rumap}()},
 \code{\link{propscore}()},
 \code{\link{regression_fidelity}()},
 \code{\link{rumap}()},

@@ -532,8 +532,7 @@ n <- 100
 x <- data.frame(
   age    = sample(18:80, n, TRUE),
   sex    = factor(sample(c("f","m"), n, TRUE)),
-  region = factor(sample(paste0("R",1:5), n, TRUE)),
-  stringsAsFactors = FALSE
+  region = factor(sample(paste0("R",1:5), n, TRUE))
 )
 
 # Simple perturbation: swap age within region

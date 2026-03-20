@@ -156,6 +156,7 @@ Other utility:
 \code{\link{hellinger}()},
 \code{\link{mqs}()},
 \code{\link{pMSE}()},
+\code{\link{plot.rumap}()},
 \code{\link{propscore}()},
 \code{\link{regression_fidelity}()},
 \code{\link{rumap}()},

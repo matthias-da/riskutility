@@ -95,7 +95,8 @@
 # -----------------------------------------------------------------------------
 #' Membership Inference Attack metric via classification
 #'
-#' @param X data.frame or synth_pair. Records used to train the synthetic generator.
+#' @param X synth_pair object, or (for the default method) a data.frame of
+#'   records used to train the synthetic generator.
 #' @param synt_data data.frame. Synthetic records produced by the generator.
 #' @param hout_data data.frame. Holdout records from the same population,
 #'   NOT used to train the generator.
@@ -141,7 +142,7 @@ mia_classifier.synth_pair <- function(X, ...) {
   if (!is.null(X$source) && X$source == "sdcMicro") {
     stop("mia_classifier is designed for synthetic data evaluation and is not applicable to ",
          "traditionally anonymized data (sdcMicro objects). ",
-         "Use dcr, nndr, or ims for distance-based privacy evaluation instead.",
+         "Use dcr(), nndr(), or ims() for distance-based privacy evaluation instead.",
          call. = FALSE)
   }
   if (is.null(X$holdout)) {
@@ -153,7 +154,7 @@ mia_classifier.synth_pair <- function(X, ...) {
     X = X$original,
     synt_data = X$synthetic,
     hout_data = X$holdout,
-    cols = X$vars,
+    cols      = X$vars,
     ...
   )
 }
@@ -173,6 +174,8 @@ mia_classifier.default <- function(X,
                            num_threads   = 1L,
                            ...) {
 
+  real_data <- X
+
   # --- Registry of available classifier back-ends ----------------------------
   # To add a new method, implement a function with the same signature as
   # .mia_backend_rf and add an entry here.
@@ -191,8 +194,6 @@ mia_classifier.default <- function(X,
     )
   }
   clf_fn <- classifiers[[method]]
-
-  real_data <- X
 
   # --- Input validation ------------------------------------------------------
   if (!is.data.frame(real_data) || !is.data.frame(synt_data) || !is.data.frame(hout_data)) {

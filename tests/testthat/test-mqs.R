@@ -437,3 +437,27 @@ test_that("summary works for RMSE-based mqs", {
   expect_s3_class(s, "summary.mqs")
   expect_match(s$interpretation, "better prediction quality")
 })
+
+# --- S3 methods: plot (mock-based) ---
+
+test_that("plot.mqs runs without error (which = 1)", {
+  mock <- make_mock_mqs()
+  expect_silent(plot(mock, which = 1))
+})
+
+test_that("plot.mqs runs without error (which = 2)", {
+  mock <- make_mock_mqs()
+  expect_silent(plot(mock, which = 2))
+})
+
+test_that("plot.mqs returns object invisibly", {
+  mock <- make_mock_mqs()
+  ret <- plot(mock, which = 1)
+  expect_identical(ret, mock)
+})
+
+test_that("plot.mqs works with RMSE-based mock", {
+  mock <- make_mock_mqs_rmse(ratio = 1.10)
+  expect_silent(plot(mock, which = 1))
+  expect_silent(plot(mock, which = 2))
+})

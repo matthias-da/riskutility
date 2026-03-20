@@ -270,7 +270,6 @@ regression_fidelity.default <- function(X, Y,
     sig_orig       = sig_orig,
     sig_synth      = sig_synth,
     sig_agreement  = sig_agreement,
-    stringsAsFactors = FALSE,
     row.names = NULL
   )
 
@@ -399,8 +398,7 @@ print.summary.regression_fidelity <- function(x, ...) {
     Bias       = sprintf("%.4f", df$bias),
     Std.Bias   = sprintf("%.4f", df$std_bias),
     CI.Overlap = sprintf("%.4f", df$ci_overlap),
-    Sig.Agree  = ifelse(df$sig_agreement, "yes", "NO"),
-    stringsAsFactors = FALSE
+    Sig.Agree  = ifelse(df$sig_agreement, "yes", "NO")
   )
   print(fmt, row.names = FALSE, right = FALSE)
 

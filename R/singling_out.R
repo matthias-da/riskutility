@@ -161,13 +161,6 @@ singling_out.default <- function(X, Y,
                                   confidence_level = 0.95,
                                   ...) {
 
-  # Input validation
-  if (!is.data.frame(X)) stop("X must be a data frame.")
-  if (!is.data.frame(Y)) stop("Y must be a data frame.")
-  if (!is.null(holdout) && !is.data.frame(holdout)) {
-    stop("holdout must be a data frame or NULL.")
-  }
-
   mode <- match.arg(mode)
 
   if (!is.numeric(n_attacks) || length(n_attacks) != 1 || n_attacks < 1) {
@@ -185,70 +178,18 @@ singling_out.default <- function(X, Y,
     stop("confidence_level must be a number between 0 and 1.")
   }
 
-  # Determine variables to use
-  if (is.null(vars)) {
-    vars <- intersect(names(X), names(Y))
-    if (!is.null(holdout)) {
-      vars <- intersect(vars, names(holdout))
-    }
-  }
-
-  if (length(vars) == 0) {
-    stop("No common variables found between datasets.")
-  }
-
-  # Check variables exist
-  missing_X <- setdiff(vars, names(X))
-  missing_Y <- setdiff(vars, names(Y))
-  if (length(missing_X) > 0) {
-    stop(paste("Variables missing in X:", paste(missing_X, collapse = ", ")))
-  }
-  if (length(missing_Y) > 0) {
-    stop(paste("Variables missing in Y:", paste(missing_Y, collapse = ", ")))
-  }
-
-  # Check variable types match
-  for (var in vars) {
-    if (!identical(class(X[[var]]), class(Y[[var]]))) {
-      stop(paste("Variable", var, "has different class in X and Y."))
-    }
-  }
-
-  # Subset to selected variables
-  X <- X[, vars, drop = FALSE]
-  Y <- Y[, vars, drop = FALSE]
-
-  # Handle missing values
-  if (na.rm) {
-    complete_X <- complete.cases(X)
-    complete_Y <- complete.cases(Y)
-    X <- X[complete_X, , drop = FALSE]
-    Y <- Y[complete_Y, , drop = FALSE]
-  }
-
-  if (nrow(X) == 0) stop("No complete cases in X after removing NAs.")
-  if (nrow(Y) == 0) stop("No complete cases in Y after removing NAs.")
+  # Shared input validation, variable intersection, NA removal, holdout split
+  v <- .validate_pair_inputs(X, Y, holdout = holdout,
+                             holdout_fraction = holdout_fraction,
+                             vars = vars, na.rm = na.rm, seed = seed)
+  Y       <- v$Y
+  vars    <- v$vars
+  train   <- v$train
+  holdout <- v$holdout
 
   # Cap n_cols at number of available variables
   if (n_cols > length(vars)) {
     n_cols <- length(vars)
-  }
-
-  # Create or validate holdout
-  if (is.null(holdout)) {
-    if (!is.null(seed)) set.seed(seed)
-    n_holdout <- max(1, floor(nrow(X) * holdout_fraction))
-    holdout_idx <- sample(nrow(X), n_holdout)
-    holdout <- X[holdout_idx, , drop = FALSE]
-    train <- X[-holdout_idx, , drop = FALSE]
-  } else {
-    holdout <- holdout[, vars, drop = FALSE]
-    if (na.rm) {
-      complete_H <- complete.cases(holdout)
-      holdout <- holdout[complete_H, , drop = FALSE]
-    }
-    if (nrow(holdout) == 0) stop("No complete cases in holdout after removing NAs.")
-    train <- X
   }
 
   n_train <- nrow(train)

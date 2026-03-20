@@ -161,7 +161,7 @@ suda.default <- function(X,
   names(msu_by_size) <- as.character(1:max_msu)
 
   # Convert to character for consistent comparison
-  X_char <- as.data.frame(lapply(X_keys, as.character), stringsAsFactors = FALSE)
+  X_char <- as.data.frame(lapply(X_keys, as.character))
 
   # For each subset size (starting from smallest = most dangerous)
   for (size in 1:max_msu) {

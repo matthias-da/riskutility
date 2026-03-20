@@ -215,4 +215,7 @@ Other distance-risk:
 \code{\link{nndr}()},
 \code{\link{repu}()}
 }
+\author{
+Matthias Templ
+}
 \concept{distance-risk}

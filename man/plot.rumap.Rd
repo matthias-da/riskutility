@@ -41,6 +41,9 @@
 
 \item{col_dominated}{Color for dominated points. Default "gray60".}
 }
+\value{
+The \code{rumap} object \code{x}, invisibly.
+}
 \description{
 Provides multiple visualization approaches for multivariate Risk-Utility evaluation
 as described in "Beyond the Trade-off Curve" (Thees, Müller, Templ 2026).
@@ -72,7 +75,27 @@ X-axis = PC1(utility), Y-axis = PC1(risk).
 }
 \seealso{
 \code{\link{rumap}} for creating rumap objects
+
+Other utility: 
+\code{\link{chisq_utility}()},
+\code{\link{ci_proximity}()},
+\code{\link{contingency_fidelity}()},
+\code{\link{copula_fidelity}()},
+\code{\link{energy_distance}()},
+\code{\link{gower}()},
+\code{\link{hellinger}()},
+\code{\link{mmd}()},
+\code{\link{mqs}()},
+\code{\link{pMSE}()},
+\code{\link{propscore}()},
+\code{\link{regression_fidelity}()},
+\code{\link{rumap}()},
+\code{\link{specks}()},
+\code{\link{subgroup_utility}()},
+\code{\link{tail_fidelity}()},
+\code{\link{tstr}()}
 }
 \author{
 Matthias Templ
 }
+\concept{utility}

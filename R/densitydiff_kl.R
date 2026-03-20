@@ -101,9 +101,12 @@ densitydiff_kl_num <- function(X, Y, stepsize = 1000) {
   }
 
   # bivariate
+  # Evaluate both densities on a common grid so the element-wise KL sum is valid.
+  # Without shared limits, kde2d may produce grids over different ranges for X and Y.
   if(ncol(X) == 2){
-    dX <- MASS::kde2d(x = X[, 1], y = X[, 2])
-    dY <- MASS::kde2d(x = Y[, 1], y = Y[, 2])
+    lims <- c(range(X[, 1], Y[, 1]), range(X[, 2], Y[, 2]))
+    dX <- MASS::kde2d(x = X[, 1], y = X[, 2], lims = lims, n = 50)
+    dY <- MASS::kde2d(x = Y[, 1], y = Y[, 2], lims = lims, n = 50)
     return(sum(dX$z * log(dX$z / dY$z), na.rm = TRUE))
   }
 

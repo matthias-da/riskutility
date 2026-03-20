@@ -547,27 +547,20 @@ plot.compare_distributions_cont <- function(x, ..., which = "ecdf", interactive 
   if(which == "density_ratio") which <- "density_ratios"
   if(which == "density_ratio_bayes") which <- "density_ratios_bayes"
 
-  # Function to convert formula to ggplot2 syntax with color and appropriate faceting
+  # Function to build ggplot2 object with color and appropriate faceting
   convert_formula_to_ggplot <- function(data, x_var, y_var, y_label) {
 
-    facet_cmd <- ""
+    p <- ggplot(data, aes(x = .data[[x_var]], y = .data[[y_var]],
+                          colour = .data[[".name"]])) +
+      geom_line() + theme_bw() + theme(legend.title = element_blank()) +
+      xlab("x") + ylab(y_label)
 
     # Check if faceting is needed
     if (".var" %in% names(data) && length(unique(data$.var)) > 1) {
-      facet_cmd <- "facet_wrap(~ .var, scales = 'free')"
+      p <- p + facet_wrap(~ .var, scales = "free")
     }
 
-    # Create ggplot2 command with color
-    ggplot_cmd <- paste0(
-      "ggplot(data, aes(x = ", x_var, ", y = ", y_var, ", colour = .name)) + ",
-      "geom_line() + theme_bw() + theme(legend.title=element_blank()) + ",
-      "xlab('x') + ylab('", y_label, "')",
-      if (facet_cmd != "") paste0(" + ", facet_cmd) else ""
-    )
-
-    # Evaluate and return the ggplot2 command
-    plot <- eval(parse(text = ggplot_cmd))
-    return(plot)
+    return(p)
   }
 
   # Select data based on user input

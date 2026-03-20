@@ -180,7 +180,7 @@ individual_risk.default <- function(X,
   risk_model <- NULL
 
   if (method %in% c("model", "both")) {
-    tryCatch({
+    risk_model <- tryCatch({
       # Prepare data for Poisson model
       # Aggregate to cell counts
       agg_df <- as.data.frame(table(X_keys), stringsAsFactors = TRUE)
@@ -189,12 +189,12 @@ individual_risk.default <- function(X,
       if (nrow(agg_df) > 1) {
         # Fit Poisson log-linear model with main effects
         formula_str <- paste("count ~", paste(key_vars, collapse = " + "))
-        model <- glm(as.formula(formula_str),
+        model_fit <- glm(as.formula(formula_str),
                      data = agg_df,
                      family = poisson())
 
         # Predict expected counts
-        fitted_counts <- predict(model, newdata = agg_df, type = "response")
+        fitted_counts <- predict(model_fit, newdata = agg_df, type = "response")
         fitted_counts[fitted_counts < 1] <- 1  # Minimum expected count
 
         # Map back to individual records
@@ -205,22 +205,23 @@ individual_risk.default <- function(X,
 
         # Model-based risk
         expected_size <- fitted_counts[key_signature]
-        risk_model <- 1 / expected_size
+        rm_val <- 1 / expected_size
 
         # If weights available, adjust for sampling fraction
         if (!is.null(wt)) {
           # Estimate population size per cell
           weighted_counts <- tapply(wt, key_signature, sum)
           pop_size <- weighted_counts[key_signature]
-          risk_model <- 1 / pmax(pop_size, 1)
+          rm_val <- 1 / pmax(pop_size, 1)
         }
+        rm_val
       } else {
-        risk_model <- risk_sample
         message("Only one cell - using sample-based risk.")
+        risk_sample
       }
     }, error = function(e) {
       warning(paste("Model fitting failed:", e$message, "- using sample-based risk only."))
-      risk_model <<- risk_sample
+      risk_sample
     })
   }
 
@@ -259,8 +260,7 @@ individual_risk.default <- function(X,
   ec_df <- data.frame(
     key = names(ec_table),
     size = as.numeric(ec_table),
-    n_records = as.numeric(ec_table),
-    stringsAsFactors = FALSE
+    n_records = as.numeric(ec_table)
   )
   ec_df$sample_risk <- 1 / ec_df$size
   ec_df <- ec_df[order(ec_df$size), ]
@@ -469,7 +469,6 @@ high_risk_records <- function(x, threshold = NULL) {
 
   data.frame(
     index = x$record_indices[high_idx],
-    risk = x$risk[high_idx],
-    stringsAsFactors = FALSE
+    risk = x$risk[high_idx]
   )
 }

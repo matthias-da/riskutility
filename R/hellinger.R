@@ -215,8 +215,7 @@ hellinger.default <- function(X, Y,
       hellinger = H,
       n_categories_X = n_cats_x,
       n_categories_Y = n_cats_y,
-      n_categories_union = n_cats_union,
-      stringsAsFactors = FALSE
+      n_categories_union = n_cats_union
     )
   }
 

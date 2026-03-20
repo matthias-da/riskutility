@@ -13,22 +13,28 @@ gower(X, ...)
 \method{gower}{default}(X, Y, ...)
 }
 \arguments{
-\item{X}{data frame}
+\item{X}{data frame (or a \code{synth_pair} object)}
 
 \item{...}{additional arguments passed to methods}
 
 \item{Y}{data frame}
 }
 \value{
-An object of class "gower" containing:
+An object of class \code{"gower"} containing:
 \itemize{
-\item gower_distance: the average Gower distance
-\item n: number of observations
-\item n_vars: number of variables
+\item \code{gower_distance}: the average Gower distance (lower = more similar)
+\item \code{utility_score}: \code{1 - gower_distance}, in \eqn{[0, 1]}
+(higher = better utility)
+\item \code{n_records}: number of observations
+\item \code{n_variables}: number of variables
+\item \code{n}: alias for \code{n_records} (for backward compatibility)
+\item \code{n_vars}: alias for \code{n_variables} (for backward compatibility)
 }
 }
 \description{
-Average (per observation) Gower distance
+Average (per observation) Gower distance between an original and a
+synthetic/anonymized data frame.  Returns an S3 object of class
+\code{"gower"} with print, summary, and plot methods.
 }
 \examples{
 # Simple example with mixed data types
@@ -42,7 +48,12 @@ Y <- data.frame(
   income = c(32000, 44000, 52000, 58000),
   gender = factor(c("M", "F", "M", "F"))
 )
-gower(X, Y)
+result <- gower(X, Y)
+result
+summary(result)
+\donttest{
+plot(result)
+}
 
 }
 \references{
@@ -62,6 +73,7 @@ Other utility:
 \code{\link{mmd}()},
 \code{\link{mqs}()},
 \code{\link{pMSE}()},
+\code{\link{plot.rumap}()},
 \code{\link{propscore}()},
 \code{\link{regression_fidelity}()},
 \code{\link{rumap}()},

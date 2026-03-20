@@ -169,6 +169,7 @@ Other utility:
 \code{\link{mmd}()},
 \code{\link{mqs}()},
 \code{\link{pMSE}()},
+\code{\link{plot.rumap}()},
 \code{\link{propscore}()},
 \code{\link{rumap}()},
 \code{\link{specks}()},

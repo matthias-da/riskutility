@@ -186,8 +186,7 @@ ldiversity.default <- function(X,
       entropy_l_equiv = entropy_l_equiv,
       recursive_cl = recursive_satisfied,
       violates_distinct = n_distinct < l,
-      violates_entropy = entropy < log(l),
-      stringsAsFactors = FALSE
+      violates_entropy = entropy < log(l)
     )
   })
 

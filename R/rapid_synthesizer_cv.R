@@ -170,8 +170,7 @@ rapid_synthesizer_cv <- function(original_data,
       fold_results[[fold_id]] <- data.frame(
         fold = fold_id,
         rapid = conf_rate,
-        accuracy = result$model_metrics$accuracy,
-        stringsAsFactors = FALSE
+        accuracy = result$model_metrics$accuracy
       )
     } else {
       fold_results[[fold_id]] <- data.frame(
@@ -180,8 +179,7 @@ rapid_synthesizer_cv <- function(original_data,
         mae  = result$model_metrics$mae,
         rmse = result$model_metrics$rmse,
         rmae = result$model_metrics$rmae,
-        rrmse = result$model_metrics$rrmse,
-        stringsAsFactors = FALSE
+        rrmse = result$model_metrics$rrmse
       )
     }
 

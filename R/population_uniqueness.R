@@ -138,6 +138,9 @@ population_uniqueness <- function(X, ...) {
 #' @rdname population_uniqueness
 #' @export
 population_uniqueness.synth_pair <- function(X, data = c("synthetic", "original"), ...) {
+  # Design note: unlike other single-dataset synth_pair methods (kanonymity, ldiversity,
+  # etc.) which hardcode X$synthetic, population_uniqueness exposes `data` because
+  # comparing uniqueness between original and synthetic is a common diagnostic.
   if (is.null(X$key_vars)) {
     stop("synth_pair must have 'key_vars' set for population_uniqueness()")
   }

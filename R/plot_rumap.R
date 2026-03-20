@@ -48,6 +48,8 @@
 #'
 #' @seealso \code{\link{rumap}} for creating rumap objects
 #'
+#' @return The \code{rumap} object \code{x}, invisibly.
+#' @family utility
 #' @author Matthias Templ
 #' @export
 #' @importFrom graphics plot points lines polygon segments text legend axis mtext abline arrows

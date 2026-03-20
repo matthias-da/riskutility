@@ -137,10 +137,6 @@ epsilon_identifiability.default <- function(X, Y,
                                              n_bins = 20L,
                                              ...) {
 
-  # Input validation
-  if (!is.data.frame(X)) stop("X must be a data frame.")
-  if (!is.data.frame(Y)) stop("Y must be a data frame.")
-
   if (!is.numeric(epsilon) || length(epsilon) != 1 || epsilon <= 0 || epsilon >= 1) {
     stop("epsilon must be a single number between 0 and 1 (exclusive).")
   }
@@ -150,46 +146,11 @@ epsilon_identifiability.default <- function(X, Y,
   }
   n_bins <- as.integer(n_bins)
 
-  # Determine variables to use
-  if (is.null(vars)) {
-    vars <- intersect(names(X), names(Y))
-  }
-
-  if (length(vars) == 0) {
-    stop("No common variables found between datasets.")
-  }
-
-  # Check variables exist
-  missing_X <- setdiff(vars, names(X))
-  missing_Y <- setdiff(vars, names(Y))
-  if (length(missing_X) > 0) {
-    stop(paste("Variables missing in X:", paste(missing_X, collapse = ", ")))
-  }
-  if (length(missing_Y) > 0) {
-    stop(paste("Variables missing in Y:", paste(missing_Y, collapse = ", ")))
-  }
-
-  # Check variable types match
-  for (var in vars) {
-    if (!identical(class(X[[var]]), class(Y[[var]]))) {
-      stop(paste("Variable", var, "has different class in X and Y."))
-    }
-  }
-
-  # Subset to selected variables
-  X <- X[, vars, drop = FALSE]
-  Y <- Y[, vars, drop = FALSE]
-
-  # Handle missing values
-  if (na.rm) {
-    complete_X <- complete.cases(X)
-    complete_Y <- complete.cases(Y)
-    X <- X[complete_X, , drop = FALSE]
-    Y <- Y[complete_Y, , drop = FALSE]
-  }
-
-  if (nrow(X) == 0) stop("No complete cases in X after removing NAs.")
-  if (nrow(Y) == 0) stop("No complete cases in Y after removing NAs.")
+  # Shared input validation, variable intersection, NA removal (no holdout)
+  v <- .validate_pair_inputs(X, Y, vars = vars, na.rm = na.rm)
+  X    <- v$X
+  Y    <- v$Y
+  vars <- v$vars
 
   # Set seed if provided
   if (!is.null(seed)) set.seed(seed)
@@ -260,8 +221,12 @@ epsilon_identifiability.default <- function(X, Y,
 #' @param n_bins integer, number of bins for discretizing numeric variables
 #' @return numeric scalar, the Shannon entropy (natural log)
 #' @keywords internal
-# Note: handles raw data vectors (discretization + entropy), unlike the
-# probability-vector entropy functions in divergence.R/divergence2.R.
+# Note: this is intentionally separate from the entropy helpers in
+# divergence.R (KLDiv) and divergence2.R (NormalizedEntropy, etc.), which
+# operate on pre-computed probability vectors.  .compute_entropy accepts a
+# raw data vector, handles NAs, discretises numeric variables into bins, and
+# then computes Shannon entropy -- functionality none of the exported
+# functions provide.
 .compute_entropy <- function(x, n_bins = 20L) {
   x <- x[!is.na(x)]
   if (length(x) == 0) return(0)

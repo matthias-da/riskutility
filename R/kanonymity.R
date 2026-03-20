@@ -155,8 +155,7 @@ kanonymity.default <- function(X,
   # Build equivalence class summary
   ec_df <- data.frame(
     key = names(ec_table),
-    size = as.numeric(ec_table),
-    stringsAsFactors = FALSE
+    size = as.numeric(ec_table)
   )
   ec_df <- ec_df[order(ec_df$size), ]
   ec_df$violates_k <- ec_df$size < k

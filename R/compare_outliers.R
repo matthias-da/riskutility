@@ -78,8 +78,7 @@ compare_outliers.default <- function(X, Y, method = "zscore", threshold = NULL, 
                            Total_X = integer(0),
                            Total_Y = integer(0),
                            Prop_X = numeric(0),
-                           Prop_Y = numeric(0),
-                           stringsAsFactors = FALSE)
+                           Prop_Y = numeric(0))
   details <- list()
 
   if (method %in% c("zscore", "iqr")) {
@@ -117,8 +116,7 @@ compare_outliers.default <- function(X, Y, method = "zscore", threshold = NULL, 
                                                  Total_X = totalX,
                                                  Total_Y = totalY,
                                                  Prop_X = outX / totalX,
-                                                 Prop_Y = outY / totalY,
-                                                 stringsAsFactors = FALSE))
+                                                 Prop_Y = outY / totalY))
     }
     details <- summary_df
   } else if (method == "dbscan") {
@@ -134,8 +132,7 @@ compare_outliers.default <- function(X, Y, method = "zscore", threshold = NULL, 
                              Total_X = nrow(X),
                              Total_Y = nrow(Y),
                              Prop_X = outX / nrow(X),
-                             Prop_Y = outY / nrow(Y),
-                             stringsAsFactors = FALSE)
+                             Prop_Y = outY / nrow(Y))
     details <- list(dbscan_X = db_X, dbscan_Y = db_Y)
   } else if (method == "robust") {
     if (!requireNamespace("robustbase", quietly = TRUE))
@@ -154,8 +151,7 @@ compare_outliers.default <- function(X, Y, method = "zscore", threshold = NULL, 
                              total_X = nrow(X),
                              total_Y = nrow(Y),
                              prop_X = outX / nrow(X),
-                             prop_Y = outY / nrow(Y),
-                             stringsAsFactors = FALSE)
+                             prop_Y = outY / nrow(Y))
     details <- list(mahalanobis_X = mdX, mahalanobis_Y = mdY, chi_threshold = chi_thresh, mult_outliers_X = outX, mult_outliers_Y = outY)
   }
 

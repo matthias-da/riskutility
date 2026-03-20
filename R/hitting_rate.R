@@ -138,61 +138,20 @@ hitting_rate.default <- function(X, Y,
                                   na.rm = TRUE,
                                   ...) {
 
-  # Input validation
-  if (!is.data.frame(X)) stop("X must be a data frame.")
-  if (!is.data.frame(Y)) stop("Y must be a data frame.")
-
   if (!is.numeric(threshold) || length(threshold) != 1 || threshold < 0) {
     stop("threshold must be a single non-negative number.")
   }
 
   method <- match.arg(method)
 
-  # Determine variables to use
-  if (is.null(vars)) {
-    vars <- intersect(names(X), names(Y))
-  }
-
-  if (length(vars) == 0) {
-    stop("No common variables found between datasets.")
-  }
-
-  # Check variables exist
-  missing_X <- setdiff(vars, names(X))
-  missing_Y <- setdiff(vars, names(Y))
-  if (length(missing_X) > 0) {
-    stop(paste("Variables missing in X:", paste(missing_X, collapse = ", ")))
-  }
-  if (length(missing_Y) > 0) {
-    stop(paste("Variables missing in Y:", paste(missing_Y, collapse = ", ")))
-  }
-
-  # Check variable types match
-  for (var in vars) {
-    if (!identical(class(X[[var]]), class(Y[[var]]))) {
-      stop(paste("Variable", var, "has different class in X and Y."))
-    }
-  }
-
-  # Subset to selected variables
-  X <- X[, vars, drop = FALSE]
-  Y <- Y[, vars, drop = FALSE]
-
-  # Handle missing values
-  if (na.rm) {
-    complete_X <- complete.cases(X)
-    complete_Y <- complete.cases(Y)
-    X <- X[complete_X, , drop = FALSE]
-    Y <- Y[complete_Y, , drop = FALSE]
-  }
-
-  if (nrow(X) == 0) stop("No complete cases in X after removing NAs.")
-  if (nrow(Y) == 0) stop("No complete cases in Y after removing NAs.")
+  # Shared input validation, variable intersection, NA removal (no holdout)
+  v <- .validate_pair_inputs(X, Y, vars = vars, na.rm = na.rm)
+  X    <- v$X
+  Y    <- v$Y
+  vars <- v$vars
 
   n_original <- nrow(X)
   n_synthetic <- nrow(Y)
-
-  # .normalize_minmax is defined in R/utils_internal.R
 
   # Compute minimum distance from each synthetic record to closest original
   if (method == "gower") {
@@ -201,25 +160,14 @@ hitting_rate.default <- function(X, Y,
     min_distances <- apply(dist_mat, 1, min, na.rm = TRUE)
 
   } else if (method == "euclidean") {
-    # Check all variables are numeric
-    if (!all(sapply(Y, is.numeric))) {
-      stop("method='euclidean' requires all variables to be numeric. Use method='gower' for mixed types.")
-    }
+    # .normalize_and_split / .euclidean_dist are defined in R/utils_internal.R
+    norms <- .normalize_and_split(X, Y)
+    X_norm <- norms[[1]]
+    Y_norm <- norms[[2]]
 
-    # Combine all data for consistent normalization
-    all_data <- rbind(X, Y)
-    all_data_norm <- as.data.frame(lapply(all_data, .normalize_minmax))
-
-    X_norm <- all_data_norm[seq_len(n_original), , drop = FALSE]
-    Y_norm <- all_data_norm[(n_original + 1):nrow(all_data_norm), , drop = FALSE]
-
-    # Compute distances
-    min_distances <- numeric(n_synthetic)
-    for (i in seq_len(n_synthetic)) {
-      diffs <- sweep(as.matrix(X_norm), 2, as.numeric(Y_norm[i, ]))
-      dists <- sqrt(rowSums(diffs^2))
-      min_distances[i] <- min(dists)
-    }
+    # Compute full distance matrix and take row minima
+    dist_mat <- .euclidean_dist(Y_norm, X_norm)
+    min_distances <- apply(dist_mat, 1, min, na.rm = TRUE)
   }
 
   # Determine hits
