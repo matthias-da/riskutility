@@ -7,9 +7,12 @@
 #'
 #' @param X A data frame or data table.
 #' @param Y A data frame or data table to compare with \code{X}.
-#' @param variables A character vector specifying the variables for which the
+#' @param vars A character vector specifying the variables for which the
 #' comparisons are made. Must be present in both \code{X} and \code{Y}. The
 #' class of variables determines the default kind of calculation. See details.
+#' This argument was formerly named \code{variables}; that name is still
+#' accepted for backward compatibility but \code{vars} is preferred for
+#' consistency with the rest of the package (e.g. \code{\link{rumap}}).
 #' @param kind To be set when changing the default kind of calculation. See
 #' details.
 #' @param conditional A character vector specifying conditioning variables, or
@@ -39,15 +42,15 @@
 #' @details
 #' The following default calculations are taken:
 #'
-#' If \code{variables} links to one or two numeric variables: the (weighted)
+#' If \code{vars} links to one or two numeric variables: the (weighted)
 #' ECDF is calculated for both data sets. With \code{kind} one can change to
 #' \code{"density"}, \code{"density_bayes"}, \code{"density_ratio"} and
 #' \code{"density_ratio_bayes"}.
 #'
-#' If \code{variables} links to one, two or three categorical variables:
+#' If \code{vars} links to one, two or three categorical variables:
 #' barcharts and mosaic plots are made.
 #'
-#' If \code{variables} links to one numeric and one categorical variable:
+#' If \code{vars} links to one numeric and one categorical variable:
 #' boxplots statistics are calculated.
 #'
 #' If weights are provided, the weighted versions are
@@ -72,7 +75,7 @@
 #' )
 #'
 #' # Compare ECDFs for age and income
-#' result <- compare_distributions_cont(S, U, variables = c("age", "income"), weights = "weights")
+#' result <- compare_distributions_cont(S, U, vars = c("age", "income"), weights = "weights")
 #'
 #' # View the result
 #' print(result$formula)
@@ -94,7 +97,7 @@
 #' )
 #'
 #' # Compare ECDFs for age and income
-#' result <- compare_distributions_cont(X, Y, variables = c("age", "income"), weights = "weights")
+#' result <- compare_distributions_cont(X, Y, vars = c("age", "income"), weights = "weights")
 #'
 #' # View the result
 #' print(result$formula)
@@ -115,7 +118,7 @@
 #' )
 #'
 #' # Compare ECDFs for age and income
-#' result <- compare_distributions_cont(X, Y, variables = c("age", "income"), n_approx = 100)
+#' result <- compare_distributions_cont(X, Y, vars = c("age", "income"), n_approx = 100)
 #'
 #' # View the result
 #' print(result$formula)
@@ -136,10 +139,17 @@ compare_distributions_cont.synth_pair <- function(X, ...) {
 
 #' @rdname compare_distributions_cont
 #' @export
-compare_distributions_cont.default <- function(X, Y, variables = NULL, kind = NULL, conditional = NULL,
+compare_distributions_cont.default <- function(X, Y, vars = NULL, kind = NULL, conditional = NULL,
                           weights = NULL, approx = c(FALSE, TRUE),
                           n_approx = 10000, bounds = TRUE, ...)
 {
+  # 'vars' is the canonical selector, consistent with the rest of the package
+  # (e.g. rumap()). The former name 'variables' is still accepted, as a legacy
+  # alias passed through '...'. Internally the code below uses 'variables'.
+  variables <- vars
+  .dots <- list(...)
+  if (is.null(variables) && !is.null(.dots$variables)) variables <- .dots$variables
+
   # Function to check and convert to data.table if necessary
   convert_to_data_table <- function(X) {
     if (!inherits(X, "data.table")) {
@@ -194,11 +204,11 @@ compare_distributions_cont.default <- function(X, Y, variables = NULL, kind = NU
   }
 
   if (!is.character(variables) || length(variables) == 0) {
-    stop("'variables' must be a character vector of positive length!\n")
+    stop("'vars' must be a character vector of positive length!\n")
   }
   if (!(all(variables %in% colnames(Y)) & (all(variables %in% colnames(X))))) {
-    stop("The variables names specified in argument 'variables' must be available
-         both data sets.\n")
+    stop("The variable names specified in argument 'vars' must be available
+         in both data sets.\n")
   }
   if (!is.null(conditional) && !is.character(conditional)) {
     stop("'conditional' must be a character vector or NULL!\n")
@@ -403,6 +413,7 @@ NULL
 #'
 #' @param x an object of class "compare_distributions_cont"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.compare_distributions_cont <- function(x, ...) {
   cat("Continuous Distribution Comparison\n")
@@ -415,6 +426,42 @@ print.compare_distributions_cont <- function(x, ...) {
   cat("  ECDF observations:", nrow(x$ecdf), "\n\n")
   cat("  Available plot types: 'ecdf', 'density', 'density_bayes',\n")
   cat("    'density_ratio', 'density_ratio_bayes'\n")
+  invisible(x)
+}
+
+#' Summary method for compare_distributions_cont objects
+#'
+#' @param object an object of class "compare_distributions_cont"
+#' @param ... additional arguments (ignored)
+#' @return An object of class "summary.compare_distributions_cont".
+#' @export
+summary.compare_distributions_cont <- function(object, ...) {
+  vars <- unique(object$ecdf$.var)
+  summ <- list(
+    formula      = object$formula,
+    kind         = object$kind,
+    datasets     = object$datasetNames,
+    variables    = vars,
+    n_variables  = length(vars),
+    n_ecdf       = nrow(object$ecdf)
+  )
+  class(summ) <- "summary.compare_distributions_cont"
+  summ
+}
+
+#' Print method for summary.compare_distributions_cont objects
+#'
+#' @param x an object of class "summary.compare_distributions_cont"
+#' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
+#' @export
+print.summary.compare_distributions_cont <- function(x, ...) {
+  cat("Summary: Continuous Distribution Comparison\n")
+  cat("===========================================\n\n")
+  cat("  Datasets:    ", paste(x$datasets, collapse = " vs. "), "\n")
+  cat("  Formula:     ", x$formula, "\n")
+  cat("  Variables:   ", paste(x$variables, collapse = ", "), "\n")
+  cat("  N variables: ", x$n_variables, "| ECDF observations:", x$n_ecdf, "\n")
   invisible(x)
 }
 
@@ -431,7 +478,10 @@ print.compare_distributions_cont <- function(x, ...) {
 #' @param which A character string specifying the type of plot to generate.
 #' Options include \code{"ecdf"}, \code{"density"}, \code{"density_bayes"},
 #' \code{"density_ratio"}, and \code{"density_ratio_bayes"}.
-#' Default is \code{"ecdf"}.
+#' Default is \code{"ecdf"}. Unlike the integer \code{which} used by most
+#' \code{plot} methods in this package, a character string is used here on
+#' purpose: each option names a conceptually distinct diagnostic rather than an
+#' interchangeable panel index, so a descriptive label is clearer than a number.
 #' @param interactive A logical value indicating whether to produce an
 #' interactive plot using \code{plotly}. Default is \code{FALSE}.
 #'
@@ -462,7 +512,7 @@ print.compare_distributions_cont <- function(x, ...) {
 #' )
 #'
 #' # Compare ECDFs for age and income
-#' result <- compare_distributions_cont(S, U, variables = c("age", "income"), weights = "weights")
+#' result <- compare_distributions_cont(S, U, vars = c("age", "income"), weights = "weights")
 #'
 #' # Plot the ECDF
 #' plot(result)

@@ -16,6 +16,9 @@
 \item{which}{which plot(s) to show: 1 = DiSCO vs non-DiSCO bar chart,
 2 = comparison with baseline, 3 = comparison of both methods}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for disco objects
 }

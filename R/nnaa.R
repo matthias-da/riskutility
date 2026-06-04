@@ -279,6 +279,7 @@ nnaa.default <- function(X, Y,
 #'
 #' @param x an object of class "nnaa"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.nnaa <- function(x, ...) {
   cat("Nearest-Neighbor Adversarial Accuracy (NNAA)\n")
@@ -326,6 +327,7 @@ print.nnaa <- function(x, ...) {
 #'
 #' @param object an object of class "nnaa"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.nnaa <- function(object, ...) {
   summ <- list(
@@ -365,6 +367,7 @@ summary.nnaa <- function(object, ...) {
 #'
 #' @param x an object of class "summary.nnaa"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.nnaa <- function(x, ...) {
   cat("Summary: Nearest-Neighbor Adversarial Accuracy (NNAA)\n")
@@ -415,6 +418,7 @@ print.summary.nnaa <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which which plot(s) to show: 1 = AA comparison barplot (train vs holdout),
 #'   2 = NN distance distributions (overlay histograms of d_TS vs d_TT)
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.nnaa <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

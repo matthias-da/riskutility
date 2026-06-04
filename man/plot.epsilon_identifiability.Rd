@@ -16,6 +16,9 @@
 \item{which}{which plot(s) to show: 1 = histogram of minimum distances with
 epsilon threshold line, 2 = entropy weights barplot}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for epsilon_identifiability objects
 }

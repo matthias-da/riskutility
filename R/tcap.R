@@ -372,6 +372,7 @@ tcap.default <- function(X, Y,
 #'
 #' @param x an object of class "tcap"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.tcap <- function(x, ...) {
   cat("Correct Attribution Probability (CAP) Analysis\n")
@@ -413,6 +414,7 @@ print.tcap <- function(x, ...) {
 #'
 #' @param object an object of class "tcap"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.tcap <- function(object, ...) {
   scores <- object$tcap_scores[!is.na(object$tcap_scores)]
@@ -453,6 +455,7 @@ summary.tcap <- function(object, ...) {
 #'
 #' @param x an object of class "summary.tcap"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.tcap <- function(x, ...) {
   cat("Summary: Correct Attribution Probability (CAP) Analysis\n")
@@ -499,6 +502,7 @@ print.summary.tcap <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which which plot(s) to show: 1 = TCAP histogram, 2 = risk categories,
 #'   3 = matches distribution
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.tcap <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 3)

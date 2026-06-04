@@ -15,6 +15,9 @@
 
 \item{...}{additional arguments passed to plotting functions}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for compare_feature_importance objects
 }

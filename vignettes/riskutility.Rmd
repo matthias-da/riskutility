@@ -2,11 +2,11 @@
 title: "riskutility: Comprehensive Disclosure Risk and Data Utility Assessment for Anonymized and Synthetic Data in R"
 author:
   - name: Matthias Templ
-    affiliation: "Institute of Data Analysis and Process Design, Zurich University of Applied Sciences"
+    affiliation: "School of Business, FHNW University of Applied Sciences and Arts Northwestern Switzerland"
     email: matthias.templ@gmail.com
     orcid: 0000-0002-8638-5276
   - name: Oscar Thees
-    affiliation: "Institute of Data Analysis and Process Design, Zurich University of Applied Sciences"
+    affiliation: "School of Business, FHNW University of Applied Sciences and Arts Northwestern Switzerland"
     orcid: 0009-0001-9378-4988
 abstract: >
   The R package **riskutility** provides a comprehensive framework for measuring
@@ -14,8 +14,9 @@ abstract: >
   implements over 30 risk measures spanning six paradigms --- frequency-based
   privacy models ($k$-anonymity, $l$-diversity, $t$-closeness), attribution-based
   (DCAP, TCAP, WEAP, DiSCO), ML-based (RAPID), distance-based (DCR, NNDR, IMS,
-  RF proximity), record linkage, and membership inference (DOMIAS, NNAA, singling
-  out, linkability) --- alongside a broad suite of utility measures including
+  RF proximity), record linkage, membership inference (DOMIAS, NNAA), and GDPR
+  anonymization criteria (singling out, linkability) --- alongside a broad suite of
+  utility measures including
   propensity scores, distributional distances (Hellinger, energy, MMD),
   dependence structure fidelity (copula, contingency), regression fidelity,
   subgroup-stratified utility, and Train on Synthetic, Test on Real (TSTR).
@@ -61,7 +62,7 @@ library(riskutility)
 # Introduction {#sec-intro}
 
 Statistical agencies and data custodians face a fundamental challenge: releasing
-data that is useful for analysis while protecting individual privacy. Two main
+data that are useful for analysis while protecting individual privacy. Two main
 approaches exist: (i) traditional anonymization methods such as perturbation,
 suppression, and generalization [@hundepool2012statistical;
 @templ2017statistical], and (ii) synthetic data generation via statistical
@@ -75,15 +76,16 @@ estimation but limited utility assessment. synthpop [@nowok2016synthpop]
 offers the CAP disclosure metric and propensity-score utility but not
 distance-based or membership inference methods. In Python, SDMetrics covers
 distance-based metrics and Anonymeter implements GDPR failure criteria, but
-neither addresses attribution risk. No existing tool provides a unified
-framework that spans all risk families and supports multivariate comparison
-of multiple synthesis approaches.
+neither addresses attribution risk. No existing *R* package provides a unified
+framework that spans all risk families and supports multivariate comparison of
+multiple synthesis approaches; the most comprehensive evaluation suites (the
+Python libraries synthcity and SynthEval) sit outside the R ecosystem.
 
 The **riskutility** package for R [@R2025] fills this gap. It implements
 over 30 risk measures spanning six paradigms --- frequency-based privacy
 models, attribution-based (CAP), ML-based (RAPID), distance-based, record
-linkage, and membership inference --- alongside 12 utility functions covering
-global, distributional, structural, and predictive assessment. All functions
+linkage, and membership inference --- alongside more than a dozen utility
+functions covering global, distributional, structural, and predictive assessment. All functions
 share a consistent S3 API with `print()`, `summary()`, and `plot()` methods
 and accept a `synth_pair` container that bundles data and metadata.
 
@@ -91,7 +93,10 @@ The need for rigorous evaluation is well established in the statistical
 disclosure control literature and has gained urgency as synthetic data enters
 regulatory frameworks. The European Article 29 Working Party
 [@wp29anonymisation] identifies three criteria for anonymization: singling out,
-linkability, and inference --- all of which **riskutility** measures directly.
+linkability, and inference. **riskutility** measures the first two directly
+(`singling_out()`, `linkability()`); the inference criterion is approached
+through the attribution-based CAP and RAPID measures rather than a dedicated
+inference-attack function.
 Importantly, synthetic data does not automatically satisfy these criteria
 [@stadler2022synthetic], making empirical assessment essential.
 
@@ -177,7 +182,7 @@ data evaluation:
   individual. Measured by: `recordLinkage()`, `kanonymity()`,
   `individual_risk()`, `hitting_rate()`.
 - **Attribute disclosure**: An attacker learns a sensitive attribute value
-  through quasi-identifier matching. Measured by: `dcap()`, `tcap()`,
+  through quasi-identifier (QI) matching. Measured by: `dcap()`, `tcap()`,
   `weap()`, `disco()`, `rapid()`.
 - **Membership disclosure**: An attacker determines whether an individual's
   data was used to create the released dataset. Measured by:
@@ -536,7 +541,7 @@ k_res
 # l-Diversity: sensitive attribute diversity per EC
 l_res <- riskutility::ldiversity(synthetic, key_vars = key_vars,
                                  sensitive_var = target_var)
-riskutility:::print.ldiversity(l_res)
+print(l_res)
 
 # t-Closeness: EMD between EC and overall distribution
 t_res <- riskutility::tcloseness(synthetic, key_vars = key_vars,
@@ -593,10 +598,12 @@ match $\mathbf{q}_i$ (the *equivalence class*). If the sensitive attribute
 is homogeneous within this class, the attacker learns the true value. The
 **Targeted CAP** (TCAP) gives each record a risk score between 0 and 1:
 $\text{TCAP}_i = \Pr(\text{correct attribution} \mid \mathbf{q}_i)$. The
-**Differential CAP** (DCAP) is the mean CAP across all records:
-$\text{DCAP} = n^{-1} \sum_i \text{CAP}_i$. The `summary()` method
-computes a risk ratio $\text{DCAP} / \text{baseline}$ to contextualize
-the result against random guessing.
+mean CAP across all records is $\overline{\text{CAP}} = n^{-1} \sum_i \text{CAP}_i$
+(returned as `cap`). The **Differential CAP** subtracts the baseline (modal-class)
+attribution rate, $\text{DCAP} = \overline{\text{CAP}} - \text{baseline}$ (returned
+as `dcap`; @taub2018differential), so a value near zero indicates no attribution
+gain over random guessing. The `summary()` method also reports the risk ratio
+$\overline{\text{CAP}} / \text{baseline}$ to contextualize the result.
 
 The **WEAP** (Within-EC Attribution Probability) evaluates risk from the
 released data alone, without access to the original, making it suitable
@@ -699,11 +706,12 @@ $d_T$ will be systematically smaller:
 
 $$\text{DCR\_share} = n^{-1} \sum_j \mathbf{1}\bigl(d_T(y_j) < d_H(y_j)\bigr), \qquad \text{DCR\_ratio} = \frac{\bar{d}_T}{\bar{d}_H}$$
 
-A DCR share above 0.5 (or ratio below 1) indicates memorization. The
-**NNDR** (Nearest Neighbor Distance Ratio) provides a complementary view:
-for each synthetic record, the ratio of the distance to its nearest
-neighbor to its second-nearest neighbor. A ratio near 0 indicates a single
-dominant match; near 1 indicates no distinctive match. **IMS** (Identical
+A DCR share meaningfully above 0.5 (the package flags shares above 0.55), or a
+ratio below about 1, suggests memorization. The **NNDR** (Nearest Neighbor
+Distance Ratio) provides a complementary view: for each synthetic record, it is
+the ratio of the distance to its nearest neighbor over the distance to its
+second-nearest neighbor. A ratio near 0 indicates a single dominant match;
+near 1 indicates no distinctive match. **IMS** (Identical
 Match Share) counts exact copies. When an explicit holdout is unavailable,
 `holdout_fraction` automatically splits the original data.
 
@@ -713,10 +721,14 @@ summary(dcr_res)
 plot(dcr_res, which = 1)
 ```
 
-**The DCR Delusion.** @yao2025dcr demonstrate that DCR can fail to
-detect privacy leakage. Datasets deemed "private" by DCR may still be
-vulnerable to membership inference attacks. Distance-based metrics should
-always be complemented with other risk families.
+**The DCR Delusion.** @yao2025dcr show that DCR can fail to
+detect privacy leakage: datasets deemed "private" by DCR may still be
+vulnerable to membership inference attacks. Their central recommendation is that
+DCR be interpreted relative to a proper null distribution rather than in
+absolute terms; `dcr()` implements exactly this, comparing the observed share
+against a permutation null (`null_test`) and reporting a Wilcoxon test alongside
+the point estimate. Even so, distance-based metrics should always be
+complemented with other risk families.
 
 ```{r distance-table, echo=FALSE}
 dist <- data.frame(
@@ -781,15 +793,19 @@ knitr::kable(rl,
 ## Membership Inference and Anonymization Failure Criteria {#sec-membership}
 
 This section groups two related but distinct concerns. The first three
-measures (MIA, DOMIAS, NNAA) assess *membership disclosure* --- whether an
-attacker can determine if a specific individual's data was used during
-synthesis. The singling out and linkability attacks implement GDPR
-anonymization failure criteria [@stadler2022synthetic; @wp29anonymisation].
+measures (`mia_classifier()`, `domias()`, `nnaa()`) assess *membership
+disclosure* --- whether a membership inference attack (MIA) can determine if a
+specific individual's data was used during
+synthesis. The singling out and linkability attacks operationalize two of the GDPR
+anonymization criteria [@wp29anonymisation], following the attack-based
+approach of @giomi2023anonymeter.
 
-**NNAA** (Nearest Neighbor Adversarial Accuracy, @yale2020generation) compares,
-for each real record, the label (training vs holdout) of its nearest synthetic
-neighbor. The privacy loss is the difference between the share of training
-records correctly identified and 0.5 (random chance):
+**NNAA** (Nearest Neighbor Adversarial Accuracy, @yale2020generation) is based on
+the adversarial accuracy of a nearest-neighbour two-sample comparison,
+$\text{AA}(A,S) = \tfrac{1}{2}\bigl[\Pr(d_{AS} > d_{AA}) + \Pr(d_{SA} > d_{SS})\bigr]$.
+The reported privacy loss is $\text{AA}(\text{holdout}, S) - \text{AA}(\text{train}, S)$;
+a positive value means synthetic records resemble training records more closely
+than holdout records, indicating memorization:
 
 ```{r nnaa-demo}
 nnaa_res <- nnaa(train_data, synthetic, holdout = holdout_data,
@@ -803,8 +819,9 @@ print(nnaa_res)
 | 0.01--0.05 | Minor leakage, likely acceptable |
 | > 0.10 | Significant memorization |
 
-**Singling out** and **linkability** operationalize the Article 29 Working
-Party's three anonymization criteria:
+**Singling out** and **linkability** operationalize two of the Article 29
+Working Party's three anonymization criteria (the third, inference, is
+addressed by the attribution-based CAP and RAPID measures):
 
 ```{r membership-demo}
 so_res <- singling_out(original, synthetic,
@@ -940,8 +957,9 @@ estimates are close.
 ## Multivariate and Structural Utility {#sec-utility-structural}
 
 Marginal distributions can match perfectly while joint distributions diverge.
-The **energy distance** [@szekely2013energy] provides a multivariate two-sample
-test that is sensitive to differences in both location and scale:
+The **energy distance** [@szekely2013energy] is a multivariate two-sample
+statistic sensitive to differences in both location and scale (lower values
+indicate closer joint distributions):
 
 ```{r utility-structural}
 e_res <- energy_distance(original[, c("age", "income")],
@@ -1046,7 +1064,7 @@ util <- data.frame(
                    "Mixed"),
   Interpretation = c("< 0.1: good", "< 0.05: good",
                      "Lower = better", "< 0.1: good", "> 0.8: good",
-                     "p > 0.05: good", "p > 0.05: good",
+                     "Lower = better", "Lower = better",
                      "< 0.1: good", "< 0.05: good",
                      "ratio near 1: good", "overlap > 0.8: good",
                      "High corr: good",
@@ -1276,7 +1294,7 @@ If utility is too low:
 ## Limitations and Recommendations
 
 **No formal privacy guarantees.** All measures provide empirical risk
-assessment. A low DCAP score does not prove no attacker can succeed.
+assessment. A low DCAP score does not prove that no attacker can succeed.
 Empirical and formal approaches (differential privacy) are complementary.
 
 **Key variable selection.** Results depend heavily on the choice of

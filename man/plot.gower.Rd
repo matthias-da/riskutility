@@ -15,6 +15,9 @@
 
 \item{which}{integer, which plot: 1 = bar chart of distance and utility score}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Visualizes the average Gower distance as a simple bar plot with a reference
 scale from 0 (identical) to 1 (maximally different).

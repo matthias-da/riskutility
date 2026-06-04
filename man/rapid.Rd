@@ -15,7 +15,7 @@ rapid(X, ...)
   Y,
   key_vars,
   target_var,
-  model_type = c("lm", "rf", "cart", "gbm", "logit"),
+  model_type = c("rf", "lm", "cart", "gbm", "logit"),
   num_epsilon = 10,
   num_epsilon_type = c("percentage", "absolute"),
   num_error_metric = c("symmetric", "stabilised_relative", "absolute"),
@@ -42,9 +42,9 @@ rapid(X, ...)
 
 \item{target_var}{character, name of the sensitive target variable}
 
-\item{model_type}{character, model type for inference: "lm" (linear model, default),
-"rf" (random forest), "cart" (decision tree), "gbm" (gradient boosting), or
-"logit" (logistic regression, binary only)}
+\item{model_type}{character, model type for inference: "rf" (random forest,
+default), "lm" (linear model), "cart" (decision tree), "gbm" (gradient
+boosting), or "logit" (logistic regression, binary only)}
 
 \item{num_epsilon}{numeric threshold for continuous attributes. For percentage-based
 metrics (default), specify as percentage (e.g., 5 for 5\\%). For absolute error,

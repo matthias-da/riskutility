@@ -366,6 +366,7 @@ dcr.default <- function(X, Y,
 #'
 #' @param x an object of class "dcr"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.dcr <- function(x, ...) {
   cat("Distance to Closest Record (DCR) Privacy Metric\n")
@@ -421,6 +422,7 @@ print.dcr <- function(x, ...) {
 #'
 #' @param object an object of class "dcr"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.dcr <- function(object, ...) {
   summ <- list(
@@ -460,6 +462,7 @@ summary.dcr <- function(object, ...) {
 #'
 #' @param x an object of class "summary.dcr"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.dcr <- function(x, ...) {
   cat("Summary: Distance to Closest Record (DCR)\n")
@@ -525,6 +528,7 @@ print.summary.dcr <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which which plot(s) to show: 1 = overlaid histograms, 2 = boxplot
 #'   comparison, 3 = scatter plot of train vs holdout DCR
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.dcr <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 3)

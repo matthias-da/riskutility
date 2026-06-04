@@ -16,6 +16,9 @@
 \item{which}{integer, which plot: 1 = permutation null distribution histogram
 (requires \code{n_perm} to have been set)}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for mmd objects
 }

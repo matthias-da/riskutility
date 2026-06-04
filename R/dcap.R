@@ -17,8 +17,11 @@
 #' @return An object of class "dcap" containing:
 #' \itemize{
 #'   \item cap_scores: per-record CAP values
-#'   \item dcap: mean CAP (overall disclosure risk)
-#'   \item dcap_median: median CAP
+#'   \item cap: mean CAP (raw correct-attribution probability; synthpop's CAPd)
+#'   \item cap_median: median CAP
+#'   \item dcap: differential CAP, \code{cap - baseline} (attribution risk above
+#'     random guessing; Taub et al. 2018)
+#'   \item dcap_median: \code{cap_median - baseline}
 #'   \item n_matched: records with at least one synthetic match
 #'   \item n_unmatched: records with no matches
 #'   \item baseline: expected CAP under random guessing
@@ -36,6 +39,11 @@
 #' Higher CAP values indicate higher disclosure risk. A CAP of 1 means the
 #' intruder can perfectly infer the target; a CAP equal to baseline means
 #' no information leakage beyond random guessing.
+#'
+#' Two summaries are returned: the raw mean CAP (\code{cap}) and the
+#' \emph{differential} CAP (\code{dcap} \eqn{= \overline{CAP} - baseline}), which
+#' subtracts the baseline so that values near 0 indicate no leakage beyond random
+#' guessing and larger values indicate more attribute disclosure (Taub et al. 2018).
 #'
 #' @section Baseline computation:
 #' The baseline is computed as the maximum target category frequency in the
@@ -269,11 +277,15 @@ dcap.default <- function(X, Y,
   n_matched <- sum(!is.na(cap_scores))
   n_unmatched <- sum(is.na(cap_scores))
 
+  cap_mean <- mean(cap_scores, na.rm = TRUE)
+  cap_med  <- median(cap_scores, na.rm = TRUE)
   results <- list(
     cap_scores = cap_scores,
     n_matches = n_matches,
-    dcap = mean(cap_scores, na.rm = TRUE),
-    dcap_median = median(cap_scores, na.rm = TRUE),
+    cap = cap_mean,                 # raw mean CAP (= synthpop's CAPd)
+    cap_median = cap_med,
+    dcap = cap_mean - baseline,     # differential CAP = mean CAP - baseline (Taub et al. 2018)
+    dcap_median = cap_med - baseline,
     n_matched = n_matched,
     n_unmatched = n_unmatched,
     n_total = n,
@@ -292,16 +304,18 @@ dcap.default <- function(X, Y,
 #'
 #' @param x an object of class "dcap"
 #' @param ... additional arguments passed to the print method
+#' @return The input object, invisibly.
 #' @export
 print.dcap <- function(x, ...) {
-  cat("Correct Attribution Probability (DCAP) Analysis\n")
-  cat("================================================\n")
+  cat("Correct Attribution Probability (CAP/DCAP) Analysis\n")
+  cat("===================================================\n")
   cat("Method:", x$method, "\n")
   cat("Key variables:", paste(x$key_vars, collapse = ", "), "\n")
   cat("Target variable:", x$target_var, "\n\n")
-  cat("DCAP (mean CAP):", round(x$dcap, 4), "\n")
-  cat("Median CAP:", round(x$dcap_median, 4), "\n")
+  cat("CAP (mean):", round(x$cap, 4), "\n")
   cat("Baseline (random):", round(x$baseline, 4), "\n")
+  cat("DCAP (CAP - baseline):", round(x$dcap, 4), "\n")
+  cat("Median CAP:", round(x$cap_median, 4), "\n")
   cat("Records matched:", x$n_matched, "/", x$n_total,
       sprintf("(%.1f%%)", 100 * x$n_matched / x$n_total), "\n")
   invisible(x)
@@ -311,14 +325,17 @@ print.dcap <- function(x, ...) {
 #'
 #' @param object an object of class "dcap"
 #' @param ... additional arguments passed to the summary method
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.dcap <- function(object, ...) {
   cap <- object$cap_scores[!is.na(object$cap_scores)]
   summ <- list(
+    cap = object$cap,
+    cap_median = object$cap_median,
     dcap = object$dcap,
     dcap_median = object$dcap_median,
     baseline = object$baseline,
-    risk_ratio = object$dcap / object$baseline,
+    risk_ratio = object$cap / object$baseline,
     cap_quantiles = quantile(cap, probs = c(0, 0.25, 0.5, 0.75, 1)),
     cap_sd = sd(cap),
     n_matched = object$n_matched,
@@ -336,18 +353,20 @@ summary.dcap <- function(object, ...) {
 #'
 #' @param x an object of class "summary.dcap"
 #' @param ... additional arguments passed to the print method
+#' @return The input object, invisibly.
 #' @export
 print.summary.dcap <- function(x, ...) {
-  cat("Summary: Correct Attribution Probability (DCAP)\n")
-  cat("================================================\n")
+  cat("Summary: Correct Attribution Probability (CAP/DCAP)\n")
+  cat("===================================================\n")
   cat("Key variables:", paste(x$key_vars, collapse = ", "), "\n")
   cat("Target variable:", x$target_var, "\n")
   cat("Method:", x$method, "\n\n")
 
   cat("Risk Assessment:\n")
-  cat("  DCAP (mean):", round(x$dcap, 4), "\n")
+  cat("  CAP (mean):", round(x$cap, 4), "\n")
   cat("  Baseline:", round(x$baseline, 4), "\n")
-  cat("  Risk ratio:", round(x$risk_ratio, 2),
+  cat("  DCAP (CAP - baseline):", round(x$dcap, 4), "\n")
+  cat("  Risk ratio (CAP/baseline):", round(x$risk_ratio, 2),
       ifelse(x$risk_ratio > 1.5, " (elevated risk)",
              ifelse(x$risk_ratio > 1, " (slightly elevated)", " (low risk)")), "\n\n")
 
@@ -368,6 +387,7 @@ print.summary.dcap <- function(x, ...) {
 #' @param y not used
 #' @param ... additional arguments passed to the plot method
 #' @param which which plot(s) to show: 1 for CAP histogram, 2 for matches histogram
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.dcap <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)
@@ -384,9 +404,9 @@ plot.dcap <- function(x, y = NULL, ..., which = 1) {
     # Histogram of CAP scores
     hist(cap, breaks = 20, main = "Distribution of CAP Scores",
          xlab = "CAP Score", col = "steelblue", border = "white", ...)
-    abline(v = x$dcap, col = "red", lwd = 2, lty = 2)
+    abline(v = x$cap, col = "red", lwd = 2, lty = 2)
     abline(v = x$baseline, col = "darkgreen", lwd = 2, lty = 3)
-    legend("topright", legend = c("Mean DCAP", "Baseline"),
+    legend("topright", legend = c("Mean CAP", "Baseline"),
            col = c("red", "darkgreen"), lty = c(2, 3), lwd = 2)
   }
 

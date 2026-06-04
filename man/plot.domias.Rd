@@ -17,6 +17,9 @@
 (train vs holdout overlaid histograms), 2 = boxplot comparison of
 density ratios}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for domias objects
 }

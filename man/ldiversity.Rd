@@ -31,7 +31,7 @@ Only used by the synth_pair method.}
 \item{na.rm}{logical, remove records with NA values (default: TRUE)}
 }
 \value{
-An object of class "ldiversity" containing:
+An object of class "ldiversityRisk" containing:
 \itemize{
 \item distinct_l: achieved distinct l-diversity level
 \item entropy_l: achieved entropy l-diversity level

@@ -386,6 +386,7 @@ tail_fidelity.default <- function(X, Y,
 #'
 #' @param x an object of class \code{"tail_fidelity"}
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.tail_fidelity <- function(x, ...) {
   cat("Tail Fidelity - Tail Preservation Utility Measure\n")
@@ -445,6 +446,7 @@ print.tail_fidelity <- function(x, ...) {
 #'
 #' @param object an object of class \code{"tail_fidelity"}
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.tail_fidelity <- function(object, ...) {
   # Aggregate JSD across variables (ignoring NAs)
@@ -479,6 +481,7 @@ summary.tail_fidelity <- function(object, ...) {
 #'
 #' @param x an object of class \code{"summary.tail_fidelity"}
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.tail_fidelity <- function(x, ...) {
   cat("Summary: Tail Fidelity\n")
@@ -515,6 +518,7 @@ print.summary.tail_fidelity <- function(x, ...) {
 #'   Default 9.
 #' @importFrom graphics par plot points abline mtext segments
 #' @importFrom stats quantile
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.tail_fidelity <- function(x, y = NULL, ..., which = 1, max_panels = 9) {
   show <- rep(FALSE, 2)

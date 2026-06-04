@@ -11,6 +11,9 @@
 
 \item{...}{additional arguments (ignored)}
 }
+\value{
+A list of summary statistics for the corresponding object.
+}
 \description{
 Summary method for ci_proximity objects
 }

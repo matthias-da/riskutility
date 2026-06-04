@@ -55,7 +55,7 @@ For regression tasks, you can use:
 Additionally, a custom metric function can be supplied that takes the observed values and predictions as inputs and
 returns a single numeric performance value.}
 
-\item{nsim}{Number of simulations or permutations (also used by \code{fastshap::explain}).}
+\item{nsim}{Number of simulations used by permutation importance.}
 }
 \value{
 A list containing:
@@ -71,12 +71,12 @@ This function supports three types of feature importance measures:
 \itemize{
 \item \strong{Model-based:} Uses \code{caret::varImp}.
 \item \strong{Permutation-based:} Uses \code{vip::vi_permute}. A prediction wrapper is required.
-\item \strong{SHAP-based:} Computes mean absolute Shapley values using the \code{fastshap} package.
+\item \strong{SHAP-based:} Computes mean absolute Shapley values using the \code{kernelshap} package.
 }
 
 \itemize{
 \item If the target variable in \code{X} is a factor, the target variable in \code{Y} is coerced to a factor with the same levels.
-\item For SHAP importance, the function uses the \code{fastshap} package. The returned importance is the mean absolute SHAP value per feature.
+\item For SHAP importance, the function uses the \code{kernelshap} package. The returned importance is the mean absolute SHAP value per feature.
 \item For classification tasks in the SHAP branch, if no \code{pred_wrapper} is provided, predictions are taken as the probability of the first class.
 }
 }

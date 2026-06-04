@@ -11,6 +11,9 @@
 
 \item{...}{ignored.}
 }
+\value{
+A list of summary statistics for the corresponding object.
+}
 \description{
 Summary method for recordLinkageRisk
 }

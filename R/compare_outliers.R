@@ -26,21 +26,23 @@
 #' }
 #'
 #' @examples
-#' \dontrun{
-#'   set.seed(123)
-#'   X <- data.frame(a = rnorm(100), b = rnorm(100))
-#'   Y <- data.frame(a = rnorm(100, mean = 0.1), b = rnorm(100, mean = -0.1))
+#' set.seed(123)
+#' X <- data.frame(a = rnorm(100), b = rnorm(100))
+#' Y <- data.frame(a = rnorm(100, mean = 0.1), b = rnorm(100, mean = -0.1))
 #'
-#'   # Using z-score method
-#'   res_z <- compare_outliers(X, Y, method = "zscore", threshold = 3)
+#' # Using z-score method (no extra packages required)
+#' res_z <- compare_outliers(X, Y, method = "zscore", threshold = 3)
 #'
-#'   # Using IQR method
-#'   res_iqr <- compare_outliers(X, Y, method = "iqr")
+#' # Using IQR method
+#' res_iqr <- compare_outliers(X, Y, method = "iqr")
 #'
-#'   # Using DBSCAN (requires 'dbscan' package)
+#' # Using DBSCAN (requires the 'dbscan' package)
+#' if (requireNamespace("dbscan", quietly = TRUE)) {
 #'   res_db <- compare_outliers(X, Y, method = "dbscan", eps = 0.5, minPts = 5)
+#' }
 #'
-#'   # Using robust Mahalanobis (requires 'robustbase' package)
+#' # Using robust Mahalanobis (requires the 'robustbase' package)
+#' if (requireNamespace("robustbase", quietly = TRUE)) {
 #'   res_robust <- compare_outliers(X, Y, method = "robust", threshold = 0.975)
 #' }
 #'

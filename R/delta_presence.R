@@ -275,6 +275,7 @@ delta_presence.default <- function(X, Y,
 #' Print method for delta_presence objects
 #' @param x an object of class "delta_presence"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.delta_presence <- function(x, ...) {
   cat("delta-Presence Risk Assessment\n")
@@ -317,6 +318,7 @@ print.delta_presence <- function(x, ...) {
 #' Summary method for delta_presence objects
 #' @param object an object of class "delta_presence"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.delta_presence <- function(object, ...) {
   prob_summary <- data.frame(
@@ -358,6 +360,7 @@ summary.delta_presence <- function(object, ...) {
 #' Print method for summary.delta_presence objects
 #' @param x an object of class "summary.delta_presence"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.delta_presence <- function(x, ...) {
   cat("Summary: delta-Presence Risk Assessment\n")
@@ -402,6 +405,7 @@ print.summary.delta_presence <- function(x, ...) {
 #'   1 = histogram of membership probabilities with delta bounds,
 #'   2 = per-QI-combination barplot sorted by probability
 #' @importFrom graphics hist abline barplot par legend
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.delta_presence <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

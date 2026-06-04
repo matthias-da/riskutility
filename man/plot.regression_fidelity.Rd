@@ -17,6 +17,9 @@
 1 = forest plot comparing original and synthetic coefficients with CIs,
 2 = CI overlap bar chart per coefficient}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for regression_fidelity objects
 }

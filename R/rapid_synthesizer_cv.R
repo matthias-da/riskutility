@@ -325,6 +325,7 @@ summary.rapid_cv <- function(object, ...) {
 #'
 #' @param x an object of class "summary.rapid_cv"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.rapid_cv <- function(x, ...) {
   cat("Summary: RAPID Cross-Validation\n")

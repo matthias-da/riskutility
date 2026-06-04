@@ -27,23 +27,21 @@
 #' }
 #'
 #' @examples
-#' \dontrun{
-#'   set.seed(123)
-#'   X <- data.frame(a = c(rnorm(95), rep(NA, 5)), b = c(rnorm(90), rep(NA, 10)))
-#'   Y <- data.frame(a = c(rnorm(95), rep(NA, 5)), b = c(rnorm(90), rep(NA, 10)))
+#' set.seed(123)
+#' X <- data.frame(a = c(rnorm(95), rep(NA, 5)), b = c(rnorm(90), rep(NA, 10)))
+#' Y <- data.frame(a = c(rnorm(95), rep(NA, 5)), b = c(rnorm(90), rep(NA, 10)))
 #'
-#'   # Compare missing value percentages
-#'   res_pct <- compare_missing_values(X, Y, method = "percentage")
-#'   print(res_pct)
-#'   summary(res_pct)
-#'   plot(res_pct)
+#' # Compare missing value percentages
+#' res_pct <- compare_missing_values(X, Y, method = "percentage")
+#' print(res_pct)
+#' summary(res_pct)
+#' \donttest{plot(res_pct)}
 #'
-#'   # Compare missing value patterns
-#'   res_pat <- compare_missing_values(X, Y, method = "pattern")
-#'   print(res_pat)
-#'   summary(res_pat)
-#'   plot(res_pat)
-#' }
+#' # Compare missing value patterns
+#' res_pat <- compare_missing_values(X, Y, method = "pattern")
+#' print(res_pat)
+#' summary(res_pat)
+#' \donttest{plot(res_pat)}
 #'
 #' @importFrom stats na.omit quantile
 #' @family comparison
@@ -96,7 +94,11 @@ compare_missing_values.default <- function(X, Y, method = "percentage", ...) {
   return(res)
 }
 
-# S3 print method for missingCompare objects
+#' Print method for missingCompare objects
+#'
+#' @param x An object of class \code{"missingCompare"}.
+#' @param ... Additional arguments (ignored).
+#' @return The input object, invisibly.
 #' @export
 print.missingCompare <- function(x, ...) {
   cat("Missing Value Comparison Result\n")
@@ -113,7 +115,11 @@ print.missingCompare <- function(x, ...) {
   invisible(x)
 }
 
-# S3 summary method for missingCompare objects
+#' Summary method for missingCompare objects
+#'
+#' @param object An object of class \code{"missingCompare"}.
+#' @param ... Additional arguments (ignored).
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.missingCompare <- function(object, ...) {
   if (object$method == "percentage") {
@@ -125,7 +131,11 @@ summary.missingCompare <- function(object, ...) {
   return(object)
 }
 
-# S3 print method for summary.missingCompare objects
+#' Print method for summary.missingCompare objects
+#'
+#' @param x An object of class \code{"summary.missingCompare"}.
+#' @param ... Additional arguments (ignored).
+#' @return The input object, invisibly.
 #' @export
 print.summary.missingCompare <- function(x, ...) {
   cat("Summary of Missing Value Comparison\n")
@@ -140,7 +150,11 @@ print.summary.missingCompare <- function(x, ...) {
   invisible(x)
 }
 
-# S3 plot method for missingCompare objects
+#' Plot method for missingCompare objects
+#'
+#' @param x An object of class \code{"missingCompare"}.
+#' @param ... Additional arguments (ignored).
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.missingCompare <- function(x, ...) {
   if (x$method == "percentage") {

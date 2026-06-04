@@ -17,6 +17,9 @@
 1 = histogram of membership probabilities with delta bounds,
 2 = per-QI-combination barplot sorted by probability}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for delta_presence objects
 }

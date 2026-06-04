@@ -16,6 +16,9 @@
 \item{which}{which plot(s) to show: 1 = WEAP histogram, 2 = equivalence class
 sizes, 3 = disclosive vs non-disclosive}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for weap objects
 }

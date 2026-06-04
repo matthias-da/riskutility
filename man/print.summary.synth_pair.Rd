@@ -11,6 +11,9 @@
 
 \item{...}{Additional arguments (ignored)}
 }
+\value{
+The input object, invisibly.
+}
 \description{
 Print method for summary.synth_pair objects
 }

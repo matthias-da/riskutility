@@ -89,6 +89,11 @@ The intuition is that variables with low entropy (few distinct values or
 skewed distributions) carry more identifying power. A close match on a
 rare-valued variable is more concerning than a close match on a
 high-entropy variable.
+
+\strong{Note:} This is the SynthEval distance-entropy variant (Lautrup et al.,
+2025). It shares the name but not the definition of the probabilistic
+\eqn{\epsilon}-identifiability of Yoon et al. (2020, ADS-GAN); the two should
+not be conflated.
 }
 \section{Choosing epsilon}{
 

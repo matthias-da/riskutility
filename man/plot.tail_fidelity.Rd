@@ -19,6 +19,9 @@
 \item{max_panels}{integer, maximum number of panels for QQ plots.
 Default 9.}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for tail_fidelity objects
 }

@@ -9,9 +9,9 @@
 #' @param Y data frame of synthetic data (not needed if X is a synth_pair)
 #' @param key_vars character vector of quasi-identifier variable names
 #' @param target_var character, name of the sensitive target variable
-#' @param model_type character, model type for inference: "lm" (linear model, default),
-#'   "rf" (random forest), "cart" (decision tree), "gbm" (gradient boosting), or
-#'   "logit" (logistic regression, binary only)
+#' @param model_type character, model type for inference: "rf" (random forest,
+#'   default), "lm" (linear model), "cart" (decision tree), "gbm" (gradient
+#'   boosting), or "logit" (logistic regression, binary only)
 #' @param num_epsilon numeric threshold for continuous attributes. For percentage-based
 #'   metrics (default), specify as percentage (e.g., 5 for 5\%). For absolute error,
 #'   specify in units of the sensitive attribute.
@@ -273,7 +273,7 @@ rapid.synth_pair <- function(X, ...) {
 rapid.default <- function(X, Y,
                           key_vars,
                           target_var,
-                          model_type = c("lm", "rf", "cart", "gbm", "logit"),
+                          model_type = c("rf", "lm", "cart", "gbm", "logit"),
                           # Numeric-specific
                           num_epsilon = 10,
                           num_epsilon_type = c("percentage", "absolute"),
@@ -909,6 +909,7 @@ rapid.default <- function(X, Y,
 #'
 #' @param x an object of class "rapid"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.rapid <- function(x, ...) {
   cat("RAPID Disclosure Risk Assessment\n")
@@ -939,6 +940,7 @@ print.rapid <- function(x, ...) {
 #'
 #' @param object an object of class "rapid"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.rapid <- function(object, ...) {
   summ <- list(
@@ -963,6 +965,7 @@ summary.rapid <- function(object, ...) {
 #'
 #' @param x an object of class "summary.rapid"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.rapid <- function(x, ...) {
   cat("Summary: RAPID Disclosure Risk Assessment\n")

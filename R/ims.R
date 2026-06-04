@@ -53,8 +53,8 @@
 #'   \code{\link{disco}} for disclosive records with matching target values
 #'
 #' @references
-#' MOSTLY AI (2024). Evaluate generator quality.
-#' \url{https://docs.mostly.ai/generators/evaluate-quality}
+#' MOSTLY AI (2024). Synthetic data quality assurance.
+#' \url{https://mostly.ai/}
 #'
 #' @author Matthias Templ
 #' @family distance-risk
@@ -220,6 +220,7 @@ ims.default <- function(X, Y,
 #'
 #' @param x an object of class "ims"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.ims <- function(x, ...) {
   cat("Identical Match Share (IMS) Privacy Metric\n")
@@ -262,6 +263,7 @@ print.ims <- function(x, ...) {
 #'
 #' @param object an object of class "ims"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.ims <- function(object, ...) {
   # Analyze match multiplicities
@@ -294,6 +296,7 @@ summary.ims <- function(object, ...) {
 #'
 #' @param x an object of class "summary.ims"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.ims <- function(x, ...) {
   cat("Summary: Identical Match Share (IMS)\n")
@@ -331,6 +334,7 @@ print.summary.ims <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which which plot to show: 1 = pie chart of identical vs unique,
 #'   2 = bar chart of match counts (if any identical records exist)
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.ims <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

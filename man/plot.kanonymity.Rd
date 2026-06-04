@@ -15,6 +15,9 @@
 
 \item{which}{integer, which plot: 1 = EC size distribution, 2 = cumulative distribution}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for kanonymity objects
 }

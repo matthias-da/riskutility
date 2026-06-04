@@ -59,6 +59,11 @@
 #' rare-valued variable is more concerning than a close match on a
 #' high-entropy variable.
 #'
+#' \strong{Note:} This is the SynthEval distance-entropy variant (Lautrup et al.,
+#' 2025). It shares the name but not the definition of the probabilistic
+#' \eqn{\epsilon}-identifiability of Yoon et al. (2020, ADS-GAN); the two should
+#' not be conflated.
+#'
 #' @section Choosing epsilon:
 #' The default \code{epsilon = 0.05} is a conservative threshold. Smaller
 #' values are more strict (fewer flagged records). The appropriate threshold
@@ -262,6 +267,7 @@ epsilon_identifiability.default <- function(X, Y,
 #'
 #' @param x an object of class "epsilon_identifiability"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.epsilon_identifiability <- function(x, ...) {
   cat("Epsilon Identifiability Risk Assessment\n")
@@ -310,6 +316,7 @@ print.epsilon_identifiability <- function(x, ...) {
 #'
 #' @param object an object of class "epsilon_identifiability"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.epsilon_identifiability <- function(object, ...) {
   summ <- list(
@@ -338,6 +345,7 @@ summary.epsilon_identifiability <- function(object, ...) {
 #'
 #' @param x an object of class "summary.epsilon_identifiability"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.epsilon_identifiability <- function(x, ...) {
   cat("Summary: Epsilon Identifiability Risk Assessment\n")
@@ -382,6 +390,7 @@ print.summary.epsilon_identifiability <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which which plot(s) to show: 1 = histogram of minimum distances with
 #'   epsilon threshold line, 2 = entropy weights barplot
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.epsilon_identifiability <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

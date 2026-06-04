@@ -298,6 +298,7 @@ chisq_utility.default <- function(X,
 #' Print method for chisq_utility objects
 #' @param x an object of class "chisq_utility"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.chisq_utility <- function(x, ...) {
   cat("Chi-Square Utility Assessment\n")
@@ -333,6 +334,7 @@ print.chisq_utility <- function(x, ...) {
 #' Summary method for chisq_utility objects
 #' @param object an object of class "chisq_utility"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.chisq_utility <- function(object, ...) {
   # Calculate cell-level differences
@@ -367,6 +369,7 @@ summary.chisq_utility <- function(object, ...) {
 #' Print method for summary.chisq_utility objects
 #' @param x an object of class "summary.chisq_utility"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.chisq_utility <- function(x, ...) {
   cat("Summary: Chi-Square Utility Assessment\n")
@@ -399,6 +402,7 @@ print.summary.chisq_utility <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which integer, which plot: 1 = proportion comparison, 2 = residuals
 #' @importFrom graphics barplot plot abline par legend text
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.chisq_utility <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

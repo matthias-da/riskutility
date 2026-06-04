@@ -32,6 +32,13 @@ to which strata. If not NULL, density estimation is applied on each strata.
 It must have the same levels than strata_x and there must be observed values
 for each level.}
 }
+\value{
+An object of class \code{"denpca"}: a list with per-principal-component
+Kullback--Leibler (\code{kl}) and Jensen--Shannon (\code{jsd}) divergences and
+the mean (\code{mean_ratio}) and standard deviation (\code{sd_ratio}) of the
+density ratio. For stratified input, a list of such per-stratum objects.
+Has \code{print} and \code{plot} methods.
+}
 \description{
 Computes the density ratio between the selected principal components
 and provides entropy measures and more.

@@ -301,6 +301,7 @@ regression_fidelity.default <- function(X, Y,
 #'
 #' @param x an object of class \code{"regression_fidelity"}
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.regression_fidelity <- function(x, ...) {
   cat("Regression Fidelity - Coefficient Comparison\n")
@@ -354,6 +355,7 @@ print.regression_fidelity <- function(x, ...) {
 #'
 #' @param object an object of class \code{"regression_fidelity"}
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.regression_fidelity <- function(object, ...) {
   summ <- list(
@@ -379,6 +381,7 @@ summary.regression_fidelity <- function(object, ...) {
 #'
 #' @param x an object of class \code{"summary.regression_fidelity"}
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.regression_fidelity <- function(x, ...) {
   cat("Summary: Regression Fidelity\n")
@@ -420,6 +423,7 @@ print.summary.regression_fidelity <- function(x, ...) {
 #'   1 = forest plot comparing original and synthetic coefficients with CIs,
 #'   2 = CI overlap bar chart per coefficient
 #' @importFrom graphics abline arrows axis barplot legend mtext par plot points segments
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.regression_fidelity <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

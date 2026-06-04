@@ -17,6 +17,11 @@
 #' to which strata. If not NULL, density estimation is applied on each strata.
 #' It must have the same levels than strata_x and there must be observed values
 #' for each level.
+#' @return An object of class \code{"denpca"}: a list with per-principal-component
+#' Kullback--Leibler (\code{kl}) and Jensen--Shannon (\code{jsd}) divergences and
+#' the mean (\code{mean_ratio}) and standard deviation (\code{sd_ratio}) of the
+#' density ratio. For stratified input, a list of such per-stratum objects.
+#' Has \code{print} and \code{plot} methods.
 #' @importFrom stats princomp
 #' @importFrom stats runif
 #' @family comparison
@@ -213,7 +218,7 @@ densitydiff_pca <- function(X,
 }
 
 # Register global variables to avoid NOTE
-utils::globalVariables(c("x", "y"))
+utils::globalVariables(c("x", "y", "pc", "value", "stratum"))
 
 NULL
 
@@ -222,6 +227,7 @@ NULL
 #'
 #' @param x an object of class "denpca"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.denpca <- function(x, ...) {
   cat("Density Ratio Comparison (PCA-based)\n")
@@ -247,6 +253,45 @@ print.denpca <- function(x, ...) {
 }
 
 
+#' Summary method for denpca objects
+#'
+#' @param object an object of class "denpca"
+#' @param ... additional arguments (ignored)
+#' @return An object of class "summary.denpca".
+#' @export
+summary.denpca <- function(object, ...) {
+  if (!is.null(object$kl)) {
+    summ <- list(
+      stratified = FALSE,
+      stats = data.frame(PC = seq_along(object$kl),
+                         kl = object$kl, jsd = object$jsd,
+                         mean_ratio = object$mean_ratio,
+                         sd_ratio = object$sd_ratio)
+    )
+  } else {
+    summ <- list(stratified = TRUE, n_strata = length(object))
+  }
+  class(summ) <- "summary.denpca"
+  summ
+}
+
+#' Print method for summary.denpca objects
+#'
+#' @param x an object of class "summary.denpca"
+#' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
+#' @export
+print.summary.denpca <- function(x, ...) {
+  cat("Summary: Density Ratio Comparison (PCA-based)\n")
+  cat("=============================================\n\n")
+  if (isTRUE(x$stratified)) {
+    cat("  Stratified result with", x$n_strata, "strata\n")
+  } else {
+    print(round(x$stats, 4), row.names = FALSE)
+  }
+  invisible(x)
+}
+
 #' Plot method for denpca objects
 #'
 #' This function plots objects of class \code{denpca}.
@@ -260,102 +305,47 @@ print.denpca <- function(x, ...) {
 #' @method plot denpca
 #' @export
 plot.denpca <- function(x, y, ..., which = 1){
-  # TBD
-  is_list_of_lists <- function(obj) {
-    # Check if obj is a list
-    if (!is.list(obj)) {
-      return(FALSE)
-    }
-
-    # Check if every element of obj is a list
-    for (element in obj) {
-      if (!is.list(element)) {
-        return(FALSE)
-      }
-    }
-
-    return(TRUE)
+  which <- as.integer(which)
+  if (!all(which %in% 1:2)) {
+    stop("'which' must be 1 (KL divergence) and/or 2 (JS divergence).")
   }
 
-  show <- rep(FALSE, 2)
-  show[which] <- TRUE
+  # A denpca object stores per-principal-component divergences (kl, jsd);
+  # a stratified result is a list of such per-stratum objects.
+  stratified <- is.null(x$kl)
 
-  if(is_list_of_lists(x)){
-    if(x[[1]]$bayesspace){
-      ylab1 <- "densities (Bayes space)"
-      ylab2 <- "density ratio (Bayes space)"
-    } else {
-      lab1 <- "densities"
-      lab2 <- "density ratio"
-    }
-    extractFromList <- function(x, what){
-      df <- data.frame(sapply(x, function(x) x[[what]]))
-      colnames(df) <- levels(x[[1]]$strata_x)
-      df <- reshape2::melt(df)
-      df$what <- what
-      colnames(df)[1] <- "strata"
-      return(df)
-    }
-    appendMe <- function(dfNames) {
-      do.call(rbind, lapply(dfNames, function(x) {
-        cbind(get(x), source = x)
+  build_df <- function(obj, measure, stratum = NA_character_) {
+    vals <- obj[[measure]]
+    data.frame(
+      pc      = factor(paste0("PC", seq_along(vals)),
+                       levels = paste0("PC", seq_along(vals))),
+      value   = as.numeric(vals),
+      stratum = stratum,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  for (w in which) {
+    measure     <- if (w == 1L) "kl" else "jsd"
+    measure_lab <- if (w == 1L) "KL divergence" else "JS divergence"
+
+    if (stratified) {
+      df <- do.call(rbind, lapply(seq_along(x), function(i) {
+        build_df(x[[i]], measure, stratum = paste0("stratum ", i))
       }))
-    }
-
-    denX <- extractFromList(x, what = "denX")
-    denY <- extractFromList(x, what = "denY")
-    points <- extractFromList(x, what = "points")
-    denX$x <- points$value
-    denY$x <- points$value
-    #    den <- appendMe(c("denX", "denY"))
-    den <- rbind(denX, denY)
-    denRatio <- extractFromList(x, what = "density_ratio")
-    denRatio$x <- points$value
-
-    if(show[1L]){
-      print(ggplot(den, aes(x = x, y = value, colour = what)) +
-              geom_line() +
-              facet_wrap(~ strata) +
-              ylab(ylab2) +
-              theme_minimal() +
-              theme(legend.position="none") +
-              geom_hline(yintercept = 0, color = "grey", linetype = "dashed"))
-    }
-    if(show[2L]){
-      print(ggplot(denRatio, aes(x = x, y = value, colour = what)) +
-              geom_line() +
-              facet_wrap(~ strata) +
-              ylab(ylab2) +
-              theme_minimal() +
-              theme(legend.position="none") +
-              geom_hline(yintercept = 0, color = "grey", linetype = "dashed"))
-    }
-
-  } else {
-    if(x$bayesspace){
-      ylab1 <- "densities (Bayes space)"
-      ylab2 <- "density ratio (Bayes space)"
     } else {
-      ylab1 <- "density"
-      ylab2 <- "density ratio"
-    }
-    if(sum(show) > 1){
-      par(mfrow = c(1,2))
-    }
-    if(show[1L]){
-      plot(x = x$points, y = x$denX, type = "l", ylab = ylab1, xlab = "")
-      lines(x = x$points, y = x$denY, col = "red")
-      abline(h = 1, lty = 2, col = "gray")
-    }
-    if(show[2L]){
-      plot(x = x$points,
-           y = x$density_ratio,
-           type = "l",
-           ylab = ylab2, xlab = "")
-      abline(h = 1, lty = 2, col = "gray")
+      df <- build_df(x, measure)
     }
 
+    p <- ggplot2::ggplot(df, ggplot2::aes(x = pc, y = value)) +
+      ggplot2::geom_col(fill = "steelblue") +
+      ggplot2::xlab("principal component") +
+      ggplot2::ylab(measure_lab) +
+      ggplot2::theme_minimal()
+    if (stratified) p <- p + ggplot2::facet_wrap(~ stratum)
+    print(p)
   }
+  invisible(x)
 }
 
 

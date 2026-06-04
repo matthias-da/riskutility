@@ -290,6 +290,7 @@ ci_proximity.default <- function(X, Y,
 #'
 #' @param x an object of class "ci_proximity"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.ci_proximity <- function(x, ...) {
   cat("Confidence Interval Proximity - Statistical Inference Preservation\n")
@@ -328,6 +329,7 @@ print.ci_proximity <- function(x, ...) {
 #'
 #' @param object an object of class "ci_proximity"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.ci_proximity <- function(object, ...) {
   df <- object$per_variable
@@ -357,6 +359,7 @@ summary.ci_proximity <- function(object, ...) {
 #'
 #' @param x an object of class "summary.ci_proximity"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.ci_proximity <- function(x, ...) {
   cat("Summary: Confidence Interval Proximity\n")
@@ -390,6 +393,7 @@ print.summary.ci_proximity <- function(x, ...) {
 #' @param which integer, which plot: 1 = CI comparison plot,
 #'   2 = proximity scores bar chart, 3 = error vs overlap scatter
 #' @importFrom graphics arrows barplot par points abline legend
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.ci_proximity <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 3)

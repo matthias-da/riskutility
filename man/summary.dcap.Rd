@@ -11,6 +11,9 @@
 
 \item{...}{additional arguments passed to the summary method}
 }
+\value{
+A list of summary statistics for the corresponding object.
+}
 \description{
 Summary method for dcap objects
 }

@@ -13,6 +13,11 @@
 #' to which strata. If not NULL, density estimation is applied on each strata.
 #' It must have the same levels than strata_x and there must be observed values
 #' for each level.
+#' @return An object of class \code{"denratio"}: a list with the evaluated
+#' densities, their ratio over a grid of points, and Kullback--Leibler
+#' (\code{kl}) and Jensen--Shannon (\code{jsd}) divergence measures. For
+#' stratified input, a list of such per-stratum objects. Has \code{print} and
+#' \code{plot} methods.
 #' @family comparison
 #' @export
 #' @importFrom stats density
@@ -187,6 +192,7 @@ NULL
 #'
 #' @param x an object of class "denratio"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.denratio <- function(x, ...) {
   cat("Density Ratio Comparison (1D numeric)\n")
@@ -208,6 +214,48 @@ print.denratio <- function(x, ...) {
   invisible(x)
 }
 
+
+#' Summary method for denratio objects
+#'
+#' @param object an object of class "denratio"
+#' @param ... additional arguments (ignored)
+#' @return An object of class "summary.denratio".
+#' @export
+summary.denratio <- function(object, ...) {
+  if (is.list(object) && !is.null(object$kl)) {
+    summ <- list(
+      stratified = FALSE,
+      bayesspace = object$bayesspace,
+      stats = data.frame(kl = object$kl, jsd = object$jsd,
+                         mean_ratio = object$mean_ratio,
+                         sd_ratio = object$sd_ratio)
+    )
+  } else {
+    summ <- list(
+      stratified = TRUE,
+      stats = data.frame(
+        stratum = seq_along(object),
+        kl  = vapply(object, function(s) s$kl[1], numeric(1)),
+        jsd = vapply(object, function(s) s$jsd[1], numeric(1)))
+    )
+  }
+  class(summ) <- "summary.denratio"
+  summ
+}
+
+#' Print method for summary.denratio objects
+#'
+#' @param x an object of class "summary.denratio"
+#' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
+#' @export
+print.summary.denratio <- function(x, ...) {
+  cat("Summary: Density Ratio Comparison (1D numeric)\n")
+  cat("==============================================\n\n")
+  if (!x$stratified) cat("  Bayes space:", x$bayesspace, "\n")
+  print(round(x$stats, 4), row.names = FALSE)
+  invisible(x)
+}
 
 #' Plot method for denratio objects
 #'
@@ -247,8 +295,8 @@ plot.denratio <- function(x, y, ..., which = 1){
       ylab1 <- "densities (Bayes space)"
       ylab2 <- "density ratio (Bayes space)"
     } else {
-      lab1 <- "densities"
-      lab2 <- "density ratio"
+      ylab1 <- "densities"
+      ylab2 <- "density ratio"
     }
     extractFromList <- function(x, what){
       df <- data.frame(sapply(x, function(x) x[[what]]))

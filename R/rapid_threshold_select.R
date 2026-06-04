@@ -256,6 +256,7 @@ summary.rapid_threshold <- function(object, ...) {
 #'
 #' @param x an object of class "summary.rapid_threshold"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.rapid_threshold <- function(x, ...) {
   cat("Summary: RAPID Threshold Selection\n")

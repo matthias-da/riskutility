@@ -337,6 +337,7 @@ disco.default <- function(X, Y,
 #'
 #' @param x an object of class "disco"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.disco <- function(x, ...) {
   cat("Disclosive in Synthetic Correct Original (DiSCO)\n")
@@ -383,6 +384,7 @@ print.disco <- function(x, ...) {
 #'
 #' @param object an object of class "disco"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.disco <- function(object, ...) {
   # Count how many original records are matched by DiSCO records
@@ -427,6 +429,7 @@ summary.disco <- function(object, ...) {
 #'
 #' @param x an object of class "summary.disco"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.disco <- function(x, ...) {
   cat("Summary: Disclosive in Synthetic Correct Original (DiSCO)\n")
@@ -479,6 +482,7 @@ print.summary.disco <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which which plot(s) to show: 1 = DiSCO vs non-DiSCO bar chart,
 #'   2 = comparison with baseline, 3 = comparison of both methods
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.disco <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 3)

@@ -392,6 +392,7 @@ mmd.default <- function(X, Y,
 #'
 #' @param x an object of class \code{"mmd"}
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.mmd <- function(x, ...) {
   cat("Maximum Mean Discrepancy (MMD)\n")
@@ -440,6 +441,7 @@ print.mmd <- function(x, ...) {
 #'
 #' @param object an object of class \code{"mmd"}
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.mmd <- function(object, ...) {
   summ <- list(
@@ -468,6 +470,7 @@ summary.mmd <- function(object, ...) {
 #'
 #' @param x an object of class \code{"summary.mmd"}
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.mmd <- function(x, ...) {
   cat("Summary: Maximum Mean Discrepancy (MMD)\n")
@@ -506,6 +509,7 @@ print.summary.mmd <- function(x, ...) {
 #' @param which integer, which plot: 1 = permutation null distribution histogram
 #'   (requires \code{n_perm} to have been set)
 #' @importFrom graphics hist abline legend
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.mmd <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 1)

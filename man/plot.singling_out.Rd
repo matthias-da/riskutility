@@ -16,6 +16,9 @@
 \item{which}{which plot(s) to show: 1 = Risk comparison barplot (attack vs control),
 2 = Match count distribution histogram}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for singling_out objects
 }

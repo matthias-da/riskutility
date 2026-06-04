@@ -45,23 +45,21 @@ Supported methods include:
 Both \code{X} and \code{Y} should be numeric data frames or matrices with the same structure.
 }
 \examples{
-\dontrun{
-  set.seed(123)
-  X <- data.frame(a = c(rnorm(95), rep(NA, 5)), b = c(rnorm(90), rep(NA, 10)))
-  Y <- data.frame(a = c(rnorm(95), rep(NA, 5)), b = c(rnorm(90), rep(NA, 10)))
+set.seed(123)
+X <- data.frame(a = c(rnorm(95), rep(NA, 5)), b = c(rnorm(90), rep(NA, 10)))
+Y <- data.frame(a = c(rnorm(95), rep(NA, 5)), b = c(rnorm(90), rep(NA, 10)))
 
-  # Compare missing value percentages
-  res_pct <- compare_missing_values(X, Y, method = "percentage")
-  print(res_pct)
-  summary(res_pct)
-  plot(res_pct)
+# Compare missing value percentages
+res_pct <- compare_missing_values(X, Y, method = "percentage")
+print(res_pct)
+summary(res_pct)
+\donttest{plot(res_pct)}
 
-  # Compare missing value patterns
-  res_pat <- compare_missing_values(X, Y, method = "pattern")
-  print(res_pat)
-  summary(res_pat)
-  plot(res_pat)
-}
+# Compare missing value patterns
+res_pat <- compare_missing_values(X, Y, method = "pattern")
+print(res_pat)
+summary(res_pat)
+\donttest{plot(res_pat)}
 
 }
 \seealso{

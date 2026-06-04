@@ -21,6 +21,9 @@
 \item 4: Histogram comparison
 }}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for pMSE objects
 }

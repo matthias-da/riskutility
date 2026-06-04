@@ -16,6 +16,9 @@
 \item{which}{integer, which plot: 1 = bar chart of Hellinger distances,
 2 = dotchart sorted by distance}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for hellinger objects
 }

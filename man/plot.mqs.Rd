@@ -16,6 +16,9 @@
 \item{which}{integer, which plot: 1 = grouped bar chart of per-model
 performance, 2 = MQS ratio dot plot}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Visualizes the model performance comparison between original (X) and
 synthetic (Y) data.

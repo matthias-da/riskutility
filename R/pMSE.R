@@ -498,6 +498,7 @@ interpret_pMSE <- function(pMSE_ratio, S_pMSE, SPECKS, PO50) {
 #'
 #' @param x an object of class "pMSE"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.pMSE <- function(x, ...) {
   cat("Propensity Score Mean Squared Error (pMSE) Utility\n")
@@ -540,6 +541,7 @@ print.pMSE <- function(x, ...) {
 #'
 #' @param object an object of class "pMSE"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.pMSE <- function(object, ...) {
   prop_orig <- object$propensity_original
@@ -589,6 +591,7 @@ summary.pMSE <- function(object, ...) {
 #'
 #' @param x an object of class "summary.pMSE"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.pMSE <- function(x, ...) {
   cat("Summary: Propensity Score Mean Squared Error (pMSE)\n")
@@ -646,6 +649,7 @@ print.summary.pMSE <- function(x, ...) {
 #' @importFrom graphics hist lines legend abline par boxplot
 #' @importFrom stats density ecdf
 #' @importFrom grDevices adjustcolor
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.pMSE <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 4)

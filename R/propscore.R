@@ -499,6 +499,7 @@ propscore.default <- function(X, Y,
 #'
 #' @param x an object of class "propscore"
 #' @param ... additional arguments passed to the print method
+#' @return The input object, invisibly.
 #' @export
 print.propscore <- function(x, ...){
   cat("mean propensity scores for x: ", x$mean_ps_x)
@@ -561,6 +562,7 @@ summary.propscore <- function(object, ...) {
 #'
 #' @param x an object of class "summary.propscore"
 #' @param ... additional arguments passed to the print method
+#' @return The input object, invisibly.
 #' @export
 print.summary.propscore <- function(x, ...) {
   cat("Propensity Score Utility Summary\n")
@@ -609,6 +611,7 @@ print.summary.propscore <- function(x, ...) {
 #' @param which which plot to show: 1 for density, 2 for density ratio,
 #' 3 for proximity structure (ranger only), 4 for variable importance
 #' (ranger only)
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.propscore <- function(x, y = NULL, ..., which = 1){
 

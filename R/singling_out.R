@@ -328,6 +328,7 @@ singling_out.default <- function(X, Y,
 #'
 #' @param x an object of class "singling_out"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.singling_out <- function(x, ...) {
   cat("Singling Out Risk Assessment\n")
@@ -368,6 +369,7 @@ print.singling_out <- function(x, ...) {
 #'
 #' @param object an object of class "singling_out"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.singling_out <- function(object, ...) {
   # Match count distribution
@@ -413,6 +415,7 @@ summary.singling_out <- function(object, ...) {
 #'
 #' @param x an object of class "summary.singling_out"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.singling_out <- function(x, ...) {
   cat("Summary: Singling Out Risk Assessment\n")
@@ -458,6 +461,7 @@ print.summary.singling_out <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which which plot(s) to show: 1 = Risk comparison barplot (attack vs control),
 #'   2 = Match count distribution histogram
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.singling_out <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

@@ -55,7 +55,10 @@ NULL
 
 #' @rdname Entropy
 KLDiv <- function(A, B) {
-  sum(A * log(A / B))
+  # Apply the 0 * log(0 / B) = 0 convention; without it, zero entries in A
+  # produce NaN (0 * -Inf) and propagate into JSDiv().
+  idx <- A > 0
+  sum(A[idx] * log(A[idx] / B[idx]))
 }
 
 #' @rdname Entropy

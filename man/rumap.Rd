@@ -25,6 +25,7 @@ rumap(X, ...)
   normalize = TRUE,
   seed = NULL,
   na.rm = TRUE,
+  Y = NULL,
   ...
 )
 }
@@ -33,8 +34,7 @@ rumap(X, ...)
 
 \item{...}{additional arguments passed to methods}
 
-\item{synthetic}{A data.frame or named list of data.frames containing synthetic dataset(s).
-If a named list, each element is treated as a different synthetic data generator (SDG).}
+\item{synthetic}{A data.frame or named list of data.frames containing synthetic dataset(s).}
 
 \item{risk_measures}{Character vector of risk measures to compute. Options:
 "dcap", "tcap", "disco", "ims", "repu", "dcr", "nndr", "rapid", "rf_privacy".
@@ -67,6 +67,11 @@ If NULL, auto-detected.}
 \item{seed}{Integer, random seed for reproducibility.}
 
 \item{na.rm}{Logical, whether to remove NA values. Default TRUE.}
+
+\item{Y}{Alias for \code{synthetic}, for naming consistency with other
+measures in the package. If \code{synthetic} is not supplied but \code{Y}
+is, \code{Y} is used.
+If a named list, each element is treated as a different synthetic data generator (SDG).}
 }
 \value{
 An object of class "rumap" containing:
@@ -149,7 +154,7 @@ synth_poor <- data.frame(
 
 # Compare multiple SDGs
 result <- rumap(
-  original = original,
+  X = original,
   synthetic = list(good_sdg = synth_good, poor_sdg = synth_poor),
   key_vars = c("age", "gender", "region"),
   target_var = "income",

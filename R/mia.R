@@ -100,6 +100,11 @@
 #' @param synt_data data.frame. Synthetic records produced by the generator.
 #' @param hout_data data.frame. Holdout records from the same population,
 #'   NOT used to train the generator.
+#' @param Y Alias for \code{synt_data}, for naming consistency with the rest of
+#'   the package. If \code{synt_data} is \code{NULL} and \code{Y} is supplied,
+#'   \code{Y} is used.
+#' @param holdout Alias for \code{hout_data}. If \code{hout_data} is \code{NULL}
+#'   and \code{holdout} is supplied, \code{holdout} is used.
 #' @param cols character vector of column names to use (optional). If NULL, all common
 #' @param cat_cols  character vector of categorical column names (optional).
 #'   If NULL, inferred as non-numeric columns.
@@ -162,8 +167,8 @@ mia_classifier.synth_pair <- function(X, ...) {
 #' @rdname mia_classifier
 #' @export
 mia_classifier.default <- function(X,
-                           synt_data,
-                           hout_data,
+                           synt_data     = NULL,
+                           hout_data     = NULL,
                            cols          = NULL,
                            cat_cols      = NULL,
                            num_cols      = NULL,
@@ -172,7 +177,18 @@ mia_classifier.default <- function(X,
                            seed          = NULL,
                            num_trees     = 300L,
                            num_threads   = 1L,
+                           Y             = NULL,
+                           holdout       = NULL,
                            ...) {
+
+  # Accept the package-wide names 'Y' (synthetic) and 'holdout' as aliases for
+  # the local 'synt_data' / 'hout_data'. The original names remain valid.
+  if (is.null(synt_data) && !is.null(Y))       synt_data <- Y
+  if (is.null(hout_data) && !is.null(holdout)) hout_data <- holdout
+  if (is.null(synt_data) || is.null(hout_data)) {
+    stop("Provide synthetic data (via 'Y' or 'synt_data') and holdout data ",
+         "(via 'holdout' or 'hout_data').", call. = FALSE)
+  }
 
   real_data <- X
 
@@ -433,6 +449,7 @@ mia_classifier.default <- function(X,
 #'
 #' @param x an object of class "mia"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.mia <- function(x, ...) {
   cat("Membership Inference Attack (MIA) Results\n")
@@ -487,6 +504,7 @@ summary.mia <- function(object, ...) {
 #'
 #' @param x an object of class "summary.mia"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.mia <- function(x, ...) {
   cat("Summary: Membership Inference Attack (MIA)\n")
@@ -523,6 +541,7 @@ print.summary.mia <- function(x, ...) {
 #' @param y not used
 #' @param ... additional arguments (ignored)
 #' @param which integer, which plot: 1 = metric barplot (default)
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 #' @importFrom graphics barplot arrows
 plot.mia <- function(x, y = NULL, ..., which = 1) {

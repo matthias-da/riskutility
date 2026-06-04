@@ -38,7 +38,7 @@ test_that("ldiversity returns correct S3 class", {
   data <- make_test_data()
   result <- ldiversity(data, key_vars = c("age", "gender"),
                        sensitive_var = "disease")
-  expect_s3_class(result, "ldiversity")
+  expect_s3_class(result, "ldiversityRisk")
 })
 
 test_that("ldiversity result has expected fields", {
@@ -196,7 +196,7 @@ test_that("ldiversity errors when all cases have NAs", {
 test_that("ldiversity works with single key variable", {
   data <- make_test_data()
   result <- ldiversity(data, key_vars = "age", sensitive_var = "disease")
-  expect_s3_class(result, "ldiversity")
+  expect_s3_class(result, "ldiversityRisk")
   expect_equal(result$n_records, 100)
 })
 
@@ -204,7 +204,7 @@ test_that("ldiversity works with many key variables", {
   data <- make_test_data()
   result <- ldiversity(data, key_vars = c("age", "gender", "region"),
                        sensitive_var = "disease")
-  expect_s3_class(result, "ldiversity")
+  expect_s3_class(result, "ldiversityRisk")
 })
 
 test_that("ldiversity handles single EC", {
@@ -254,7 +254,7 @@ test_that("ldiversity works with synth_pair objects (default = synthetic)", {
                      target_var = "income")
 
   result <- ldiversity(pair)
-  expect_s3_class(result, "ldiversity")
+  expect_s3_class(result, "ldiversityRisk")
   expect_equal(result$sensitive_var, "income")
   expect_equal(result$n_records, 50)
 })
@@ -311,7 +311,7 @@ test_that("summary.ldiversity returns correct class", {
   result <- ldiversity(data, key_vars = c("age", "gender"),
                        sensitive_var = "disease")
   s <- summary(result)
-  expect_s3_class(s, "summary.ldiversity")
+  expect_s3_class(s, "summary.ldiversityRisk")
   expect_true(is.data.frame(s$ec_summary))
   expect_true(is.data.frame(s$worst_ec))
 })

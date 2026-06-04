@@ -1,36 +1,55 @@
 # riskutility 0.1.0
 
-* Initial CRAN submission
+Initial release: a comprehensive framework for measuring disclosure risk and
+data utility of anonymized and synthetic data. All measures share a consistent
+S3 API (`print()`, `summary()`, `plot()`) and feed a multivariate Risk-Utility
+(R-U) map.
 
-## Disclosure Risk Metrics
+## Disclosure risk
 
-* `dcap()`: Differential Correct Attribution Probability
-* `tcap()`: Targeted Correct Attribution Probability with risk categories
-* `weap()`: Within Equivalence Class Attribution Probability
-* `disco()`: Disclosive in Synthetic Correct Original
-* `dcr()`: Distance to Closest Record
-* `nndr()`: Nearest Neighbor Distance Ratio
-* `ims()`: Identical Match Share
-* `repu()`: Replicated Uniques
-* `disclosure_report()`: Comprehensive disclosure risk report
+* **Attribution-based (CAP family):** `dcap()` (reports both the raw mean CAP and
+  the differential CAP = mean CAP minus baseline), `tcap()`, `weap()`, `disco()`.
+* **ML-based:** `rapid()` (Risk of Attribute Prediction-Induced Disclosure;
+  random-forest default, also `lm`/`cart`/`gbm`/`logit`) with `confint()`,
+  permutation test, threshold selection, synthesizer cross-validation, and six
+  plot types.
+* **Distance-based (holdout):** `dcr()`, `nndr()`, `ims()`, `repu()`, including the
+  DCR-Delusion caveat and null-distribution diagnostics.
+* **Membership inference:** `domias()`, `nnaa()`, `mia_classifier()`.
+* **Classical SDC privacy models:** `kanonymity()`, `ldiversity()`
+  (distinct/entropy/recursive), `tcloseness()` (EMD), `suda()`,
+  `individual_risk()`, `population_uniqueness()` (Pitman/Zayatz/SNB),
+  `epsilon_identifiability()`, `delta_presence()`, `hitting_rate()`,
+  `singling_out()`, `linkability()`, `attacker_risk()`
+  (prosecutor/journalist/marketer), `drisk()`.
+* **Record linkage:** `recordLinkage()` with deterministic, probabilistic
+  (Fellegi-Sunter), PRAM, predictive, random-forest, RBRL, robust-Mahalanobis,
+  and embedding (autoencoder) methods; independent, bijective (Hungarian / GDBRL),
+  and optimal-transport (Sinkhorn) matching; blocking and per-record accessors.
+* **Reporting:** `disclosure_report()` produces a comprehensive multi-metric report.
 
-## Utility Metrics
+## Data utility
 
-* `propscore()`: Propensity score utility measure
-* Distribution comparison functions: `compare_distributions_cont()`,
-  `compare_histograms()`, `compare_boxplots()`, etc.
-* Statistical tests: `compare_ks_test()`, `compare_chisq_gof()`,
-  `compare_wasserstein()`
-* Multivariate comparisons: `compare_correlation_matrices()`,
-  `compare_pca()`, `compare_embedding()`
+* Propensity-score utility: `propscore()`, `pMSE()`, `specks()`.
+* Global / interval: `gower()`, `mqs()`, `ci_overlap()`, `ci_proximity()`.
+* Distributional and structural: `compare_wasserstein()`, `compare_ks_test()`,
+  `compare_chisq_gof()`, `compare_pca()`, `compare_embedding()`,
+  `compare_correlation_matrices()`, `hellinger()`, `energy_distance()`, `mmd()`,
+  `copula_fidelity()`, `tail_fidelity()`, `contingency_fidelity()`.
+* Downstream / model-based: `tstr()` (train on synthetic, test on real),
+  `compare_feature_importance()`, `compare_model_performance()`,
+  `regression_fidelity()`, `subgroup_utility()`.
+* Information-theoretic: `KLDiv()`, `JSDiv()`, `CrossEntropy()`, entropy and
+  mutual-information helpers, `privacy_score()`.
 
-## Information-Theoretic Measures
+## Multivariate Risk-Utility map
 
-* Entropy functions: `KLDiv()`, `JSDiv()`, `MaxEntropy()`, `MinEntropy()`, etc.
-* `mutualInformation()`: Mutual information between variables
-* `privacy_score()`: Overall privacy composite score
+* `rumap()`: normalized multivariate R-U evaluation with Pareto-frontier
+  identification, internal-consistency metrics, and seven visualizations
+  (scatter, heatmap, dot plot, parallel coordinates, radial, PCA biplot,
+  blockwise PCA).
 
-## S3 Methods
+## Integration
 
-* All major functions return S3 objects with `print()`, `summary()`, and
-  `plot()` methods for consistent user experience
+* `synth_pair()` container plus `from_synthpop()` and `from_simPop()` converters;
+  most measures dispatch on `synth_pair` objects as well as plain data frames.

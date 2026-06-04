@@ -94,8 +94,8 @@ result_bad <- ims(X, Y_bad)
 print(result_bad)
 }
 \references{
-MOSTLY AI (2024). Evaluate generator quality.
-\url{https://docs.mostly.ai/generators/evaluate-quality}
+MOSTLY AI (2024). Synthetic data quality assurance.
+\url{https://mostly.ai/}
 }
 \seealso{
 \code{\link{dcr}} for distance to closest record,

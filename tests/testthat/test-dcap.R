@@ -13,9 +13,10 @@ test_that("dcap returns correct S3 class structure", {
   result <- dcap(X, Y, key_vars = c("age", "gender"), target_var = "income")
 
   expect_s3_class(result, "dcap")
-  expect_named(result, c("cap_scores", "n_matches", "dcap", "dcap_median",
-                         "n_matched", "n_unmatched", "n_total", "baseline",
-                         "key_vars", "target_var", "method", "gower_threshold"))
+  expect_named(result, c("cap_scores", "n_matches", "cap", "cap_median",
+                         "dcap", "dcap_median", "n_matched", "n_unmatched",
+                         "n_total", "baseline", "key_vars", "target_var",
+                         "method", "gower_threshold"))
 })
 
 test_that("dcap values are in valid range [0, 1]", {
@@ -30,7 +31,7 @@ test_that("dcap values are in valid range [0, 1]", {
 
   result <- dcap(X, Y, key_vars = c("age", "gender"), target_var = "income")
 
-  expect_true(result$dcap >= 0 && result$dcap <= 1)
+  expect_true(result$cap >= 0 && result$cap <= 1)
   expect_true(result$baseline >= 0 && result$baseline <= 1)
   expect_true(all(result$cap_scores[!is.na(result$cap_scores)] >= 0))
   expect_true(all(result$cap_scores[!is.na(result$cap_scores)] <= 1))

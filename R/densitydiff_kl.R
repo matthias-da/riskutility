@@ -115,9 +115,12 @@ densitydiff_kl_num <- function(X, Y, stepsize = 1000) {
     if (!requireNamespace("misc3d", quietly = TRUE)) {
       stop("Package 'misc3d' is required for 3D kernel density estimation. Please install it.")
     }
-    dX <- misc3d::kde3d(x = X[, 1], y = X[, 2], z = X[, 3])
-    dY <- misc3d::kde3d(x = Y[, 1], y = Y[, 2], z = Y[, 3])
-    return(sum(dX$d * log(dX$d / dY$d)))
+    # Evaluate both densities on a common grid so the element-wise KL sum is
+    # valid (mirrors the bivariate branch above).
+    lims <- c(range(X[, 1], Y[, 1]), range(X[, 2], Y[, 2]), range(X[, 3], Y[, 3]))
+    dX <- misc3d::kde3d(x = X[, 1], y = X[, 2], z = X[, 3], lims = lims, n = 20)
+    dY <- misc3d::kde3d(x = Y[, 1], y = Y[, 2], z = Y[, 3], lims = lims, n = 20)
+    return(sum(dX$d * log(dX$d / dY$d), na.rm = TRUE))
   }
   # >3 variate
   if(ncol(X) > 3){

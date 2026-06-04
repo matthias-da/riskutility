@@ -16,6 +16,9 @@
 \item{which}{integer, which plot: 1 = CI comparison plot,
 2 = proximity scores bar chart, 3 = error vs overlap scatter}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for ci_proximity objects
 }

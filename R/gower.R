@@ -1,8 +1,20 @@
 #' Gower distance between two data frames
 #'
-#' Average (per observation) Gower distance between an original and a
-#' synthetic/anonymized data frame.  Returns an S3 object of class
-#' \code{"gower"} with print, summary, and plot methods.
+#' Mean per-observation Gower distance between an original data frame and a
+#' \emph{row-corresponding} anonymized version (e.g. a perturbative method such
+#' as noise addition, microaggregation, or rank swapping, where record \eqn{i}
+#' of the anonymized data corresponds to record \eqn{i} of the original).
+#' Returns an S3 object of class \code{"gower"} with print, summary, and plot
+#' methods.
+#'
+#' @details The two data frames must have the same number of rows; rows are
+#' compared pairwise, so the reported \code{gower_distance} is
+#' \eqn{\frac{1}{n}\sum_{i=1}^{n} d_G(X_i, Y_i)}, the mean Gower distance between
+#' corresponding records, in \eqn{[0, 1]}. Identical data therefore yields
+#' distance \code{0} and \code{utility_score} \code{1}. This measure assumes
+#' record correspondence (perturbative anonymization); for fully synthetic data
+#' without such correspondence use a distributional measure such as
+#' \code{\link{energy_distance}}, \code{\link{mmd}}, or \code{compare_wasserstein}.
 #'
 #' @param X data frame (or a \code{synth_pair} object)
 #' @param Y data frame
@@ -61,8 +73,16 @@ gower.synth_pair <- function(X, ...) {
 #' @rdname gower
 #' @export
 gower.default <- function(X, Y, ...){
+  if (nrow(X) != nrow(Y)) {
+    stop("gower() compares row-corresponding data frames; X and Y must have ",
+         "the same number of rows. For synthetic data without record ",
+         "correspondence, use energy_distance(), mmd(), or compare_wasserstein().")
+  }
+  # Pairwise (diagonal) Gower distance: record i of X vs record i of Y.
+  # gowerD() returns the full n x n cross-distance matrix; the diagonal holds
+  # the corresponding-record distances, whose mean is the per-observation loss.
   gd <- VIM::gowerD(X, Y)
-  avg_distance <- sum(abs(gd)) / nrow(X)
+  avg_distance <- mean(diag(as.matrix(gd)))
 
   nr <- nrow(X)
   nv <- ncol(X)
@@ -83,6 +103,7 @@ gower.default <- function(X, Y, ...){
 #'
 #' @param x an object of class "gower"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.gower <- function(x, ...) {
   cat("Average Gower Distance:", round(x$gower_distance, 6), "\n")
@@ -115,6 +136,7 @@ summary.gower <- function(object, ...) {
 #'
 #' @param x an object of class "summary.gower"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.gower <- function(x, ...) {
   cat("Summary: Average Gower Distance\n")
@@ -137,6 +159,7 @@ print.summary.gower <- function(x, ...) {
 #' @param ... additional arguments passed to \code{\link[graphics]{barplot}}
 #' @param which integer, which plot: 1 = bar chart of distance and utility score
 #' @importFrom graphics barplot abline axis mtext
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.gower <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 1)

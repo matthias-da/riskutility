@@ -65,8 +65,8 @@
 #'   \code{\link{nnaa}} for nearest-neighbor adversarial accuracy
 #'
 #' @references
-#' MOSTLY AI (2024). Evaluate generator quality.
-#' \url{https://docs.mostly.ai/generators/evaluate-quality}
+#' MOSTLY AI (2024). Synthetic data quality assurance.
+#' \url{https://mostly.ai/}
 #'
 #' Lowe, D.G. (2004). Distinctive Image Features from Scale-Invariant Keypoints.
 #' \emph{International Journal of Computer Vision}, 60(2), 91-110.
@@ -159,7 +159,14 @@ nndr.default <- function(X, Y,
       d1 <- dists[1]  # Distance to nearest
       d2 <- dists[2]  # Distance to 2nd nearest
 
-      if (is.na(d2) || d2 == 0) {
+      if (is.na(d1)) {
+        nndr_vals[i] <- NA
+      } else if (d1 == 0) {
+        # Exact match to a real record (possibly with a duplicate, d1 = d2 = 0):
+        # maximally suspicious memorization. Must precede the d2 == 0 guard,
+        # otherwise the clearest copies were silently dropped as NA.
+        nndr_vals[i] <- 0
+      } else if (is.na(d2) || d2 == 0) {
         nndr_vals[i] <- NA
       } else {
         nndr_vals[i] <- d1 / d2
@@ -278,6 +285,7 @@ nndr.default <- function(X, Y,
 #'
 #' @param x an object of class "nndr"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.nndr <- function(x, ...) {
  cat("Nearest Neighbor Distance Ratio (NNDR) Privacy Metric\n")
@@ -318,6 +326,7 @@ print.nndr <- function(x, ...) {
 #'
 #' @param object an object of class "nndr"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.nndr <- function(object, ...) {
   nndr_train <- object$nndr_train[!is.na(object$nndr_train)]
@@ -354,6 +363,7 @@ summary.nndr <- function(object, ...) {
 #'
 #' @param x an object of class "summary.nndr"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.nndr <- function(x, ...) {
   cat("Summary: Nearest Neighbor Distance Ratio (NNDR)\n")
@@ -399,6 +409,7 @@ print.summary.nndr <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which which plot(s) to show: 1 = overlaid histograms, 2 = boxplot
 #'   comparison, 3 = cumulative distribution comparison
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.nndr <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 3)

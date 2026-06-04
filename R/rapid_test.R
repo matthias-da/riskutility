@@ -232,6 +232,7 @@ summary.rapid_test <- function(object, ...) {
 #'
 #' @param x an object of class "summary.rapid_test"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.rapid_test <- function(x, ...) {
   cat("Summary: RAPID Permutation Test\n")

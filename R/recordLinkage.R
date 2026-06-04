@@ -238,6 +238,11 @@
 #' @param X data.frame or \code{\link{synth_pair}} object. Original microdata.
 #' @param x_anon data.frame. Perturbed/anonymized microdata.
 #' @param key character. Names of quasi-identifier variables used for linkage.
+#' @param Y Alias for \code{x_anon}, for naming consistency with the rest of the
+#'   package. If \code{x_anon} is not supplied but \code{Y} is, \code{Y} is used.
+#' @param key_vars Alias for \code{key}, matching the name used by
+#'   \code{\link{synth_pair}} and \code{\link{rumap}}. If \code{key} is not
+#'   supplied but \code{key_vars} is, \code{key_vars} is used.
 #' @param method character. Linkage method: \code{"deterministic"} (default),
 #'   \code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
 #'   \code{"predictive"} (propensity-score-based), \code{"rf"}
@@ -574,7 +579,20 @@ recordLinkage.default <- function(X,
                                   emb_latent_dim = NULL,
                                   emb_epochs = 50L,
                                   emb_global = FALSE,
+                                  Y = NULL,
+                                  key_vars = NULL,
                                   ...) {
+
+    # Accept the package-wide names 'Y' (comparison/anonymized data) and
+    # 'key_vars' as aliases for the local 'x_anon' / 'key'. The original
+    # names remain valid (including positionally).
+    if (missing(x_anon) && !is.null(Y))        x_anon <- Y
+    if (missing(key)    && !is.null(key_vars)) key    <- key_vars
+    if (missing(x_anon))
+        stop("Provide the comparison data via 'Y' or 'x_anon'.", call. = FALSE)
+    if (missing(key))
+        stop("Provide the linkage key variables via 'key_vars' or 'key'.",
+             call. = FALSE)
 
     method <- match.arg(method)
     direction <- match.arg(direction)
@@ -2499,6 +2517,7 @@ print.inspect_record <- function(x, ...) {
 #'
 #' @param x object of class \code{"recordLinkageRisk"}.
 #' @param ... ignored.
+#' @return The input object, invisibly.
 #' @export
 print.recordLinkageRisk <- function(x, ...) {
     if (!is.list(x) || is.null(x$overall) || is.null(x$settings)) {
@@ -2584,6 +2603,7 @@ print.recordLinkageRisk <- function(x, ...) {
 #'
 #' @param object object of class \code{"recordLinkageRisk"}.
 #' @param ... ignored.
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.recordLinkageRisk <- function(object, ...) {
     risk <- object$per_record$risk
@@ -2662,6 +2682,7 @@ summary.recordLinkageRisk <- function(object, ...) {
 #'
 #' @param x object of class \code{"summary.recordLinkageRisk"}.
 #' @param ... ignored.
+#' @return The input object, invisibly.
 #' @export
 print.summary.recordLinkageRisk <- function(x, ...) {
     dir <- if (is.null(x$direction)) "forward" else x$direction
@@ -2771,6 +2792,7 @@ print.summary.recordLinkageRisk <- function(x, ...) {
 #'   for \code{which = 7}.
 #' @param data optional data frame for extracting \code{group} column.
 #' @importFrom graphics hist abline legend par plot plot.new points text barplot lines polygon segments axis box
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1,
                                     group = NULL, data = NULL) {

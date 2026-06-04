@@ -6,6 +6,9 @@
 #'
 #' @param X A synth_pair object, or a data.frame containing the original dataset.
 #' @param synthetic A data.frame or named list of data.frames containing synthetic dataset(s).
+#' @param Y Alias for \code{synthetic}, for naming consistency with other
+#'   measures in the package. If \code{synthetic} is not supplied but \code{Y}
+#'   is, \code{Y} is used.
 #'   If a named list, each element is treated as a different synthetic data generator (SDG).
 #' @param risk_measures Character vector of risk measures to compute. Options:
 #'   "dcap", "tcap", "disco", "ims", "repu", "dcr", "nndr", "rapid", "rf_privacy".
@@ -117,7 +120,7 @@
 #'
 #' # Compare multiple SDGs
 #' result <- rumap(
-#'   original = original,
+#'   X = original,
 #'   synthetic = list(good_sdg = synth_good, poor_sdg = synth_poor),
 #'   key_vars = c("age", "gender", "region"),
 #'   target_var = "income",
@@ -164,7 +167,12 @@ rumap.default <- function(X,
                   num_vars = NULL,
                   normalize = TRUE,
                   seed = NULL,
-                  na.rm = TRUE, ...) {
+                  na.rm = TRUE,
+                  Y = NULL, ...) {
+
+  # Accept 'Y' as a package-wide alias for 'synthetic'. The original name
+  # remains valid (including positionally).
+  if (missing(synthetic) && !is.null(Y)) synthetic <- Y
 
   original <- X
 
@@ -275,7 +283,9 @@ rumap.default <- function(X,
     if ("dcap" %in% risk_measures) {
       tryCatch({
         res <- dcap(original, Y, key_vars = key_vars, target_var = target_var)
-        risk_results[i, "dcap"] <- res$dcap
+        # Use the raw mean CAP (absolute attribution probability in [0,1]) as the
+        # risk score; res$dcap is now the differential CAP (cap - baseline).
+        risk_results[i, "dcap"] <- res$cap
       }, error = function(e) {
         warning(paste("dcap failed for", sdg_name, ":", e$message))
         risk_results[i, "dcap"] <<- NA
@@ -646,6 +656,7 @@ identify_pareto <- function(risk, utility) {
 #'
 #' @param x an object of class "rumap"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.rumap <- function(x, ...) {
   cat("Multivariate Risk-Utility Map (RU-Map)\n")
@@ -676,6 +687,7 @@ print.rumap <- function(x, ...) {
 #'
 #' @param object an object of class "rumap"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.rumap <- function(object, ...) {
   # Compute internal consistency metrics
@@ -719,6 +731,7 @@ summary.rumap <- function(object, ...) {
 #'
 #' @param x an object of class "summary.rumap"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.rumap <- function(x, ...) {
   cat("Summary: Multivariate Risk-Utility Map\n")

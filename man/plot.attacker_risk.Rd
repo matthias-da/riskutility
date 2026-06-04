@@ -17,6 +17,9 @@
 1 = Per-record risk distribution (histogram),
 2 = Comparison across models (barplot of global risks)}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for attacker_risk objects
 }

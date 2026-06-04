@@ -14,7 +14,10 @@
 \item{which}{A character string specifying the type of plot to generate.
 Options include \code{"ecdf"}, \code{"density"}, \code{"density_bayes"},
 \code{"density_ratio"}, and \code{"density_ratio_bayes"}.
-Default is \code{"ecdf"}.}
+Default is \code{"ecdf"}. Unlike the integer \code{which} used by most
+\code{plot} methods in this package, a character string is used here on
+purpose: each option names a conceptually distinct diagnostic rather than an
+interchangeable panel index, so a descriptive label is clearer than a number.}
 
 \item{interactive}{A logical value indicating whether to produce an
 interactive plot using \code{plotly}. Default is \code{FALSE}.}
@@ -53,7 +56,7 @@ U <- data.frame(
 )
 
 # Compare ECDFs for age and income
-result <- compare_distributions_cont(S, U, variables = c("age", "income"), weights = "weights")
+result <- compare_distributions_cont(S, U, vars = c("age", "income"), weights = "weights")
 
 # Plot the ECDF
 plot(result)

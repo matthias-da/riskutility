@@ -187,6 +187,7 @@ weap.default <- function(X,
 #'
 #' @param x an object of class "weap"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.weap <- function(x, ...) {
   cat("Within Equivalence Class Attribution Probability (WEAP)\n")
@@ -219,6 +220,7 @@ print.weap <- function(x, ...) {
 #'
 #' @param object an object of class "weap"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.weap <- function(object, ...) {
   scores <- object$weap_scores
@@ -252,6 +254,7 @@ summary.weap <- function(object, ...) {
 #'
 #' @param x an object of class "summary.weap"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.weap <- function(x, ...) {
   cat("Summary: Within Equivalence Class Attribution Probability (WEAP)\n")
@@ -290,6 +293,7 @@ print.summary.weap <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which which plot(s) to show: 1 = WEAP histogram, 2 = equivalence class
 #'   sizes, 3 = disclosive vs non-disclosive
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.weap <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 3)

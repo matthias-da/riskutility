@@ -16,6 +16,9 @@
 \item{which}{integer, which plot(s) to show: 1 = per-record risk distribution
 histogram, 2 = method comparison (only when method="all")}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for population_uniqueness objects
 }

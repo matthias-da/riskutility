@@ -32,9 +32,22 @@ An object of class \code{"gower"} containing:
 }
 }
 \description{
-Average (per observation) Gower distance between an original and a
-synthetic/anonymized data frame.  Returns an S3 object of class
-\code{"gower"} with print, summary, and plot methods.
+Mean per-observation Gower distance between an original data frame and a
+\emph{row-corresponding} anonymized version (e.g. a perturbative method such
+as noise addition, microaggregation, or rank swapping, where record \eqn{i}
+of the anonymized data corresponds to record \eqn{i} of the original).
+Returns an S3 object of class \code{"gower"} with print, summary, and plot
+methods.
+}
+\details{
+The two data frames must have the same number of rows; rows are
+compared pairwise, so the reported \code{gower_distance} is
+\eqn{\frac{1}{n}\sum_{i=1}^{n} d_G(X_i, Y_i)}, the mean Gower distance between
+corresponding records, in \eqn{[0, 1]}. Identical data therefore yields
+distance \code{0} and \code{utility_score} \code{1}. This measure assumes
+record correspondence (perturbative anonymization); for fully synthetic data
+without such correspondence use a distributional measure such as
+\code{\link{energy_distance}}, \code{\link{mmd}}, or \code{compare_wasserstein}.
 }
 \examples{
 # Simple example with mixed data types

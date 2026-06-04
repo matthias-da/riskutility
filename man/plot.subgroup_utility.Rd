@@ -15,6 +15,9 @@
 
 \item{which}{integer, which plot: 1 = bar chart of utility scores per subgroup}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for subgroup_utility objects
 }

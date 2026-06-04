@@ -90,7 +90,7 @@ Each class follows the pattern:
    - Uses machine learning models to predict sensitive attributes from quasi-identifiers
    - Trains on synthetic data, evaluates on original data
    - Captures complex non-linear relationships that CAP methods may miss
-   - Supports: linear model (`lm`, default), random forest (`rf`), CART (`cart`), XGBoost (`gbm`), logistic (`logit`)
+   - Supports: random forest (`rf`, default), linear model (`lm`), CART (`cart`), XGBoost (`gbm`), logistic (`logit`)
    - Requires optional packages: `ranger`, `rpart`, or `xgboost` depending on model choice
    - For numeric targets: `at_risk = TRUE` when prediction error < threshold (accurate prediction = disclosure risk)
    - For categorical targets: `at_risk = TRUE` when ratio/gain/score >= threshold
@@ -232,14 +232,14 @@ Key internals in `R/embedding_internal.R`:
 
 ### DCR Delusion Warning
 
-Houssiau et al. (2025) demonstrate that DCR and related distance-based metrics can fail to detect privacy leakage:
+Yao et al. (2025) demonstrate that DCR and related distance-based metrics can fail to detect privacy leakage:
 
 - **False sense of security**: Datasets deemed "private" by DCR can still be vulnerable to Membership Inference Attacks (MIAs)
 - **Null distribution matters**: DCR values must be compared against a proper null distribution
 - **Not sufficient alone**: DCR should be used alongside other privacy metrics
 - **Recommendation**: The `dcr()` function includes statistical tests and warnings, but users should be aware that passing DCR tests does not guarantee privacy protection
 
-Reference: arXiv:2505.01524 "The DCR Delusion: Why Distance Metrics Fail to Measure Synthetic Data Privacy"
+Reference: Yao, Z., Krco, N., Ganev, G., & de Montjoye, Y.-A. (2025). arXiv:2505.01524 "The DCR Delusion: Measuring the Privacy Risk of Synthetic Data"
 
 ## Git Conventions
 
@@ -275,7 +275,7 @@ The RAPID implementation in riskutility is the canonical version, ported and imp
 ## References
 
 - Thees, Müller, Templ (2026). "Beyond the Trade-off Curve: Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and Synthetic Data." Journal of Official Statistics.
-- Houssiau, F., et al. (2025). "The DCR Delusion: Why Distance Metrics Fail to Measure Synthetic Data Privacy." arXiv:2505.01524.
+- Yao, Z., Krco, N., Ganev, G., & de Montjoye, Y.-A. (2025). "The DCR Delusion: Measuring the Privacy Risk of Synthetic Data." arXiv:2505.01524.
 - Taub, J., et al. (2018). "Differential Correct Attribution Probability for Synthetic Data." Privacy in Statistical Databases.
 - RAPID implementation based on Thees, Müller & Templ (2026) - Risk of Attribute Prediction-Induced Disclosure
 - Herranz, J., Nin, J., Rodriguez, P., & Tassa, T. (2016). "Revisiting Distance-Based Record Linkage for Privacy-Preserving Release of Statistical Datasets." Data & Knowledge Engineering, 100, 78-93.
@@ -291,3 +291,10 @@ The RAPID implementation in riskutility is the canonical version, ported and imp
 - **R CMD check**: 0 errors, 0 notes (2 expected vignette warnings from missing inst/doc)
 - **Vignettes**: Main vignette (`riskutility.Rmd`) + record linkage deep-dive (`recordLinkage.Rmd`)
 - **CITATION**: Available in `inst/CITATION`
+
+
+## Second brain pointers
+- Project note: `~/SecondBrain/20-Projects/riskutility.md` — read at session start if it exists; create from `~/SecondBrain/90-Templates/project-note.md` on first write
+- Decisions about this project: `grep -rl riskutility ~/SecondBrain/80-Decisions/`
+- Related papers: `grep -rl riskutility ~/SecondBrain/30-Papers/`
+- Master bibliography: `~/SecondBrain/_refs/library.bib`

@@ -199,6 +199,7 @@ kanonymity.default <- function(X,
 #' Print method for kanonymity objects
 #' @param x an object of class "kanonymity"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.kanonymity <- function(x, ...) {
  cat("k-Anonymity Assessment\n")
@@ -240,6 +241,7 @@ print.kanonymity <- function(x, ...) {
 #' Summary method for kanonymity objects
 #' @param object an object of class "kanonymity"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.kanonymity <- function(object, ...) {
   summ <- list(
@@ -264,6 +266,7 @@ summary.kanonymity <- function(object, ...) {
 #' Print method for summary.kanonymity objects
 #' @param x an object of class "summary.kanonymity"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.kanonymity <- function(x, ...) {
   cat("Summary: k-Anonymity Assessment\n")
@@ -299,6 +302,7 @@ print.summary.kanonymity <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which integer, which plot: 1 = EC size distribution, 2 = cumulative distribution
 #' @importFrom graphics barplot hist abline par legend
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.kanonymity <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

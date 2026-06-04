@@ -12,7 +12,7 @@
 #' @param na.rm logical, remove records with NA values (default: TRUE)
 #' @param ... additional arguments passed to methods (currently unused)
 #'
-#' @return An object of class "ldiversity" containing:
+#' @return An object of class "ldiversityRisk" containing:
 #' \itemize{
 #'   \item distinct_l: achieved distinct l-diversity level
 #'   \item entropy_l: achieved entropy l-diversity level
@@ -231,16 +231,19 @@ ldiversity.default <- function(X,
     sensitive_var = sensitive_var
   )
 
-  class(results) <- "ldiversity"
+  # Class is "ldiversityRisk" (not "ldiversity") to avoid an S3 dispatch
+  # collision with sdcMicro::print.ldiversity when both packages are loaded.
+  class(results) <- "ldiversityRisk"
   return(results)
 }
 
 
-#' Print method for ldiversity objects
-#' @param x an object of class "ldiversity"
+#' Print method for ldiversityRisk objects
+#' @param x an object of class "ldiversityRisk"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
-print.ldiversity <- function(x, ...) {
+print.ldiversityRisk <- function(x, ...) {
   cat("l-Diversity Assessment\n")
   cat("======================\n\n")
 
@@ -275,11 +278,12 @@ print.ldiversity <- function(x, ...) {
 }
 
 
-#' Summary method for ldiversity objects
-#' @param object an object of class "ldiversity"
+#' Summary method for ldiversityRisk objects
+#' @param object an object of class "ldiversityRisk"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
-summary.ldiversity <- function(object, ...) {
+summary.ldiversityRisk <- function(object, ...) {
   summ <- list(
     distinct_l = object$distinct_l,
     entropy_l = object$entropy_l,
@@ -304,16 +308,17 @@ summary.ldiversity <- function(object, ...) {
     sensitive_var = object$sensitive_var
   )
 
-  class(summ) <- "summary.ldiversity"
+  class(summ) <- "summary.ldiversityRisk"
   return(summ)
 }
 
 
-#' Print method for summary.ldiversity objects
-#' @param x an object of class "summary.ldiversity"
+#' Print method for summary.ldiversityRisk objects
+#' @param x an object of class "summary.ldiversityRisk"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
-print.summary.ldiversity <- function(x, ...) {
+print.summary.ldiversityRisk <- function(x, ...) {
   cat("Summary: l-Diversity Assessment\n")
   cat("================================\n\n")
 
@@ -339,15 +344,16 @@ print.summary.ldiversity <- function(x, ...) {
 }
 
 
-#' Plot method for ldiversity objects
-#' @param x an object of class "ldiversity"
+#' Plot method for ldiversityRisk objects
+#' @param x an object of class "ldiversityRisk"
 #' @param y not used
 #' @param ... additional arguments passed to plotting functions
 #' @param which integer, which plot: 1 = distinct values distribution,
 #'   2 = entropy distribution
 #' @importFrom graphics barplot hist abline par legend
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
-plot.ldiversity <- function(x, y = NULL, ..., which = 1) {
+plot.ldiversityRisk <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)
   show[which] <- TRUE
 

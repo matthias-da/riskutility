@@ -17,6 +17,9 @@
 3 for proximity structure (ranger only), 4 for variable importance
 (ranger only)}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for propscore objects
 }

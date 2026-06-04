@@ -15,6 +15,9 @@
 
 \item{which}{which plot to show: 1 = summary bar chart, 2 = metric details}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for disclosure_report objects
 }

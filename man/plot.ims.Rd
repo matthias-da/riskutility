@@ -16,6 +16,9 @@
 \item{which}{which plot to show: 1 = pie chart of identical vs unique,
 2 = bar chart of match counts (if any identical records exist)}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for ims objects
 }

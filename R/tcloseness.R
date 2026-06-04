@@ -39,6 +39,10 @@
 #' \deqn{EMD = \frac{1}{m - 1} \sum_{i=1}^{m} |F_{EC}(x_i) - F(x_i)|}
 #' where \eqn{m} is the number of unique values, \eqn{F_{EC}} is the empirical
 #' CDF within the equivalence class, and \eqn{F} is the overall empirical CDF.
+#' This CDF-difference form corresponds to the ordered-distance EMD of Li et al.
+#' (2007) up to the choice of normalisation (here \eqn{1/(m-1)} over the observed
+#' support); it is a close approximation rather than the exact published
+#' per-rank-weighted quantity.
 #'
 #' \strong{Categorical attributes:}
 #' EMD is the variational distance (half the L1 distance between distributions):
@@ -242,6 +246,7 @@ tcloseness.default <- function(X,
 #' Print method for tcloseness objects
 #' @param x an object of class "tcloseness"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.tcloseness <- function(x, ...) {
   cat("t-Closeness Assessment\n")
@@ -281,6 +286,7 @@ print.tcloseness <- function(x, ...) {
 #' Summary method for tcloseness objects
 #' @param object an object of class "tcloseness"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.tcloseness <- function(object, ...) {
   summ <- list(
@@ -309,6 +315,7 @@ summary.tcloseness <- function(object, ...) {
 #' Print method for summary.tcloseness objects
 #' @param x an object of class "summary.tcloseness"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.tcloseness <- function(x, ...) {
   cat("Summary: t-Closeness Assessment\n")
@@ -345,6 +352,7 @@ print.summary.tcloseness <- function(x, ...) {
 #' @param which integer, which plot: 1 = EMD distribution histogram,
 #'   2 = EC size vs EMD scatter
 #' @importFrom graphics barplot hist abline par legend points
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.tcloseness <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

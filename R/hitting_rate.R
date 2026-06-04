@@ -205,6 +205,7 @@ hitting_rate.default <- function(X, Y,
 #'
 #' @param x an object of class "hitting_rate"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.hitting_rate <- function(x, ...) {
   cat("Hitting Rate Privacy Metric\n")
@@ -247,6 +248,7 @@ print.hitting_rate <- function(x, ...) {
 #'
 #' @param object an object of class "hitting_rate"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.hitting_rate <- function(object, ...) {
   summ <- list(
@@ -292,6 +294,7 @@ summary.hitting_rate <- function(object, ...) {
 #'
 #' @param x an object of class "summary.hitting_rate"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.hitting_rate <- function(x, ...) {
   cat("Summary: Hitting Rate Privacy Metric\n")
@@ -335,6 +338,7 @@ print.summary.hitting_rate <- function(x, ...) {
 #' @param which which plot(s) to show: 1 = histogram of min distances with
 #'   threshold line, 2 = hitting rate vs threshold curve (sweeps thresholds
 #'   from 0 to max distance)
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.hitting_rate <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

@@ -187,6 +187,7 @@ synth_pair <- function(original,
 #'
 #' @param x An object of class "synth_pair"
 #' @param ... Additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.synth_pair <- function(x, ...) {
   cat("Synthetic Data Comparison Pair\n")
@@ -238,6 +239,7 @@ print.synth_pair <- function(x, ...) {
 #'
 #' @param object An object of class "synth_pair"
 #' @param ... Additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.synth_pair <- function(object, ...) {
   # Compute quick data quality checks
@@ -272,6 +274,7 @@ summary.synth_pair <- function(object, ...) {
 #'
 #' @param x An object of class "summary.synth_pair"
 #' @param ... Additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.synth_pair <- function(x, ...) {
   cat("Summary: Synthetic Data Comparison Pair\n")

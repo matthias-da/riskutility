@@ -17,6 +17,9 @@
 threshold line, 2 = hitting rate vs threshold curve (sweeps thresholds
 from 0 to max distance)}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for hitting_rate objects
 }

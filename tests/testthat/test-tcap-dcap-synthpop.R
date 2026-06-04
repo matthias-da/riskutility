@@ -144,14 +144,14 @@ test_that("riskutility DCAP computes valid CAP with SD2011 data", {
                         print.flag = FALSE)
 
   cat("\n=== DCAP with SD2011 ===\n")
-  cat("riskutility DCAP (mean CAP):", round(dcap_ru$dcap * 100, 4), "%\n")
+  cat("riskutility CAP (mean):", round(dcap_ru$cap * 100, 4), "%\n")
   cat("synthpop CAPd:", round(disc_sp$allCAPs$CAPd, 4), "%\n")
   cat("(See methodological note above for expected differences)\n")
 
   # Verify riskutility computes valid results
-  expect_true(dcap_ru$dcap >= 0 && dcap_ru$dcap <= 1)
+  expect_true(dcap_ru$cap >= 0 && dcap_ru$cap <= 1)
   expect_true(dcap_ru$n_matched > 0)
-  expect_true(!is.na(dcap_ru$dcap))
+  expect_true(!is.na(dcap_ru$cap))
 })
 
 test_that("riskutility per-record CAP scores are correct", {
@@ -217,10 +217,10 @@ test_that("TCAP and DCAP consistency check - both give same mean CAP", {
 
   cat("\n=== Internal Consistency Check ===\n")
   cat("TCAP mean:", round(tcap_ru$tcap_mean * 100, 4), "%\n")
-  cat("DCAP mean:", round(dcap_ru$dcap * 100, 4), "%\n")
+  cat("CAP mean:", round(dcap_ru$cap * 100, 4), "%\n")
 
   # Both functions compute the same underlying metric - mean CAP
-  expect_equal(tcap_ru$tcap_mean, dcap_ru$dcap, tolerance = 0.0001)
+  expect_equal(tcap_ru$tcap_mean, dcap_ru$cap, tolerance = 0.0001)
 })
 
 test_that("TCAP/DCAP with perfect match gives 100%", {
@@ -246,11 +246,11 @@ test_that("TCAP/DCAP with perfect match gives 100%", {
 
   cat("\n=== Perfect Match Test ===\n")
   cat("riskutility TCAP mean:", tcap_ru$tcap_mean, "\n")
-  cat("riskutility DCAP:", dcap_ru$dcap, "\n")
+  cat("riskutility CAP:", dcap_ru$cap, "\n")
 
   # With perfect matching, all CAP scores should be 1.0
   expect_equal(tcap_ru$tcap_mean, 1.0)
-  expect_equal(dcap_ru$dcap, 1.0)
+  expect_equal(dcap_ru$cap, 1.0)
   expect_true(all(tcap_ru$tcap_scores == 1, na.rm = TRUE))
 })
 
@@ -280,7 +280,7 @@ test_that("TCAP/DCAP handle no matches correctly", {
   expect_equal(tcap_ru$n_unmatched, 3)
 
   expect_true(all(is.na(dcap_ru$cap_scores)))
-  expect_true(is.nan(dcap_ru$dcap))
+  expect_true(is.nan(dcap_ru$cap))
 })
 
 test_that("TCAP/DCAP with partial matches", {

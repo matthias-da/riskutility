@@ -287,6 +287,7 @@ specks.default <- function(X, Y,
 #'
 #' @param x an object of class "specks"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.specks <- function(x, ...) {
   cat("SPECKS - Propensity Score Utility Measure\n")
@@ -325,6 +326,7 @@ print.specks <- function(x, ...) {
 #'
 #' @param object an object of class "specks"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.specks <- function(object, ...) {
   prop_orig <- object$propensity_original
@@ -371,6 +373,7 @@ summary.specks <- function(object, ...) {
 #'
 #' @param x an object of class "summary.specks"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.specks <- function(x, ...) {
   cat("Summary: SPECKS Utility Measure\n")
@@ -422,6 +425,7 @@ print.summary.specks <- function(x, ...) {
 #'   2 = ECDF comparison, 3 = histogram comparison
 #' @importFrom graphics hist lines legend abline par
 #' @importFrom stats density ecdf
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.specks <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 3)

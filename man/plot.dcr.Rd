@@ -16,6 +16,9 @@
 \item{which}{which plot(s) to show: 1 = overlaid histograms, 2 = boxplot
 comparison, 3 = scatter plot of train vs holdout DCR}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for dcr objects
 }

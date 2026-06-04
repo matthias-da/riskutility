@@ -15,6 +15,9 @@
 
 \item{which}{which plot(s) to show: 1 for CAP histogram, 2 for matches histogram}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for dcap objects
 }

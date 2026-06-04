@@ -11,6 +11,9 @@
 
 \item{...}{additional arguments (ignored)}
 }
+\value{
+The input object, invisibly.
+}
 \description{
 Print method for summary.subgroup_utility objects
 }

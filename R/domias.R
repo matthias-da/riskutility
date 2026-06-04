@@ -273,6 +273,7 @@ domias.default <- function(X, Y,
 #'
 #' @param x an object of class "domias"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.domias <- function(x, ...) {
   cat("DOMIAS: Density-based Membership Inference Attack\n")
@@ -316,6 +317,7 @@ print.domias <- function(x, ...) {
 #'
 #' @param object an object of class "domias"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.domias <- function(object, ...) {
   summ <- list(
@@ -351,6 +353,7 @@ summary.domias <- function(object, ...) {
 #'
 #' @param x an object of class "summary.domias"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.domias <- function(x, ...) {
   cat("Summary: DOMIAS Membership Inference Attack\n")
@@ -397,6 +400,7 @@ print.summary.domias <- function(x, ...) {
 #' @param which which plot(s) to show: 1 = density ratio distributions
 #'   (train vs holdout overlaid histograms), 2 = boxplot comparison of
 #'   density ratios
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.domias <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

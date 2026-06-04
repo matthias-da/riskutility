@@ -16,6 +16,9 @@
 \item{which}{which plot(s) to show: 1 = AA comparison barplot (train vs holdout),
 2 = NN distance distributions (overlay histograms of d_TS vs d_TT)}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for nnaa objects
 }

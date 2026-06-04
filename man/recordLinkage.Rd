@@ -47,6 +47,8 @@ recordLinkage(X, ...)
   emb_latent_dim = NULL,
   emb_epochs = 50L,
   emb_global = FALSE,
+  Y = NULL,
+  key_vars = NULL,
   ...
 )
 }
@@ -200,6 +202,13 @@ if \code{TRUE}, train a single autoencoder on all query data and
 restrict distance computation within blocks. If \code{FALSE} (default),
 train a separate autoencoder per block (with deterministic fallback for
 blocks smaller than \code{max(30, 5 * latent_dim)}).}
+
+\item{Y}{Alias for \code{x_anon}, for naming consistency with the rest of the
+package. If \code{x_anon} is not supplied but \code{Y} is, \code{Y} is used.}
+
+\item{key_vars}{Alias for \code{key}, matching the name used by
+\code{\link{synth_pair}} and \code{\link{rumap}}. If \code{key} is not
+supplied but \code{key_vars} is, \code{key_vars} is used.}
 }
 \value{
 An object of class \code{"recordLinkageRisk"}: a list with components

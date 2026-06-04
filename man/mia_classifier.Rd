@@ -12,8 +12,8 @@ mia_classifier(X, ...)
 
 \method{mia_classifier}{default}(
   X,
-  synt_data,
-  hout_data,
+  synt_data = NULL,
+  hout_data = NULL,
   cols = NULL,
   cat_cols = NULL,
   num_cols = NULL,
@@ -22,6 +22,8 @@ mia_classifier(X, ...)
   seed = NULL,
   num_trees = 300L,
   num_threads = 1L,
+  Y = NULL,
+  holdout = NULL,
   ...
 )
 }
@@ -55,6 +57,13 @@ holdout splits. Default 5.}
 \item{num_trees}{integer. Number of trees (only used for method = "rf").}
 
 \item{num_threads}{integer. Threads for parallelism. Default 1.}
+
+\item{Y}{Alias for \code{synt_data}, for naming consistency with the rest of
+the package. If \code{synt_data} is \code{NULL} and \code{Y} is supplied,
+\code{Y} is used.}
+
+\item{holdout}{Alias for \code{hout_data}. If \code{hout_data} is \code{NULL}
+and \code{holdout} is supplied, \code{holdout} is used.}
 }
 \value{
 An object of class \code{"mia"} with components:

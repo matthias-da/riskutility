@@ -57,8 +57,11 @@ belongs to, where smaller MSUs contribute more (they are more identifying):
 \deqn{SUDA_i = \sum_{j \in MSU_i} \frac{1}{2^{|MSU_j| - 1}}}
 
 \strong{DIS Score (Data Intrusion Simulation):}
-A normalized version of SUDA that accounts for the number of possible
-variable combinations, making it more comparable across different datasets.
+A normalized version of the SUDA score that rescales by the number of possible
+variable combinations, making scores more comparable across datasets. Note
+that this is a custom combinatorial normalisation, \emph{not} the file-level
+DIS-SUDA intrusion-probability calibration of Elliot (2002), and should not be
+interpreted as the published DIS-SUDA score.
 
 \strong{Interpretation:}
 \itemize{

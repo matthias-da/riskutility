@@ -295,6 +295,7 @@ individual_risk.default <- function(X,
 #' Print method for individual_risk objects
 #' @param x an object of class "individual_risk"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.individual_risk <- function(x, ...) {
   cat("Individual Re-identification Risk Assessment\n")
@@ -331,6 +332,7 @@ print.individual_risk <- function(x, ...) {
 #' Summary method for individual_risk objects
 #' @param object an object of class "individual_risk"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.individual_risk <- function(object, ...) {
   # Risk bands
@@ -367,6 +369,7 @@ summary.individual_risk <- function(object, ...) {
 #' Print method for summary.individual_risk objects
 #' @param x an object of class "summary.individual_risk"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.individual_risk <- function(x, ...) {
   cat("Summary: Individual Re-identification Risk\n")
@@ -403,6 +406,7 @@ print.summary.individual_risk <- function(x, ...) {
 #' @param which integer, which plot: 1 = risk distribution histogram,
 #'   2 = risk by equivalence class size
 #' @importFrom graphics hist barplot abline par legend
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.individual_risk <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

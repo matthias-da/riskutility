@@ -89,7 +89,21 @@
 #' }
 #'
 #' @section Dependencies:
-#' The package leverages several R packages including \code{ggplot2}, \code{data.table}, \code{caret}, \code{vip}, \code{simPop}, \code{survey}, \code{Rtsne}, \code{uwot}, \code{MASS}, \code{robustbase}, and \code{psych}.
+#' The package builds on \code{ggplot2} and \code{data.table}; uses \code{VIM},
+#' \code{MASS}, \code{randomForest}, and \code{ranger} for core computations; and
+#' optionally integrates with \code{simPop}, \code{synthpop}, \code{Rtsne},
+#' \code{uwot}, \code{caret}, and \code{robustbase} when installed.
+#'
+#' @section Missing-value handling:
+#' Two parameter conventions are used deliberately, according to how much choice
+#' a function offers. A logical \code{na.rm} (the standard R idiom) appears where
+#' the only decision is whether to drop incomplete cases before computing a
+#' statistic. A character selector appears where several treatments are
+#' supported: \code{na} (\code{"remove"}, \code{"impute"}, \code{"stop"}, and in
+#' \code{\link{pMSE}} additionally \code{"indicator"}) in \code{\link{propscore}},
+#' \code{\link{pMSE}}, and \code{\link{mqs}}; and \code{na_strategy}
+#' (\code{"constant"}, \code{"drop"}, \code{"median"}) in \code{\link{rapid}},
+#' which acts specifically on the sensitive target attribute.
 #'
 #' @author Matthias Templ
 #'

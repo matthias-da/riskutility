@@ -16,6 +16,9 @@
 \item{which}{integer, which plot: 1 = density comparison (default),
 2 = ECDF comparison, 3 = histogram comparison}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for specks objects
 }

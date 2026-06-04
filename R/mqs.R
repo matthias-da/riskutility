@@ -258,6 +258,7 @@ mqs.default <- function(X, Y, form,
 #'
 #' @param x an object of class "mqs"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.mqs <- function(x, ...) {
   cat("Model Quality Score (MQS)\n")
@@ -294,6 +295,7 @@ summary.mqs <- function(object, ...) {
 #'
 #' @param x an object of class "summary.mqs"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.mqs <- function(x, ...) {
   cat("Summary: Model Quality Score (MQS)\n")
@@ -317,6 +319,7 @@ print.summary.mqs <- function(x, ...) {
 #' @param which integer, which plot: 1 = grouped bar chart of per-model
 #'   performance, 2 = MQS ratio dot plot
 #' @importFrom graphics barplot abline legend axis par mtext text
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.mqs <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

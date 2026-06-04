@@ -15,6 +15,9 @@
 
 \item{which}{integer, which plot: 1 = heatmap of pairwise copula distances}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for copula_fidelity objects
 }

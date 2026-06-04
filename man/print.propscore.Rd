@@ -11,6 +11,9 @@
 
 \item{...}{additional arguments passed to the print method}
 }
+\value{
+The input object, invisibly.
+}
 \description{
 Print method for propscore objects
 }

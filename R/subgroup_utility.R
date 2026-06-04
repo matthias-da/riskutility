@@ -247,6 +247,7 @@ subgroup_utility.default <- function(X, Y,
 #'
 #' @param x an object of class \code{"subgroup_utility"}
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.subgroup_utility <- function(x, ...) {
   cat("Subgroup Utility Assessment\n")
@@ -284,6 +285,7 @@ print.subgroup_utility <- function(x, ...) {
 #'
 #' @param object an object of class \code{"subgroup_utility"}
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.subgroup_utility <- function(object, ...) {
   summ <- list(
@@ -309,6 +311,7 @@ summary.subgroup_utility <- function(object, ...) {
 #'
 #' @param x an object of class \code{"summary.subgroup_utility"}
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.subgroup_utility <- function(x, ...) {
   cat("Summary: Subgroup Utility Assessment\n")
@@ -345,6 +348,7 @@ print.summary.subgroup_utility <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which integer, which plot: 1 = bar chart of utility scores per subgroup
 #' @importFrom graphics barplot abline legend axis par mtext
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.subgroup_utility <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 1)

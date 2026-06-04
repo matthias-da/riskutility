@@ -15,6 +15,9 @@
 
 \item{which}{integer, which plot: 1 = SUDA score distribution, 2 = MSU count by size}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for suda objects
 }

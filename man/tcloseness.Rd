@@ -62,6 +62,10 @@ ordered unique values:
 \deqn{EMD = \frac{1}{m - 1} \sum_{i=1}^{m} |F_{EC}(x_i) - F(x_i)|}
 where \eqn{m} is the number of unique values, \eqn{F_{EC}} is the empirical
 CDF within the equivalence class, and \eqn{F} is the overall empirical CDF.
+This CDF-difference form corresponds to the ordered-distance EMD of Li et al.
+(2007) up to the choice of normalisation (here \eqn{1/(m-1)} over the observed
+support); it is a close approximation rather than the exact published
+per-rank-weighted quantity.
 
 \strong{Categorical attributes:}
 EMD is the variational distance (half the L1 distance between distributions):

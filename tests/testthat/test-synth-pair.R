@@ -133,8 +133,8 @@ test_that("dcap works with synth_pair", {
   result <- dcap(pair)
 
   expect_s3_class(result, "dcap")
-  expect_true(!is.na(result$dcap))
-  expect_true(result$dcap >= 0 && result$dcap <= 1)
+  expect_true(!is.na(result$cap))
+  expect_true(result$cap >= 0 && result$cap <= 1)
 })
 
 test_that("dcap.synth_pair validates key_vars and target_var", {
@@ -289,7 +289,7 @@ test_that("ldiversity works with synth_pair", {
 
   result <- ldiversity(pair)
 
-  expect_s3_class(result, "ldiversity")
+  expect_s3_class(result, "ldiversityRisk")
   expect_true(!is.na(result$distinct_l))
 })
 

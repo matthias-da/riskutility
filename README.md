@@ -6,7 +6,7 @@ Risk and utility measurement for anonymized and synthetic data.
 
 ```r
 # Install from GitHub
-devtools::install_github("username/riskutility")
+devtools::install_github("matthias-da/riskutility")
 ```
 
 ## Overview
@@ -21,7 +21,7 @@ These metrics measure the probability that an adversary can correctly infer sens
 
 | Function | Description |
 |----------|-------------|
-| `dcap()` | Differential Correct Attribution Probability - overall disclosure risk measure |
+| `dcap()` | Correct Attribution Probability; reports the raw mean CAP and the differential CAP (mean CAP minus baseline) |
 | `tcap()` | Targeted CAP - per-record attribution probability with risk categories |
 | `weap()` | Within Equivalence Class Attribution Probability - identifies risky synthetic records |
 | `disco()` | Disclosive in Synthetic Correct Original - counts records leaking original information |
@@ -56,6 +56,50 @@ print(result)
 result <- dcr(original_data, synthetic_data,
               holdout_fraction = 0.5, seed = 42)
 ```
+
+### ML-Based Measure (RAPID)
+
+`rapid()` trains a model on the synthetic data and scores attribute-inference
+risk on the original data (random-forest default; also `lm`/`cart`/`gbm`/`logit`),
+with confidence intervals, a permutation test, threshold selection, and six
+diagnostic plots.
+
+### Classical SDC Privacy Models
+
+| Function | Description |
+|----------|-------------|
+| `kanonymity()` | k-anonymity assessment |
+| `ldiversity()` | l-diversity (distinct / entropy / recursive) |
+| `tcloseness()` | t-closeness (EMD) |
+| `suda()` | Special Uniques Detection Algorithm |
+| `individual_risk()` | Individual re-identification risk |
+| `population_uniqueness()` | Population uniqueness (Pitman / Zayatz / SNB) |
+| `epsilon_identifiability()` | Epsilon-identifiability (distance-entropy) |
+| `delta_presence()` | delta-presence (membership bounds) |
+| `hitting_rate()` | Hitting rate |
+| `singling_out()`, `linkability()` | GDPR / WP216 anonymization criteria |
+| `attacker_risk()` | Prosecutor / journalist / marketer models |
+| `drisk()` | Distance-based record-linkage risk (dRisk / dRiskRMD) |
+
+### Record Linkage Risk
+
+`recordLinkage()` estimates re-identification risk via record linkage with eight
+methods (deterministic, probabilistic / Fellegi-Sunter, PRAM, predictive, random
+forest, RBRL, robust Mahalanobis, autoencoder embedding) and three matching modes
+(independent, bijective / GDBRL, optimal transport).
+
+### Membership Inference
+
+| Function | Description |
+|----------|-------------|
+| `domias()` | DOMIAS density-ratio membership inference |
+| `nnaa()` | Nearest-neighbour adversarial accuracy |
+| `mia_classifier()` | Classifier-based membership inference |
+
+### Comprehensive Report
+
+`disclosure_report()` runs a configurable battery of the above measures and
+returns a single triaged risk report.
 
 ### Information-Theoretic Measures
 
@@ -112,6 +156,25 @@ result <- dcr(original_data, synthetic_data,
 | `propscore()` | Propensity score utility measure |
 | `compare_model_performance()` | Compare predictive model performance |
 | `compare_feature_importance()` | Compare feature importance |
+
+### Distance, Fidelity & Downstream Measures
+
+| Function | Description |
+|----------|-------------|
+| `pMSE()`, `specks()` | Propensity-score utility (pMSE, SPECKS) |
+| `hellinger()`, `energy_distance()`, `mmd()` | Distributional distances |
+| `copula_fidelity()`, `tail_fidelity()`, `contingency_fidelity()` | Dependence & tail fidelity |
+| `tstr()` | Train on synthetic, test on real (downstream ML) |
+| `regression_fidelity()` | Regression-coefficient fidelity |
+| `subgroup_utility()` | Stratified utility across subgroups |
+| `ci_proximity()` | Confidence-interval proximity |
+
+### Multivariate Risk-Utility Map
+
+`rumap()` combines any set of risk and utility measures into a normalized
+multivariate Risk-Utility map with Pareto-frontier identification and seven
+visualizations (scatter, heatmap, dot plot, parallel coordinates, radial, PCA
+biplot, blockwise PCA).
 
 ### Other Utility Functions
 
@@ -205,25 +268,17 @@ compare_histograms(original, synthetic, var = "age")
 - Templ, M. (2017). Statistical Disclosure Control for Microdata: Methods and Applications in R. *Springer International Publishing*.
 - MOSTLY AI (2024). Synthetic Data Quality Metrics. https://docs.mostly.ai/
 
-## Development Status
+## Status
 
-### Ready
-- All disclosure risk metrics (DCAP, TCAP, WEAP, DiSCO, DCR, NNDR, IMS)
-- Propensity score utility measure
-- Distribution comparison functions
-- Entropy and divergence measures
+The package is feature-complete for an initial CRAN release: attribution
+(CAP/TCAP/WEAP/DiSCO), ML-based (RAPID), distance-based (DCR/NNDR/IMS),
+membership inference (DOMIAS/NNAA/MIA), classical SDC privacy models, record
+linkage, a comprehensive `disclosure_report()`, a broad set of utility measures,
+and the `rumap()` multivariate Risk-Utility map. See `NEWS.md` for the full
+inventory and the package vignettes for worked examples.
 
-### To Be Revised
-- `densitydiff_1d_num` - consider merging with categorical version
-- `densitydiff_pca` - plot method needed
-- `gower_density` - under development
-
-### Planned Features
-- SPECKS (KS-based synthetic data measure)
-- Inferential disclosure measures
-- Record linkage based identity disclosure
-- Longitudinal data metrics
-- Comprehensive reporting function
+Possible future directions include dedicated inferential-disclosure attacks and
+longitudinal-data metrics.
 
 ## License
 

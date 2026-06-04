@@ -16,6 +16,9 @@
 \item{which}{integer, which plot: 1 = risk distribution histogram,
 2 = risk by equivalence class size}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for individual_risk objects
 }

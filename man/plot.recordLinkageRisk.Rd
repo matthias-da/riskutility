@@ -28,6 +28,9 @@ for \code{which = 7}.}
 
 \item{data}{optional data frame for extracting \code{group} column.}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for recordLinkageRisk
 }

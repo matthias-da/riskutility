@@ -16,3 +16,10 @@
 ^recordLinkage_discussion
 ^TODO\.md$
 ^jss-paper-plan\.md$
+^docs$
+^LICENSE$
+^cran-comments\.md$
+^check-the-r-package.*\.md$
+^vignettes/.*\.html$
+^vignettes/riskutility\.R$
+^paper$

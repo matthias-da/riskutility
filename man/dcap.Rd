@@ -45,8 +45,11 @@ dcap(X, ...)
 An object of class "dcap" containing:
 \itemize{
 \item cap_scores: per-record CAP values
-\item dcap: mean CAP (overall disclosure risk)
-\item dcap_median: median CAP
+\item cap: mean CAP (raw correct-attribution probability; synthpop's CAPd)
+\item cap_median: median CAP
+\item dcap: differential CAP, \code{cap - baseline} (attribution risk above
+random guessing; Taub et al. 2018)
+\item dcap_median: \code{cap_median - baseline}
 \item n_matched: records with at least one synthetic match
 \item n_unmatched: records with no matches
 \item baseline: expected CAP under random guessing
@@ -69,6 +72,11 @@ correct target value appears among the matches.
 Higher CAP values indicate higher disclosure risk. A CAP of 1 means the
 intruder can perfectly infer the target; a CAP equal to baseline means
 no information leakage beyond random guessing.
+
+Two summaries are returned: the raw mean CAP (\code{cap}) and the
+\emph{differential} CAP (\code{dcap} \eqn{= \overline{CAP} - baseline}), which
+subtracts the baseline so that values near 0 indicate no leakage beyond random
+guessing and larger values indicate more attribute disclosure (Taub et al. 2018).
 }
 \section{Baseline computation}{
 

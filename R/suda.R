@@ -34,8 +34,11 @@
 #' \deqn{SUDA_i = \sum_{j \in MSU_i} \frac{1}{2^{|MSU_j| - 1}}}
 #'
 #' \strong{DIS Score (Data Intrusion Simulation):}
-#' A normalized version of SUDA that accounts for the number of possible
-#' variable combinations, making it more comparable across different datasets.
+#' A normalized version of the SUDA score that rescales by the number of possible
+#' variable combinations, making scores more comparable across datasets. Note
+#' that this is a custom combinatorial normalisation, \emph{not} the file-level
+#' DIS-SUDA intrusion-probability calibration of Elliot (2002), and should not be
+#' interpreted as the published DIS-SUDA score.
 #'
 #' \strong{Interpretation:}
 #' \itemize{
@@ -288,6 +291,7 @@ suda.default <- function(X,
 #' Print method for suda objects
 #' @param x an object of class "suda"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.suda <- function(x, ...) {
   cat("SUDA - Special Uniques Detection Algorithm\n")
@@ -332,6 +336,7 @@ print.suda <- function(x, ...) {
 #' Summary method for suda objects
 #' @param object an object of class "suda"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.suda <- function(object, ...) {
   # Get top risky records
@@ -366,6 +371,7 @@ summary.suda <- function(object, ...) {
 #' Print method for summary.suda objects
 #' @param x an object of class "summary.suda"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.suda <- function(x, ...) {
   cat("Summary: SUDA Analysis\n")
@@ -402,6 +408,7 @@ print.summary.suda <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which integer, which plot: 1 = SUDA score distribution, 2 = MSU count by size
 #' @importFrom graphics barplot hist abline par
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.suda <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

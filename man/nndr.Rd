@@ -122,8 +122,8 @@ summary(result)
 plot(result)
 }
 \references{
-MOSTLY AI (2024). Evaluate generator quality.
-\url{https://docs.mostly.ai/generators/evaluate-quality}
+MOSTLY AI (2024). Synthetic data quality assurance.
+\url{https://mostly.ai/}
 
 Lowe, D.G. (2004). Distinctive Image Features from Scale-Invariant Keypoints.
 \emph{International Journal of Computer Vision}, 60(2), 91-110.

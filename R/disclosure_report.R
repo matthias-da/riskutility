@@ -166,8 +166,10 @@ disclosure_report.default <- function(X, Y,
 
   # Determine which metrics to compute
   attribution_metrics <- c("dcap", "tcap", "weap", "disco", "rapid")
-  distance_metrics <- c("dcr", "nndr", "ims", "drisk", "hitting_rate", "rf_privacy")
-  privacy_metrics <- c("kanonymity", "ldiversity", "tcloseness", "individual_risk")
+  distance_metrics <- c("dcr", "nndr", "ims", "drisk", "hitting_rate", "rf_privacy",
+                        "epsilon_identifiability")
+  privacy_metrics <- c("kanonymity", "ldiversity", "tcloseness", "individual_risk",
+                       "population_uniqueness", "attacker_risk", "delta_presence")
   membership_metrics <- c("singling_out", "linkability", "nnaa", "domias")
   all_metrics <- c(attribution_metrics, distance_metrics,
                    privacy_metrics, membership_metrics)
@@ -256,11 +258,11 @@ disclosure_report.default <- function(X, Y,
     if (verbose) message("Computing DCAP...")
     err <- tryCatch({
       results$dcap <- dcap(X, Y, key_vars, target_var, na.rm = na.rm)
-      risk_ratio <- results$dcap$dcap / results$dcap$baseline
+      risk_ratio <- results$dcap$cap / results$dcap$baseline
       pass <- !is.na(risk_ratio) && risk_ratio <= 1.5
       summary_rows$dcap <- data.frame(
-        metric = "DCAP",
-        value = round(results$dcap$dcap, 4),
+        metric = "CAP",
+        value = round(results$dcap$cap, 4),
         reference = round(results$dcap$baseline, 4),
         ratio = round(risk_ratio, 2),
         status = ifelse(is.na(pass), "N/A",
@@ -270,7 +272,7 @@ disclosure_report.default <- function(X, Y,
     }, error = function(e) {
       if (verbose) message("  DCAP failed: ", e$message)
       data.frame(
-        metric = "DCAP", value = NA, reference = NA, ratio = NA,
+        metric = "CAP", value = NA, reference = NA, ratio = NA,
         status = "ERROR"
       )
     })
@@ -655,6 +657,83 @@ disclosure_report.default <- function(X, Y,
     if (!is.null(err)) summary_rows$individual_risk <- err
   }
 
+  if ("population_uniqueness" %in% metrics_to_compute && can_compute_privacy) {
+    if (verbose) message("Computing Population Uniqueness...")
+    err <- tryCatch({
+      results$population_uniqueness <- population_uniqueness(Y, key_vars = key_vars, na.rm = na.rm)
+      gr <- results$population_uniqueness$global_risk
+      summary_rows$population_uniqueness <- data.frame(
+        metric = "Population Uniqueness", value = round(gr, 4),
+        reference = "<= 0.1", ratio = round(gr, 4),
+        status = ifelse(isTRUE(results$population_uniqueness$privacy_pass), "PASS", "WARNING")
+      )
+      NULL
+    }, error = function(e) {
+      if (verbose) message("  Population Uniqueness failed: ", e$message)
+      data.frame(metric = "Population Uniqueness", value = NA, reference = NA,
+                 ratio = NA, status = "ERROR")
+    })
+    if (!is.null(err)) summary_rows$population_uniqueness <- err
+  }
+
+  if ("attacker_risk" %in% metrics_to_compute && can_compute_privacy) {
+    if (verbose) message("Computing Attacker Risk...")
+    err <- tryCatch({
+      results$attacker_risk <- attacker_risk(Y, key_vars = key_vars, na.rm = na.rm)
+      # model = "all" returns global_risk as a list per model; report the worst case.
+      gr <- max(unlist(results$attacker_risk$global_risk), na.rm = TRUE)
+      summary_rows$attacker_risk <- data.frame(
+        metric = "Attacker Risk", value = round(gr, 4),
+        reference = "<= 0.1", ratio = round(gr, 4),
+        status = ifelse(isTRUE(results$attacker_risk$privacy_pass), "PASS", "WARNING")
+      )
+      NULL
+    }, error = function(e) {
+      if (verbose) message("  Attacker Risk failed: ", e$message)
+      data.frame(metric = "Attacker Risk", value = NA, reference = NA,
+                 ratio = NA, status = "ERROR")
+    })
+    if (!is.null(err)) summary_rows$attacker_risk <- err
+  }
+
+  if ("delta_presence" %in% metrics_to_compute && can_compute_privacy) {
+    if (verbose) message("Computing delta-Presence...")
+    err <- tryCatch({
+      results$delta_presence <- delta_presence(X, Y, key_vars = key_vars, na.rm = na.rm)
+      pv <- results$delta_presence$pct_violations
+      summary_rows$delta_presence <- data.frame(
+        metric = "delta-Presence", value = round(pv, 2),
+        reference = "0% violations", ratio = round(pv, 2),
+        status = ifelse(isTRUE(results$delta_presence$privacy_pass), "PASS", "WARNING")
+      )
+      NULL
+    }, error = function(e) {
+      if (verbose) message("  delta-Presence failed: ", e$message)
+      data.frame(metric = "delta-Presence", value = NA, reference = NA,
+                 ratio = NA, status = "ERROR")
+    })
+    if (!is.null(err)) summary_rows$delta_presence <- err
+  }
+
+  if ("epsilon_identifiability" %in% metrics_to_compute) {
+    if (verbose) message("Computing Epsilon-Identifiability...")
+    err <- tryCatch({
+      results$epsilon_identifiability <- epsilon_identifiability(X, Y, na.rm = na.rm)
+      ir <- results$epsilon_identifiability$identifiability_rate
+      summary_rows$epsilon_identifiability <- data.frame(
+        metric = "Epsilon-Identifiability", value = round(ir, 4),
+        reference = "<= 0.1", ratio = round(ir, 4),
+        status = ifelse(isTRUE(results$epsilon_identifiability$privacy_pass), "PASS", "WARNING")
+      )
+      NULL
+    }, error = function(e) {
+      if (verbose) message("  Epsilon-Identifiability failed: ", e$message)
+      data.frame(metric = "Epsilon-Identifiability", value = NA, reference = NA,
+                 ratio = NA, status = "ERROR")
+    })
+    if (!is.null(err)) summary_rows$epsilon_identifiability <- err
+  }
+
   # ============================================
   # MEMBERSHIP INFERENCE
   # ============================================
@@ -829,6 +908,7 @@ disclosure_report.default <- function(X, Y,
 #'
 #' @param x an object of class "disclosure_report"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.disclosure_report <- function(x, ...) {
   cat("\n")
@@ -886,6 +966,7 @@ print.disclosure_report <- function(x, ...) {
 #'
 #' @param object an object of class "disclosure_report"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.disclosure_report <- function(object, ...) {
   # Create detailed summary
@@ -904,9 +985,9 @@ summary.disclosure_report <- function(object, ...) {
   # Extract key values from attribution metrics
   if (!is.null(object$results$dcap)) {
     summ$attribution_results$dcap <- list(
-      value = object$results$dcap$dcap,
+      value = object$results$dcap$cap,
       baseline = object$results$dcap$baseline,
-      risk_ratio = object$results$dcap$dcap / object$results$dcap$baseline,
+      risk_ratio = object$results$dcap$cap / object$results$dcap$baseline,
       n_matched = object$results$dcap$n_matched
     )
   }
@@ -1038,6 +1119,7 @@ summary.disclosure_report <- function(object, ...) {
 #'
 #' @param x an object of class "summary.disclosure_report"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.disclosure_report <- function(x, ...) {
   cat("Disclosure Risk Report Summary\n")
@@ -1050,7 +1132,7 @@ print.summary.disclosure_report <- function(x, ...) {
   if (length(x$attribution_results) > 0) {
     cat("Attribution-Based Metrics:\n")
     if (!is.null(x$attribution_results$dcap)) {
-      cat("  DCAP:", round(x$attribution_results$dcap$value, 4),
+      cat("  CAP:", round(x$attribution_results$dcap$value, 4),
           "(baseline:", round(x$attribution_results$dcap$baseline, 4),
           ", ratio:", round(x$attribution_results$dcap$risk_ratio, 2), ")\n")
     }
@@ -1143,6 +1225,7 @@ print.summary.disclosure_report <- function(x, ...) {
 #' @param y not used
 #' @param ... additional arguments passed to plotting functions
 #' @param which which plot to show: 1 = summary bar chart, 2 = metric details
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 #' @importFrom graphics barplot par text mtext axis box
 plot.disclosure_report <- function(x, y = NULL, ..., which = 1) {

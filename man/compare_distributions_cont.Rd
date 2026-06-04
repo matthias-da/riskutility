@@ -13,7 +13,7 @@ compare_distributions_cont(X, ...)
 \method{compare_distributions_cont}{default}(
   X,
   Y,
-  variables = NULL,
+  vars = NULL,
   kind = NULL,
   conditional = NULL,
   weights = NULL,
@@ -30,9 +30,12 @@ compare_distributions_cont(X, ...)
 
 \item{Y}{A data frame or data table to compare with \code{X}.}
 
-\item{variables}{A character vector specifying the variables for which the
+\item{vars}{A character vector specifying the variables for which the
 comparisons are made. Must be present in both \code{X} and \code{Y}. The
-class of variables determines the default kind of calculation. See details.}
+class of variables determines the default kind of calculation. See details.
+This argument was formerly named \code{variables}; that name is still
+accepted for backward compatibility but \code{vars} is preferred for
+consistency with the rest of the package (e.g. \code{\link{rumap}}).}
 
 \item{kind}{To be set when changing the default kind of calculation. See
 details.}
@@ -72,15 +75,15 @@ conditional CDFs, and approximation.
 \details{
 The following default calculations are taken:
 
-If \code{variables} links to one or two numeric variables: the (weighted)
+If \code{vars} links to one or two numeric variables: the (weighted)
 ECDF is calculated for both data sets. With \code{kind} one can change to
 \code{"density"}, \code{"density_bayes"}, \code{"density_ratio"} and
 \code{"density_ratio_bayes"}.
 
-If \code{variables} links to one, two or three categorical variables:
+If \code{vars} links to one, two or three categorical variables:
 barcharts and mosaic plots are made.
 
-If \code{variables} links to one numeric and one categorical variable:
+If \code{vars} links to one numeric and one categorical variable:
 boxplots statistics are calculated.
 
 If weights are provided, the weighted versions are
@@ -103,7 +106,7 @@ U <- data.frame(
 )
 
 # Compare ECDFs for age and income
-result <- compare_distributions_cont(S, U, variables = c("age", "income"), weights = "weights")
+result <- compare_distributions_cont(S, U, vars = c("age", "income"), weights = "weights")
 
 # View the result
 print(result$formula)
@@ -125,7 +128,7 @@ Y <- data.frame(
 )
 
 # Compare ECDFs for age and income
-result <- compare_distributions_cont(X, Y, variables = c("age", "income"), weights = "weights")
+result <- compare_distributions_cont(X, Y, vars = c("age", "income"), weights = "weights")
 
 # View the result
 print(result$formula)
@@ -146,7 +149,7 @@ Y <- data.frame(
 )
 
 # Compare ECDFs for age and income
-result <- compare_distributions_cont(X, Y, variables = c("age", "income"), n_approx = 100)
+result <- compare_distributions_cont(X, Y, vars = c("age", "income"), n_approx = 100)
 
 # View the result
 print(result$formula)

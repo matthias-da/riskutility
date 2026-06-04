@@ -16,6 +16,9 @@
 \item{which}{integer, which plot: 1 = distance comparison bar chart,
 2 = utility gauge}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for energy_distance objects
 }

@@ -339,6 +339,7 @@ linkability.default <- function(X, Y,
 #'
 #' @param x an object of class "linkability"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.linkability <- function(x, ...) {
   cat("Linkability Risk Assessment\n")
@@ -380,6 +381,7 @@ print.linkability <- function(x, ...) {
 #'
 #' @param object an object of class "linkability"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.linkability <- function(object, ...) {
   summ <- list(
@@ -413,6 +415,7 @@ summary.linkability <- function(object, ...) {
 #'
 #' @param x an object of class "summary.linkability"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.linkability <- function(x, ...) {
   cat("Summary: Linkability Risk Assessment\n")
@@ -454,6 +457,7 @@ print.summary.linkability <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which which plot(s) to show: 1 = Risk comparison barplot (attack vs control),
 #'   2 = Success rate by column group (aux vs secret column counts)
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.linkability <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

@@ -275,6 +275,7 @@ copula_fidelity.default <- function(X, Y,
 #'
 #' @param x an object of class \code{"copula_fidelity"}
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.copula_fidelity <- function(x, ...) {
   cat("Copula Fidelity - Empirical Copula Dependence Comparison\n")
@@ -318,6 +319,7 @@ print.copula_fidelity <- function(x, ...) {
 #'
 #' @param object an object of class \code{"copula_fidelity"}
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.copula_fidelity <- function(object, ...) {
   summ <- list(
@@ -344,6 +346,7 @@ summary.copula_fidelity <- function(object, ...) {
 #'
 #' @param x an object of class \code{"summary.copula_fidelity"}
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.copula_fidelity <- function(x, ...) {
   cat("Summary: Copula Fidelity\n")
@@ -379,6 +382,7 @@ print.summary.copula_fidelity <- function(x, ...) {
 #' @param which integer, which plot: 1 = heatmap of pairwise copula distances
 #' @importFrom ggplot2 ggplot aes geom_tile geom_text scale_fill_gradient2
 #'   labs theme_minimal theme element_text
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.copula_fidelity <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 1)

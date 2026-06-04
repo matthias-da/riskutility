@@ -27,6 +27,7 @@ Imports:
     MASS,
     VIM,
     randomForest,
+    ranger,
     reshape2,
     stats,
     graphics,
@@ -35,13 +36,12 @@ Suggests:
     simPop,
     synthpop,
     caretEnsemble,
-    fastshap,
+    kernelshap,
     uwot,
     Rtsne,
     dbscan,
     vip,
     rpart,
-    ranger,
     xgboost,
     partykit,
     testthat (>= 3.0.0),
@@ -54,11 +54,10 @@ Suggests:
     caret,
     robustbase,
     gridExtra,
-    ggh4x,
     Hmisc,
     robCompositions,
     clue
-License: GPL-3 + file LICENSE
+License: GPL-3
 URL: https://github.com/matthias-da/riskutility
 BugReports: https://github.com/matthias-da/riskutility/issues
 Encoding: UTF-8

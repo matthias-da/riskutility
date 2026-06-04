@@ -6,7 +6,7 @@
 #' \itemize{
 #'   \item \strong{Model-based:} Uses \code{caret::varImp}.
 #'   \item \strong{Permutation-based:} Uses \code{vip::vi_permute}. A prediction wrapper is required.
-#'   \item \strong{SHAP-based:} Computes mean absolute Shapley values using the \code{fastshap} package.
+#'   \item \strong{SHAP-based:} Computes mean absolute Shapley values using the \code{kernelshap} package.
 #' }
 #'
 #' @param X Original dataset (data.frame or data.table). Must include the target variable.
@@ -32,7 +32,7 @@
 #'   }
 #'   Additionally, a custom metric function can be supplied that takes the observed values and predictions as inputs and
 #'   returns a single numeric performance value.
-#' @param nsim Number of simulations or permutations (also used by \code{fastshap::explain}).
+#' @param nsim Number of simulations used by permutation importance.
 #'
 #' @param ... additional arguments passed to methods
 #'
@@ -44,7 +44,7 @@
 #' @details
 #' \itemize{
 #'   \item If the target variable in \code{X} is a factor, the target variable in \code{Y} is coerced to a factor with the same levels.
-#'   \item For SHAP importance, the function uses the \code{fastshap} package. The returned importance is the mean absolute SHAP value per feature.
+#'   \item For SHAP importance, the function uses the \code{kernelshap} package. The returned importance is the mean absolute SHAP value per feature.
 #'   \item For classification tasks in the SHAP branch, if no \code{pred_wrapper} is provided, predictions are taken as the probability of the first class.
 #' }
 #'
@@ -146,8 +146,8 @@ compare_feature_importance.default <- function(X, Y, formula, method,
                              pred_wrapper = pred_wrapper, nsim = nsim)
     importance_Y <- setNames(imp_Y$Importance, imp_Y$Variable)
   } else if (importance_type == "shap") {
-    if (!requireNamespace("fastshap", quietly = TRUE)) {
-      stop("Package 'fastshap' is required for SHAP importance. Please install it.")
+    if (!requireNamespace("kernelshap", quietly = TRUE)) {
+      stop("Package 'kernelshap' is required for SHAP importance. Please install it.")
     }
     # If no prediction wrapper is provided, define a default one.
     # For classification tasks, return the probability of the first class.
@@ -161,19 +161,19 @@ compare_feature_importance.default <- function(X, Y, formula, method,
         }
       }
     }
-    # Compute SHAP values using fastshap.
-    shap_X <- fastshap::explain(model_X,
-                                X = as.data.frame(X)[, features, drop = FALSE],
-                                pred_wrapper = pred_wrapper,
-                                nsim = nsim
-    )
-    importance_X <- colMeans(abs(shap_X))
-    shap_Y <- fastshap::explain(model_Y,
-                                X = as.data.frame(Y)[, features, drop = FALSE],
-                                pred_wrapper = pred_wrapper,
-                                nsim = nsim
-    )
-    importance_Y <- colMeans(abs(shap_Y))
+    pred_fun <- function(object, X, ...) pred_wrapper(object, X)
+    feat_X <- as.data.frame(X)[, features, drop = FALSE]
+    feat_Y <- as.data.frame(Y)[, features, drop = FALSE]
+    # Background samples for the SHAP reference distribution (capped for speed).
+    bg_X <- feat_X[sample.int(nrow(feat_X), min(nrow(feat_X), 100L)), , drop = FALSE]
+    bg_Y <- feat_Y[sample.int(nrow(feat_Y), min(nrow(feat_Y), 100L)), , drop = FALSE]
+    # Compute SHAP values using kernelshap (model-agnostic, available on CRAN).
+    shap_X <- kernelshap::kernelshap(model_X, X = feat_X, bg_X = bg_X,
+                                     pred_fun = pred_fun, verbose = FALSE)
+    shap_Y <- kernelshap::kernelshap(model_Y, X = feat_Y, bg_X = bg_Y,
+                                     pred_fun = pred_fun, verbose = FALSE)
+    importance_X <- colMeans(abs(shap_X$S))
+    importance_Y <- colMeans(abs(shap_Y$S))
   }
 
   # Replace NaN with NA for consistent handling
@@ -218,6 +218,7 @@ compare_feature_importance.default <- function(X, Y, formula, method,
 #'
 #' @param x an object of class "compare_feature_importance"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.compare_feature_importance <- function(x, ...) {
   cat("Feature Importance Comparison\n")
@@ -257,6 +258,7 @@ summary.compare_feature_importance <- function(object, ...) {
 #'
 #' @param x an object of class "summary.compare_feature_importance"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.compare_feature_importance <- function(x, ...) {
   cat("Summary: Feature Importance Comparison\n")
@@ -286,6 +288,7 @@ print.summary.compare_feature_importance <- function(x, ...) {
 #' @param which integer, which plot to produce (default 1). Currently only 1 is available.
 #' @param ... additional arguments passed to plotting functions
 #' @importFrom graphics barplot par legend
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.compare_feature_importance <- function(x, y = NULL, which = 1, ...) {
   comp <- x$comparison

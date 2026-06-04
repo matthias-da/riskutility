@@ -40,18 +40,21 @@
 #'
 #' Three super-population models are supported:
 #'
-#' \strong{Zayatz (1991):}
+#' \strong{Zayatz (equiprobable form):}
 #' The simplest model. For each sample unique (f_k = 1):
 #' \deqn{P(F_k = 1 | f_k = 1) = (1 - \pi)^{1/\pi - 1}}
-#' where \eqn{\pi} is the sampling fraction. This gives a single constant
-#' probability for all sample uniques. Records with f_k > 1 have risk 0.
+#' where \eqn{\pi} is the sampling fraction. This is the closed form obtained
+#' under an equiprobable (Poisson) super-population and assigns a single constant
+#' probability to all sample uniques; it is a simplification of Zayatz's (1991)
+#' frequency-spectrum estimator. Records with f_k > 1 have risk 0.
 #'
-#' \strong{Pitman (2003):}
-#' Uses a Pitman partition model with parameter \eqn{\alpha} estimated from
-#' the frequency distribution. For sample uniques:
+#' \strong{Pitman (moment approximation):}
+#' A simplified estimator inspired by the Pitman partition model, with parameter
+#' \eqn{\alpha} estimated by a moment heuristic from the singleton/doubleton
+#' frequency counts. For sample uniques:
 #' \deqn{P(F_k = 1 | f_k = 1) \approx \frac{\alpha}{\alpha + n \cdot \pi}}
-#' where \eqn{n} is the sample size. The parameter \eqn{\alpha} is estimated
-#' from the ratio of frequency classes in the sample.
+#' where \eqn{n} is the sample size. This is an approximation rather than the
+#' full Pitman (2003) maximum-likelihood estimator and should be read as such.
 #'
 #' \strong{SNB (Bethlehem et al., 1990):}
 #' Sample-Negative-Binomial model. Fits a negative binomial distribution to
@@ -59,6 +62,13 @@
 #' \eqn{r} and \eqn{q} are estimated from the sample frequency distribution.
 #' For sample uniques:
 #' \deqn{P(F_k = 1 | f_k = 1) = \frac{(1 - \pi q / (1 + q))^r}{\text{norm}}}
+#'
+#' \strong{Note on estimators:} The Zayatz and Pitman options above use
+#' simplified closed-form / moment-based approximations rather than the full
+#' published estimators; they are intended as fast, comparable heuristics. For
+#' authoritative population-uniqueness estimation consider specialised
+#' implementations (e.g. the \pkg{sdcMicro} package). Results are best compared
+#' across methods rather than relied on individually.
 #'
 #' \strong{Interpretation:}
 #' \itemize{
@@ -476,6 +486,7 @@ population_uniqueness.default <- function(X,
 #'
 #' @param x an object of class "population_uniqueness"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.population_uniqueness <- function(x, ...) {
   cat("Population Uniqueness Risk Assessment\n")
@@ -524,6 +535,7 @@ print.population_uniqueness <- function(x, ...) {
 #'
 #' @param object an object of class "population_uniqueness"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.population_uniqueness <- function(object, ...) {
   # Frequency distribution summary
@@ -557,6 +569,7 @@ summary.population_uniqueness <- function(object, ...) {
 #'
 #' @param x an object of class "summary.population_uniqueness"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.population_uniqueness <- function(x, ...) {
   cat("Summary: Population Uniqueness Risk Assessment\n")
@@ -607,6 +620,7 @@ print.summary.population_uniqueness <- function(x, ...) {
 #' @param ... additional arguments passed to plotting functions
 #' @param which integer, which plot(s) to show: 1 = per-record risk distribution
 #'   histogram, 2 = method comparison (only when method="all")
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.population_uniqueness <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

@@ -282,6 +282,7 @@ energy_distance.default <- function(X, Y,
 #'
 #' @param x an object of class "energy_distance"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.energy_distance <- function(x, ...) {
   cat("Energy Distance - Multivariate Numeric Distribution Comparison\n")
@@ -327,6 +328,7 @@ print.energy_distance <- function(x, ...) {
 #'
 #' @param object an object of class "energy_distance"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.energy_distance <- function(object, ...) {
   summ <- list(
@@ -354,6 +356,7 @@ summary.energy_distance <- function(object, ...) {
 #'
 #' @param x an object of class "summary.energy_distance"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.energy_distance <- function(x, ...) {
   cat("Summary: Energy Distance\n")
@@ -382,6 +385,7 @@ print.summary.energy_distance <- function(x, ...) {
 #' @param which integer, which plot: 1 = distance comparison bar chart,
 #'   2 = utility gauge
 #' @importFrom graphics barplot par text rect
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.energy_distance <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

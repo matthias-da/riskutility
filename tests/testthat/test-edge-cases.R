@@ -235,7 +235,7 @@ test_that("dcap returns 1 for perfect match", {
                  key_vars = c("age", "gender"),
                  target_var = "income")
 
-  expect_equal(result$dcap, 1)
+  expect_equal(result$cap, 1)
 })
 
 test_that("hellinger returns 0 for identical categorical distributions", {

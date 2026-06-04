@@ -16,6 +16,9 @@
 \item{which}{which plot(s) to show: 1 = TCAP histogram, 2 = risk categories,
 3 = matches distribution}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for tcap objects
 }

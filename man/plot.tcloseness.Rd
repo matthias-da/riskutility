@@ -16,6 +16,9 @@
 \item{which}{integer, which plot: 1 = EMD distribution histogram,
 2 = EC size vs EMD scatter}
 }
+\value{
+No return value; called for the side effect of producing a plot.
+}
 \description{
 Plot method for tcloseness objects
 }

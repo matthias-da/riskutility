@@ -349,6 +349,7 @@ drisk.default <- function(X, Y,
 #'
 #' @param x an object of class "drisk"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.drisk <- function(x, ...) {
   cat("Disclosure Risk for Continuous Variables (dRisk)\n")
@@ -404,6 +405,7 @@ print.drisk <- function(x, ...) {
 #'
 #' @param object an object of class "drisk"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.drisk <- function(object, ...) {
   summ <- list(
@@ -445,6 +447,7 @@ summary.drisk <- function(object, ...) {
 #'
 #' @param x an object of class "summary.drisk"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.drisk <- function(x, ...) {
   cat("Summary: Disclosure Risk for Continuous Variables (dRisk)\n")
@@ -496,6 +499,7 @@ print.summary.drisk <- function(x, ...) {
 #' @param which which plot(s) to show: 1 = per-record risk indicator strip chart,
 #'   2 = minimum RMD distance distribution (only available when method includes
 #'   "rmd")
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.drisk <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)

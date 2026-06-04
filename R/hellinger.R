@@ -249,6 +249,7 @@ hellinger.default <- function(X, Y,
 #'
 #' @param x an object of class "hellinger"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.hellinger <- function(x, ...) {
   cat("Hellinger Distance - Categorical Distribution Comparison\n")
@@ -283,6 +284,7 @@ print.hellinger <- function(x, ...) {
 #'
 #' @param object an object of class "hellinger"
 #' @param ... additional arguments (ignored)
+#' @return A list of summary statistics for the corresponding object.
 #' @export
 summary.hellinger <- function(object, ...) {
   summ <- list(
@@ -306,6 +308,7 @@ summary.hellinger <- function(object, ...) {
 #'
 #' @param x an object of class "summary.hellinger"
 #' @param ... additional arguments (ignored)
+#' @return The input object, invisibly.
 #' @export
 print.summary.hellinger <- function(x, ...) {
   cat("Summary: Hellinger Distance\n")
@@ -335,6 +338,7 @@ print.summary.hellinger <- function(x, ...) {
 #' @param which integer, which plot: 1 = bar chart of Hellinger distances,
 #'   2 = dotchart sorted by distance
 #' @importFrom graphics barplot dotchart abline par
+#' @return No return value; called for the side effect of producing a plot.
 #' @export
 plot.hellinger <- function(x, y = NULL, ..., which = 1) {
   show <- rep(FALSE, 2)
