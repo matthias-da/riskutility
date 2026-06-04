@@ -68,3 +68,7 @@ paper/*.out
 paper/*.toc
 paper/*.bbl
 paper/*.blg
+
+# Local working notes / scratch (not part of the package)
+TODO.md
+recordLinkage_discussion.*
