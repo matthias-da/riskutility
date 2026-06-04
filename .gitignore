@@ -58,3 +58,13 @@ rsconnect/
 .DS_Store
 .worktrees/
 jss-paper-plan.md
+
+# JSS paper (paper/) LaTeX build artifacts (source .Rmd/.R/.cls/.bst/.bib are tracked)
+paper/*.pdf
+paper/*.tex
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.toc
+paper/*.bbl
+paper/*.blg
