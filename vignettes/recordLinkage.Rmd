@@ -53,6 +53,13 @@ if (!requireNamespace("sdcMicro", quietly = TRUE))
   stop("This vignette requires the sdcMicro package. ",
        "Install it with install.packages('sdcMicro').")
 library(sdcMicro)
+
+# Backend-aware torch flag. The 'torch' package may be installed while its C++
+# backend (libtorch) is not -- e.g. on CRAN / win-builder, where it is only
+# fetched via torch::install_torch(). Embedding chunks are gated on this so the
+# vignette knits without the backend present.
+has_torch <- requireNamespace("torch", quietly = TRUE) &&
+  isTRUE(tryCatch(torch::torch_is_installed(), error = function(e) FALSE))
 ```
 
 # Introduction
@@ -1316,7 +1323,7 @@ useful when blocks are small but the overall dataset is large.
 
 ## Toy Example: 6 Records
 
-```{r emb-toy, eval=requireNamespace("torch", quietly = TRUE)}
+```{r emb-toy, eval=has_torch}
 orig_emb <- data.frame(
   age = c(20, 40, 40, 60, 60, 80),
   sex = factor(c("F", "M", "F", "M", "F", "M"))
@@ -1334,7 +1341,7 @@ res_emb <- recordLinkage(orig_emb, anon_emb,
 print(res_emb)
 ```
 
-```{r emb-toy-risk, eval=requireNamespace("torch", quietly = TRUE)}
+```{r emb-toy-risk, eval=has_torch}
 knitr::kable(res_emb$per_record[, c("risk", "cand_n", "true_in_set", "d_true")],
              digits = 4,
              caption = "Per-record risk (embedding method)")
@@ -1348,7 +1355,7 @@ space separates the age values.
 
 ## Real-World Example (n = 500)
 
-```{r emb-real, eval=requireNamespace("torch", quietly = TRUE)}
+```{r emb-real, eval=has_torch}
 set.seed(42)
 res_emb_real <- recordLinkage(census, census_anon,
                                key = c("age", "sex", "region", "educ"),
@@ -1357,11 +1364,11 @@ res_emb_real <- recordLinkage(census, census_anon,
 print(res_emb_real)
 ```
 
-```{r emb-real-riskhist, fig.height=4, fig.cap="Per-record risk distribution (embedding method).", eval=requireNamespace("torch", quietly = TRUE)}
+```{r emb-real-riskhist, fig.height=4, fig.cap="Per-record risk distribution (embedding method).", eval=has_torch}
 plot(res_emb_real, which = 1)
 ```
 
-```{r emb-real-vi, fig.height=4, fig.cap="Variable importance (permutation-based embedding shift).", eval=requireNamespace("torch", quietly = TRUE)}
+```{r emb-real-vi, fig.height=4, fig.cap="Variable importance (permutation-based embedding shift).", eval=has_torch}
 plot(res_emb_real, which = 3)
 ```
 
@@ -1453,8 +1460,8 @@ compare_df <- data.frame(
   )
 )
 
-# Add embedding row if torch is available
-if (requireNamespace("torch", quietly = TRUE)) {
+# Add embedding row if the torch backend is available
+if (has_torch) {
   set.seed(42)
   res_emb_census <- recordLinkage(census, census_anon,
                                    key = c("age", "sex", "region", "educ"),

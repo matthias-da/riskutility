@@ -47,7 +47,7 @@ test_that("RF: risk == 1 when the true match IS the unique nearest", {
 })
 
 test_that("embedding: risk uses the true match, not the nearest neighbour", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   d <- .shift_data(n = 80)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "inc"),
                        method = "embedding", truth = "row",

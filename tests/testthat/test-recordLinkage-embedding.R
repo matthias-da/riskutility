@@ -1,7 +1,7 @@
 # tests/testthat/test-recordLinkage-embedding.R
 
 test_that(".ae_preprocess handles numeric data", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   df <- data.frame(a = c(0, 5, 10), b = c(100, 200, 300))
   res <- .ae_preprocess(df, key = c("a", "b"), type = NULL)
 
@@ -16,7 +16,7 @@ test_that(".ae_preprocess handles numeric data", {
 })
 
 test_that(".ae_preprocess handles categorical data", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   df <- data.frame(x = c("A", "B", "C", "A"), stringsAsFactors = FALSE)
   res <- .ae_preprocess(df, key = "x", type = NULL)
 
@@ -31,7 +31,7 @@ test_that(".ae_preprocess handles categorical data", {
 })
 
 test_that(".ae_preprocess handles mixed data", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   df <- data.frame(a = c(1, 2, 3), b = c("X", "Y", "X"),
                    stringsAsFactors = FALSE)
   res <- .ae_preprocess(df, key = c("a", "b"), type = NULL)
@@ -43,7 +43,7 @@ test_that(".ae_preprocess handles mixed data", {
 })
 
 test_that(".ae_preprocess maps unseen levels to UNK", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   df_train <- data.frame(x = c("A", "B"), stringsAsFactors = FALSE)
   prep_train <- .ae_preprocess(df_train, key = "x", type = NULL)
 
@@ -56,7 +56,7 @@ test_that(".ae_preprocess maps unseen levels to UNK", {
 })
 
 test_that(".ae_preprocess handles constant numeric column", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   df <- data.frame(a = c(5, 5, 5), b = c(1, 2, 3))
   res <- .ae_preprocess(df, key = c("a", "b"), type = NULL)
 
@@ -67,7 +67,7 @@ test_that(".ae_preprocess handles constant numeric column", {
 })
 
 test_that(".ae_model constructs valid autoencoder", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   df <- data.frame(a = c(1, 2, 3, 4, 5),
                    b = c("X", "Y", "X", "Y", "X"),
                    stringsAsFactors = FALSE)
@@ -88,7 +88,7 @@ test_that(".ae_model constructs valid autoencoder", {
 })
 
 test_that(".ae_model works with all-numeric data", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   df <- data.frame(a = 1:5, b = 6:10)
   prep <- .ae_preprocess(df, key = c("a", "b"), type = NULL)
   model <- .ae_model(prep, latent_dim = 2L)
@@ -101,7 +101,7 @@ test_that(".ae_model works with all-numeric data", {
 })
 
 test_that(".ae_model works with all-categorical data", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   df <- data.frame(x = c("A", "B", "C", "A", "B"),
                    y = c("P", "Q", "P", "Q", "P"),
                    stringsAsFactors = FALSE)
@@ -118,7 +118,7 @@ test_that(".ae_model works with all-categorical data", {
 })
 
 test_that(".ae_train produces a trained model", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(42)
   df <- data.frame(a = rnorm(50), b = sample(letters[1:3], 50, TRUE),
                    stringsAsFactors = FALSE)
@@ -131,7 +131,7 @@ test_that(".ae_train produces a trained model", {
 })
 
 test_that(".ae_train respects custom latent_dim", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(42)
   df <- data.frame(a = rnorm(30), b = rnorm(30))
   res <- .ae_train(df, key = c("a", "b"), latent_dim = 4L, epochs = 3L)
@@ -140,7 +140,7 @@ test_that(".ae_train respects custom latent_dim", {
 })
 
 test_that(".ae_train is reproducible with set.seed", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   df <- data.frame(a = rnorm(30), b = rnorm(30))
 
   set.seed(123)
@@ -156,7 +156,7 @@ test_that(".ae_train is reproducible with set.seed", {
 })
 
 test_that(".ae_encode returns correct dimensions", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(42)
   df <- data.frame(a = rnorm(30), b = rnorm(30))
   trained <- .ae_train(df, key = c("a", "b"), latent_dim = 3L, epochs = 3L)
@@ -169,7 +169,7 @@ test_that(".ae_encode returns correct dimensions", {
 })
 
 test_that(".ae_encode handles unseen categorical levels", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(42)
   df_train <- data.frame(a = 1:20,
                          b = rep(c("X", "Y"), 10),
@@ -200,7 +200,7 @@ test_that(".ae_distance returns normalized distances", {
 })
 
 test_that(".ae_var_importance returns valid importance scores", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(42)
   df <- data.frame(a = rnorm(30), b = sample(letters[1:3], 30, TRUE),
                    stringsAsFactors = FALSE)
@@ -216,7 +216,7 @@ test_that(".ae_var_importance returns valid importance scores", {
 })
 
 test_that(".embedding_linkage_block returns expected structure", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(42)
   X <- data.frame(a = rnorm(25), b = rnorm(25))
   Y <- data.frame(a = rnorm(25), b = rnorm(25))
@@ -235,7 +235,7 @@ test_that(".embedding_linkage_block returns expected structure", {
 # --- Integration tests via recordLinkage() ---
 
 test_that("recordLinkage(method = 'embedding') basic numeric", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(30), b = rnorm(30))
   Y <- data.frame(a = rnorm(30), b = rnorm(30))
@@ -250,7 +250,7 @@ test_that("recordLinkage(method = 'embedding') basic numeric", {
 })
 
 test_that("recordLinkage(method = 'embedding') all-categorical", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(
     sex = sample(c("M", "F"), 30, TRUE),
@@ -270,7 +270,7 @@ test_that("recordLinkage(method = 'embedding') all-categorical", {
 })
 
 test_that("recordLinkage(method = 'embedding') mixed data", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(30),
                   b = sample(c("X", "Y", "Z"), 30, TRUE),
@@ -285,7 +285,7 @@ test_that("recordLinkage(method = 'embedding') mixed data", {
 })
 
 test_that("recordLinkage(method = 'embedding') near-copy detection", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(20), b = rnorm(20))
   Y <- X + rnorm(40, 0, 0.01)  # near-copies
@@ -296,7 +296,7 @@ test_that("recordLinkage(method = 'embedding') near-copy detection", {
 })
 
 test_that("recordLinkage(method = 'embedding') bijective matching", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   skip_if_not_installed("clue")
   set.seed(1)
   X <- data.frame(a = rnorm(20), b = rnorm(20))
@@ -309,7 +309,7 @@ test_that("recordLinkage(method = 'embedding') bijective matching", {
 })
 
 test_that("recordLinkage(method = 'embedding') OT matching", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(20), b = rnorm(20))
   Y <- data.frame(a = rnorm(20), b = rnorm(20))
@@ -321,7 +321,7 @@ test_that("recordLinkage(method = 'embedding') OT matching", {
 })
 
 test_that("recordLinkage(method = 'embedding') with blocking", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(80), b = rep(c("A", "B"), 40))
   Y <- data.frame(a = rnorm(80), b = rep(c("A", "B"), 40))
@@ -333,7 +333,7 @@ test_that("recordLinkage(method = 'embedding') with blocking", {
 })
 
 test_that("recordLinkage(method = 'embedding') emb_global = TRUE with blocking", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(80), b = rep(c("A", "B"), 40))
   Y <- data.frame(a = rnorm(80), b = rep(c("A", "B"), 40))
@@ -345,7 +345,7 @@ test_that("recordLinkage(method = 'embedding') emb_global = TRUE with blocking",
 })
 
 test_that("recordLinkage(method = 'embedding') direction = 'reverse'", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(20), b = rnorm(20))
   Y <- data.frame(a = rnorm(20), b = rnorm(20))
@@ -356,7 +356,7 @@ test_that("recordLinkage(method = 'embedding') direction = 'reverse'", {
 })
 
 test_that("recordLinkage(method = 'embedding') custom latent_dim and epochs", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(30), b = rnorm(30))
   Y <- data.frame(a = rnorm(30), b = rnorm(30))
@@ -368,7 +368,7 @@ test_that("recordLinkage(method = 'embedding') custom latent_dim and epochs", {
 })
 
 test_that("recordLinkage(method = 'embedding') small-block fallback", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   # Block C has only 5 records -> should fall back to deterministic
   X <- data.frame(a = rnorm(85),
@@ -384,7 +384,7 @@ test_that("recordLinkage(method = 'embedding') small-block fallback", {
 })
 
 test_that("recordLinkage(method = 'embedding') unseen categories", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(30),
                   b = sample(c("X", "Y"), 30, TRUE),
@@ -400,7 +400,7 @@ test_that("recordLinkage(method = 'embedding') unseen categories", {
 })
 
 test_that("recordLinkage(method = 'embedding') print output", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(20), b = rnorm(20))
   Y <- data.frame(a = rnorm(20), b = rnorm(20))
@@ -414,7 +414,7 @@ test_that("recordLinkage(method = 'embedding') print output", {
 })
 
 test_that("recordLinkage(method = 'embedding') summary output", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(20), b = rnorm(20))
   Y <- data.frame(a = rnorm(20), b = rnorm(20))
@@ -426,7 +426,7 @@ test_that("recordLinkage(method = 'embedding') summary output", {
 })
 
 test_that("recordLinkage(method = 'embedding') variable importance", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(30), b = rnorm(30), c = rnorm(30))
   Y <- data.frame(a = rnorm(30), b = rnorm(30), c = rnorm(30))
@@ -439,7 +439,7 @@ test_that("recordLinkage(method = 'embedding') variable importance", {
 })
 
 test_that("recordLinkage(method = 'embedding') weights message", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   set.seed(1)
   X <- data.frame(a = rnorm(20), b = rnorm(20))
   Y <- data.frame(a = rnorm(20), b = rnorm(20))
@@ -451,7 +451,7 @@ test_that("recordLinkage(method = 'embedding') weights message", {
 })
 
 test_that("recordLinkage(method = 'embedding') reproducibility", {
-  skip_if_not_installed("torch")
+  skip_if_no_torch()
   X <- data.frame(a = rnorm(20), b = rnorm(20))
   Y <- data.frame(a = rnorm(20), b = rnorm(20))
 

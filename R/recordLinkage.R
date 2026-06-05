@@ -459,8 +459,10 @@
 #' distances. Variable importance is permutation-based: each variable is
 #' shuffled and the mean embedding shift is measured.
 #'
-#' Requires the \pkg{torch} package. Entity embeddings handle mixed data
-#' naturally; all-numeric and all-categorical datasets are supported.
+#' Requires the \pkg{torch} package together with its C++ backend (libtorch),
+#' which is downloaded once via \code{torch::install_torch()}. Entity embeddings
+#' handle mixed data naturally; all-numeric and all-categorical datasets are
+#' supported.
 #'
 #' @examples
 #' set.seed(1)
@@ -703,6 +705,12 @@ recordLinkage.default <- function(X,
         if (!requireNamespace("torch", quietly = TRUE)) {
             stop("Package 'torch' required for recordLinkage(method = 'embedding'). ",
                  "Install with install.packages('torch')", call. = FALSE)
+        }
+        if (!isTRUE(tryCatch(torch::torch_is_installed(),
+                             error = function(e) FALSE))) {
+            stop("recordLinkage(method = 'embedding') requires the torch backend ",
+                 "(libtorch), which is not installed. Install it once with ",
+                 "torch::install_torch().", call. = FALSE)
         }
         if (!missing(weights)) {
             message("method = 'embedding': weights ignored. ",

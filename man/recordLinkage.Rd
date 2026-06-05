@@ -579,8 +579,10 @@ normalized to \eqn{[0, 1]} using the 97.5th percentile of within-query pairwise
 distances. Variable importance is permutation-based: each variable is
 shuffled and the mean embedding shift is measured.
 
-Requires the \pkg{torch} package. Entity embeddings handle mixed data
-naturally; all-numeric and all-categorical datasets are supported.
+Requires the \pkg{torch} package together with its C++ backend (libtorch),
+which is downloaded once via \code{torch::install_torch()}. Entity embeddings
+handle mixed data naturally; all-numeric and all-categorical datasets are
+supported.
 }
 
 \examples{
