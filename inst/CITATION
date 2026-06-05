@@ -6,15 +6,13 @@ bibentry(
   author   = c(
     person("Matthias", "Templ",
            email = "matthias.templ@gmail.com",
-           comment = c(ORCID = "0000-0002-8638-5276")),
-    person("Oscar", "Thees",
-           comment = c(ORCID = "0009-0001-9378-4988"))
+           comment = c(ORCID = "0000-0002-8638-5276"))
   ),
   year     = "2025",
   note     = "R package version 0.1.0",
   url      = "https://github.com/matthias-da/riskutility",
   textVersion = paste(
-    "Templ, M. & Thees, O. (2025).",
+    "Templ, M. (2025).",
     "riskutility: Disclosure Risk and Data Utility Metrics for Synthetic and Anonymized Data.",
     "R package version 0.1.0.",
     "https://github.com/matthias-da/riskutility"
@@ -26,15 +24,13 @@ bibentry(
   title    = "Measuring disclosure risk and data utility for privacy-preserving data synthesis",
   author   = c(
     person("Matthias", "Templ",
-           comment = c(ORCID = "0000-0002-8638-5276")),
-    person("Oscar", "Thees",
-           comment = c(ORCID = "0009-0001-9378-4988"))
+           comment = c(ORCID = "0000-0002-8638-5276"))
   ),
   journal  = "Journal of Statistical Software",
   year     = "2025",
   note     = "Submitted",
   textVersion = paste(
-    "Templ, M. & Thees, O. (2025).",
+    "Templ, M. (2025).",
     "Measuring disclosure risk and data utility for privacy-preserving data synthesis.",
     "Journal of Statistical Software. (Submitted)"
   )

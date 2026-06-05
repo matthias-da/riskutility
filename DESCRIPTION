@@ -6,8 +6,10 @@ Authors@R: c(
            role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-8638-5276")),
     person("Oscar", "Thees",
-           role = "aut",
-           comment = c(ORCID = "0009-0001-9378-4988"))
+           role = "ctb",
+           comment = c(ORCID = "0009-0001-9378-4988")),
+    person("Roman", "Müller",
+           role = "ctb")
     )
 Description: Provides comprehensive methods to measure disclosure risk and data
     utility for anonymized and synthetic data. Implements attribution-based risk
