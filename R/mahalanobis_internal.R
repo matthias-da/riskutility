@@ -141,7 +141,7 @@
 #' @param type named character. Per-key type.
 #' @return numeric vector of distances (one per candidate row).
 #' @keywords internal
-.mahal_dist <- function(x_row, candidates, prep, type) {
+.mahal_dist <- function(x_row, candidates, prep, type, na_anon = "ignore") {
   nc <- nrow(candidates)
   if (nc == 0L) return(numeric(0L))
 
@@ -165,6 +165,13 @@
 
     # diff_mat: nc x p
     diff_mat <- sweep(cand_mat, 2, x_num)
+    # na_anon for numeric keys: 'match'/'ignore' set the missing coordinate's
+    # contribution to 0 (a zero-contribution approximation; the exact
+    # conditional sub-Mahalanobis is a documented limitation); 'mismatch'
+    # marks the whole candidate as maximally distant.
+    na_mask <- is.na(diff_mat)
+    any_na <- rowSums(na_mask) > 0L
+    diff_mat[na_mask] <- 0
     # Mahalanobis: sqrt(diff %*% Sigma^{-1} %*% diff')
     rmd_sq <- rowSums((diff_mat %*% prep$cov_inv) * diff_mat)
     rmd_sq <- pmax(rmd_sq, 0)
@@ -172,16 +179,32 @@
 
     # Normalize by chi-squared threshold
     d_maha <- d_maha / prep$chi_sq_threshold
+    if (na_anon == "mismatch" && any(any_na)) {
+      hi <- if (any(!any_na)) max(d_maha[!any_na]) else 1
+      d_maha[any_na] <- max(hi, 1)
+    }
   }
 
   # --- Nominal part: exact match (Gower) ---
   d_nom <- rep(0, nc)
   if (length(prep$nominal_keys) > 0) {
     n_nom <- length(prep$nominal_keys)
+    denom_nom <- rep(n_nom, nc)
     for (v in prep$nominal_keys) {
-      d_nom <- d_nom + as.numeric(x_row[[v]] != candidates[[v]])
+      dv <- as.numeric(as.character(x_row[[v]]) != as.character(candidates[[v]]))
+      na <- is.na(dv)
+      if (na_anon == "match") {
+        dv[na] <- 0
+      } else if (na_anon == "mismatch") {
+        dv[na] <- 1
+      } else {                       # ignore: drop the variable for that pair
+        dv[na] <- 0
+        denom_nom[na] <- denom_nom[na] - 1
+      }
+      d_nom <- d_nom + dv
     }
-    d_nom <- d_nom / n_nom
+    denom_nom[denom_nom <= 0] <- 1
+    d_nom <- d_nom / denom_nom
   }
 
   # --- Combine ---

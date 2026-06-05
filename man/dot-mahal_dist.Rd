@@ -4,7 +4,7 @@
 \alias{.mahal_dist}
 \title{Compute Mahalanobis-Based Distance from One Record to Candidates}
 \usage{
-.mahal_dist(x_row, candidates, prep, type)
+.mahal_dist(x_row, candidates, prep, type, na_anon = "ignore")
 }
 \arguments{
 \item{x_row}{data.frame with 1 row. Query record.}

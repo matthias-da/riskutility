@@ -951,6 +951,39 @@ which would require prior information about the marginal distribution.
 When $T$ is asymmetric, the normalization denominators differ, yielding
 different risk profiles.
 
+## Baseline and Expected Risk
+
+Two options aid the interpretation of perturbative risk. Setting
+`compute_baseline = TRUE` re-links the data against itself (no perturbation)
+under the same method and settings, so the *reduction* achieved by the
+mechanism can be read directly. Setting `expected_risk = TRUE` (forward PRAM)
+reports a perturbation-aware *expectation*: holding all other records at their
+realized values, each record's risk is integrated over its own transition
+distribution $P(x_i \to \cdot)$, rather than evaluated only at the single
+realized output.
+
+```{r pram-baseline-expected}
+res_be <- recordLinkage(orig_dir, anon_dir,
+                        key = "grade", method = "pram",
+                        pram_matrix = list(grade = tm_grade),
+                        direction = "forward",
+                        compute_baseline = TRUE, expected_risk = TRUE)
+
+be_df <- data.frame(
+  Record    = 1:5,
+  Realized  = round(res_be$per_record$risk, 4),
+  Expected  = round(res_be$pram_info$expected_risk, 4)
+)
+knitr::kable(be_df, caption = "Realized vs. expected PRAM risk (forward)")
+```
+
+The baseline (no-perturbation) mean risk is
+`r round(res_be$baseline$mean_risk, 3)`, against a perturbed mean of
+`r round(res_be$overall$mean_risk, 3)` (a reduction of
+`r round(res_be$baseline$risk_reduction, 3)`); the expected risk averages
+`r round(res_be$pram_info$expected_mean_risk, 3)` over the mechanism, capturing
+the fact that the released table is only one of many possible PRAM outputs.
+
 ## Real-World Example (n = 500)
 
 The toy examples above used hand-specified transition matrices.
@@ -1251,12 +1284,16 @@ $$d_z(i,j) = \lVert z_i^\text{orig} - z_j^\text{anon} \rVert_2,$$
 normalized to $[0,1]$ using the 97.5th percentile of within-query
 pairwise distances (a pragmatic heuristic for robustness to outlier
 embeddings; blocks with fewer than 40 records fall back to the maximum).
-Risk is then $r_i = 1 - d_z(i, j^*)$, where $j^*$ is the nearest search
-record. **Important**: Unlike the candidate-set probability used by the
-other four methods (see Re-identification Risk above), this is a distance-based similarity
-index, not a re-identification probability. Embedding risk values are
-therefore not directly comparable on the same scale as risk from the
-deterministic, probabilistic, PRAM, or predictive methods.
+Risk follows the **same definition as the other methods**: the latent
+distances $d_z(i, \cdot)$ form the attacker's candidate scores, from which
+`recordLinkage()` returns the (weighted) probability mass on the *true* match,
+and $0$ when the true record is not in the attacker's candidate set. Embedding
+risk is therefore directly comparable on the same scale as the deterministic,
+probabilistic, PRAM, and predictive methods. The nearest-neighbour similarity
+$1 - d_z(i, j^*)$ — the closeness of the single nearest released record,
+whoever it is — is retained separately in the `nn_similarity` column of
+`per_record` as a distinctiveness diagnostic. (The random-forest method behaves
+analogously, with proximity in place of latent distance.)
 
 Variable importance is permutation-based: each variable is shuffled in
 the query data, re-encoded, and the mean embedding shift is measured.
@@ -2186,7 +2223,10 @@ Several limitations should be noted:
 
 1. **Stylized attacker model**: The function assumes perfect membership
    knowledge and exact QI knowledge. Real attackers may have noisy or
-   incomplete information, so the computed risk is an upper bound.
+   incomplete information, so the computed risk is an upper bound. The
+   `compute_baseline = TRUE` option reports the risk *without* perturbation
+   (linking the data against itself) as a reference point, so the reduction
+   achieved by anonymization can be read off directly.
 2. **Computational scaling**: Without blocking, all methods require
    $O(nm)$ pairwise comparisons, which limits applicability to datasets
    with more than approximately 50,000 records.
@@ -2213,6 +2253,20 @@ Several limitations should be noted:
    sample-level risk. For sample surveys where the attacker does not
    know whether the target is in the dataset, population-level
    adjustments [@franconi2004individual] are needed.
+8. **Realized vs. expected risk**: For perturbative mechanisms the reported
+   risk reflects the single *realized* output. For PRAM, `expected_risk = TRUE`
+   adds a perturbation-aware *expectation* over the transition distribution
+   (forward direction, assuming per-variable independence): holding all other
+   records fixed, each record's risk is integrated over its own
+   $P(x_i \to \cdot)$. A general mechanism-level expectation for arbitrary
+   swapping schemes remains future work.
+9. **Naive vs. informed attacker**: The function models an attacker who matches
+   on all quasi-identifiers. An *informed* attacker who knows which variables
+   were perturbed and matches only on the unchanged ones is not yet supported.
+10. **Missing-value handling**: `na_anon` controls NA treatment uniformly across
+    all methods (`"ignore"`, `"match"`, `"mismatch"`). For the numeric part of
+    the Mahalanobis distance, `"ignore"` uses a zero-contribution approximation
+    rather than the exact conditional sub-Mahalanobis distance.
 
 ## Future Directions
 

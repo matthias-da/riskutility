@@ -26,6 +26,17 @@ S3 API (`print()`, `summary()`, `plot()`) and feed a multivariate Risk-Utility
   (Fellegi-Sunter), PRAM, predictive, random-forest, RBRL, robust-Mahalanobis,
   and embedding (autoencoder) methods; independent, bijective (Hungarian / GDBRL),
   and optimal-transport (Sinkhorn) matching; blocking and per-record accessors.
+  All eight methods share a single re-identification-risk definition — the
+  probability of identifying the *true* match within the attacker's candidate
+  set. For the random-forest and embedding methods, the nearest-neighbour
+  similarity (their former `risk` value) is now retained in an `nn_similarity`
+  diagnostic column. `na_anon` (`ignore`/`match`/`mismatch`) is honored
+  consistently across all methods (PRAM no longer reports an artificial zero
+  risk for records with a missing key). New options: `compute_baseline = TRUE`
+  reports the no-perturbation reference risk (with `risk_reduction`), and
+  `expected_risk = TRUE` reports a perturbation-aware expected PRAM risk over
+  the transition distribution. User-supplied `m_probs`/`u_probs` are validated
+  and clamped to the open interval (0,1).
 * **Reporting:** `disclosure_report()` produces a comprehensive multi-metric report.
 
 ## Data utility

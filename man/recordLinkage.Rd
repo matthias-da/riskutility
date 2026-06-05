@@ -47,6 +47,8 @@ recordLinkage(X, ...)
   emb_latent_dim = NULL,
   emb_epochs = 50L,
   emb_global = FALSE,
+  compute_baseline = FALSE,
+  expected_risk = FALSE,
   Y = NULL,
   key_vars = NULL,
   ...
@@ -105,14 +107,24 @@ values in \code{c("numeric","ordinal","nominal")}. If NULL, inferred from \code{
 \item{weights}{named numeric vector or NULL. Optional nonnegative weights for keys.
 If NULL, equal weights are used.}
 
-\item{na_anon}{character. How to handle NA in the perturbed data during comparison:
-\code{"ignore"} (default), \code{"match"}, or \code{"mismatch"}.
+\item{na_anon}{character. How a missing quasi-identifier value is handled
+during matching, applied consistently across all methods (deterministic,
+probabilistic, pram, rbrl, mahalanobis, and the embedding deterministic
+fallback): \code{"ignore"} (default), \code{"match"}, or \code{"mismatch"}.
 \itemize{
-\item \code{"ignore"} removes the variable from the pairwise distance denominator if
-either side is NA.
-\item \code{"match"} treats NA in \code{x_anon} as a perfect match (distance contribution 0).
-\item \code{"mismatch"} treats NA in \code{x_anon} as a full mismatch (distance contribution 1).
-}}
+\item \code{"ignore"} drops the variable from that pairwise comparison
+(no contribution to the distance, likelihood ratio, or transition
+factor; for PRAM this multiplies the factor by 1 instead of collapsing
+the candidate to zero probability).
+\item \code{"match"} treats the missing value as agreement (distance
+contribution 0; for PRAM, the diagonal transition probability).
+\item \code{"mismatch"} treats the missing value as disagreement
+(distance contribution 1; for PRAM, the candidate is excluded).
+}
+For \code{method = "embedding"} the torch encoder handles NA internally
+(entity-embedding UNK / numeric pass-through); \code{na_anon} applies only
+to its deterministic fallback. The numeric part of \code{"mahalanobis"}
+uses a zero-contribution approximation for \code{"ignore"} (see Details).}
 
 \item{strategy}{character. Adversary strategy variant:
 \code{"nearest"}, \code{"threshold"}, \code{"topk"}, \code{"topk_threshold"},
@@ -203,6 +215,20 @@ restrict distance computation within blocks. If \code{FALSE} (default),
 train a separate autoencoder per block (with deterministic fallback for
 blocks smaller than \code{max(30, 5 * latent_dim)}).}
 
+\item{compute_baseline}{logical. If \code{TRUE}, also compute the
+re-identification risk with NO perturbation by linking \code{X} against
+itself (forward, \code{truth = "row"}) under the same method and settings,
+returned in \code{$baseline} (including \code{risk_reduction}). This gives
+a reference point for interpreting the perturbed risk. Doubles the
+computation. Default \code{FALSE}.}
+
+\item{expected_risk}{logical. For \code{method = "pram"} (forward direction)
+only: if \code{TRUE}, also compute a perturbation-aware \emph{expected}
+risk that, holding all other records at their realized values, integrates
+each record's risk over its own PRAM transition distribution
+\eqn{P(x_i \to \cdot)} (assuming per-variable independence). Returned in
+\code{$pram_info$expected_risk}. Default \code{FALSE}.}
+
 \item{Y}{Alias for \code{x_anon}, for naming consistency with the rest of the
 package. If \code{x_anon} is not supplied but \code{Y} is, \code{Y} is used.}
 
@@ -238,7 +264,11 @@ and \code{d_min} retain their per-record independent-scoring
 values from the main loop (useful for diagnostics).
 When \code{return_matches = TRUE} with OT, the returned
 \code{matches} also reflect independent scoring; use
-\code{transport_plans} for the OT assignment.}
+\code{transport_plans} for the OT assignment.
+When \code{method} is \code{"rf"} or \code{"embedding"}, an additional
+column \code{nn_similarity} gives the similarity to the nearest
+released record (the pre-recast \code{risk} definition), retained as a
+diagnostic alongside the true-match \code{risk}.}
 \item{overall}{list with aggregate statistics including \code{risk_gini}
 (Gini coefficient of risk concentration).}
 \item{var_importance}{named numeric vector of per-variable importance.}
@@ -248,6 +278,14 @@ When \code{return_matches = TRUE} with OT, the returned
 transport plan matrices per block. Each matrix has dimensions
 n_query_in_block x n_search_in_block, with rows summing to
 \code{1/n_query} and columns to \code{1/n_search}.}
+\item{baseline}{(only when \code{compute_baseline = TRUE}) list with
+\code{mean_risk}, \code{max_risk}, \code{per_record_risk},
+\code{pct_high_risk}, and \code{risk_reduction} (baseline minus
+perturbed mean risk) for the no-perturbation reference.}
+\item{pram_info}{(only when \code{method = "pram"}) list with
+\code{variables_used} and \code{mean_transition_prob}; when
+\code{expected_risk = TRUE} it also carries the per-record
+\code{expected_risk} and \code{expected_mean_risk}.}
 }
 When \code{direction = "forward"}, \code{per_record} has one row per
 original record; when \code{"reverse"}, one row per anonymized record.
@@ -373,11 +411,14 @@ Blocks with fewer than 2 records per class fall back to a global RF
 second pass.  Bijective matching is supported via the existing
 \code{matching = "bijective"} mechanism with \code{maximize = TRUE}.
 
-Note: for the RF method, \code{risk} is the maximum proximity (similarity
-in \eqn{[0, 1]}) to any candidate, not a re-identification probability.
-The \code{d_min} and \code{d_true} fields store proximity values (higher
-= more similar), which is inverted from the distance convention used by
-other methods (lower = closer).
+Note: \code{risk} for the RF method is the re-identification probability of
+the \emph{true} match within the attacker's candidate set (consistent with
+the distance/probability methods), obtained by treating the proximity as a
+similarity and routing it through the shared candidate-set / risk-weighting
+logic. The nearest-neighbour proximity (the former \code{risk}) is retained
+in the \code{nn_similarity} column of \code{per_record}. The \code{d_min}
+and \code{d_true} fields still store proximity values (higher = more
+similar), inverted from the distance convention used by other methods.
 }
 
 \section{RBRL method}{
@@ -525,6 +566,13 @@ re-identification risk via Euclidean distance. This captures nonlinear
 dependencies between quasi-identifiers that Gower and Mahalanobis distances
 may miss.
 
+As with the RF method, \code{risk} is the re-identification probability of
+the \emph{true} match within the attacker's candidate set (the shared
+candidate-set / risk-weighting logic applied to the latent distance); the
+nearest-neighbour similarity (\code{1 -} the smallest latent distance, the
+former \code{risk}) is kept in the \code{nn_similarity} column of
+\code{per_record}.
+
 The autoencoder trains only on query data, modeling an attacker who knows
 the population structure but not the specific anonymization. Distances are
 normalized to \eqn{[0, 1]} using the 97.5th percentile of within-query pairwise
@@ -659,6 +707,6 @@ Other privacy-models:
 \code{\link{top_at_risk}()}
 }
 \author{
-Roman Mueller and Matthias Templ
+Matthias Templ and Roman Müller
 }
 \concept{privacy-models}

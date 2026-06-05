@@ -105,11 +105,14 @@
 #' second pass.  Bijective matching is supported via the existing
 #' \code{matching = "bijective"} mechanism with \code{maximize = TRUE}.
 #'
-#' Note: for the RF method, \code{risk} is the maximum proximity (similarity
-#' in \eqn{[0, 1]}) to any candidate, not a re-identification probability.
-#' The \code{d_min} and \code{d_true} fields store proximity values (higher
-#' = more similar), which is inverted from the distance convention used by
-#' other methods (lower = closer).
+#' Note: \code{risk} for the RF method is the re-identification probability of
+#' the \emph{true} match within the attacker's candidate set (consistent with
+#' the distance/probability methods), obtained by treating the proximity as a
+#' similarity and routing it through the shared candidate-set / risk-weighting
+#' logic. The nearest-neighbour proximity (the former \code{risk}) is retained
+#' in the \code{nn_similarity} column of \code{per_record}. The \code{d_min}
+#' and \code{d_true} fields still store proximity values (higher = more
+#' similar), inverted from the distance convention used by other methods.
 #'
 #' @section RBRL method:
 #' When \code{method = "rbrl"}, rank-based record linkage is used following
@@ -277,14 +280,24 @@
 #'   values in \code{c("numeric","ordinal","nominal")}. If NULL, inferred from \code{X}.
 #' @param weights named numeric vector or NULL. Optional nonnegative weights for keys.
 #'   If NULL, equal weights are used.
-#' @param na_anon character. How to handle NA in the perturbed data during comparison:
-#'   \code{"ignore"} (default), \code{"match"}, or \code{"mismatch"}.
+#' @param na_anon character. How a missing quasi-identifier value is handled
+#'   during matching, applied consistently across all methods (deterministic,
+#'   probabilistic, pram, rbrl, mahalanobis, and the embedding deterministic
+#'   fallback): \code{"ignore"} (default), \code{"match"}, or \code{"mismatch"}.
 #'   \itemize{
-#'     \item \code{"ignore"} removes the variable from the pairwise distance denominator if
-#'       either side is NA.
-#'     \item \code{"match"} treats NA in \code{x_anon} as a perfect match (distance contribution 0).
-#'     \item \code{"mismatch"} treats NA in \code{x_anon} as a full mismatch (distance contribution 1).
+#'     \item \code{"ignore"} drops the variable from that pairwise comparison
+#'       (no contribution to the distance, likelihood ratio, or transition
+#'       factor; for PRAM this multiplies the factor by 1 instead of collapsing
+#'       the candidate to zero probability).
+#'     \item \code{"match"} treats the missing value as agreement (distance
+#'       contribution 0; for PRAM, the diagonal transition probability).
+#'     \item \code{"mismatch"} treats the missing value as disagreement
+#'       (distance contribution 1; for PRAM, the candidate is excluded).
 #'   }
+#'   For \code{method = "embedding"} the torch encoder handles NA internally
+#'   (entity-embedding UNK / numeric pass-through); \code{na_anon} applies only
+#'   to its deterministic fallback. The numeric part of \code{"mahalanobis"}
+#'   uses a zero-contribution approximation for \code{"ignore"} (see Details).
 #' @param strategy character. Adversary strategy variant:
 #'   \code{"nearest"}, \code{"threshold"}, \code{"topk"}, \code{"topk_threshold"},
 #'   or \code{"nearest_threshold"}.
@@ -353,8 +366,20 @@
 #'   restrict distance computation within blocks. If \code{FALSE} (default),
 #'   train a separate autoencoder per block (with deterministic fallback for
 #'   blocks smaller than \code{max(30, 5 * latent_dim)}).
+#' @param compute_baseline logical. If \code{TRUE}, also compute the
+#'   re-identification risk with NO perturbation by linking \code{X} against
+#'   itself (forward, \code{truth = "row"}) under the same method and settings,
+#'   returned in \code{$baseline} (including \code{risk_reduction}). This gives
+#'   a reference point for interpreting the perturbed risk. Doubles the
+#'   computation. Default \code{FALSE}.
+#' @param expected_risk logical. For \code{method = "pram"} (forward direction)
+#'   only: if \code{TRUE}, also compute a perturbation-aware \emph{expected}
+#'   risk that, holding all other records at their realized values, integrates
+#'   each record's risk over its own PRAM transition distribution
+#'   \eqn{P(x_i \to \cdot)} (assuming per-variable independence). Returned in
+#'   \code{$pram_info$expected_risk}. Default \code{FALSE}.
 #' @param ... additional arguments passed to methods.
-#' @author Roman Mueller and Matthias Templ
+#' @author Matthias Templ and Roman Müller
 #'
 #' @return An object of class \code{"recordLinkageRisk"}: a list with components
 #'   \describe{
@@ -383,7 +408,11 @@
 #'       values from the main loop (useful for diagnostics).
 #'       When \code{return_matches = TRUE} with OT, the returned
 #'       \code{matches} also reflect independent scoring; use
-#'       \code{transport_plans} for the OT assignment.}
+#'       \code{transport_plans} for the OT assignment.
+#'       When \code{method} is \code{"rf"} or \code{"embedding"}, an additional
+#'       column \code{nn_similarity} gives the similarity to the nearest
+#'       released record (the pre-recast \code{risk} definition), retained as a
+#'       diagnostic alongside the true-match \code{risk}.}
 #'     \item{overall}{list with aggregate statistics including \code{risk_gini}
 #'       (Gini coefficient of risk concentration).}
 #'     \item{var_importance}{named numeric vector of per-variable importance.}
@@ -393,6 +422,14 @@
 #'       transport plan matrices per block. Each matrix has dimensions
 #'       n_query_in_block x n_search_in_block, with rows summing to
 #'       \code{1/n_query} and columns to \code{1/n_search}.}
+#'     \item{baseline}{(only when \code{compute_baseline = TRUE}) list with
+#'       \code{mean_risk}, \code{max_risk}, \code{per_record_risk},
+#'       \code{pct_high_risk}, and \code{risk_reduction} (baseline minus
+#'       perturbed mean risk) for the no-perturbation reference.}
+#'     \item{pram_info}{(only when \code{method = "pram"}) list with
+#'       \code{variables_used} and \code{mean_transition_prob}; when
+#'       \code{expected_risk = TRUE} it also carries the per-record
+#'       \code{expected_risk} and \code{expected_mean_risk}.}
 #'   }
 #'   When \code{direction = "forward"}, \code{per_record} has one row per
 #'   original record; when \code{"reverse"}, one row per anonymized record.
@@ -408,6 +445,13 @@
 #' re-identification risk via Euclidean distance. This captures nonlinear
 #' dependencies between quasi-identifiers that Gower and Mahalanobis distances
 #' may miss.
+#'
+#' As with the RF method, \code{risk} is the re-identification probability of
+#' the \emph{true} match within the attacker's candidate set (the shared
+#' candidate-set / risk-weighting logic applied to the latent distance); the
+#' nearest-neighbour similarity (\code{1 -} the smallest latent distance, the
+#' former \code{risk}) is kept in the \code{nn_similarity} column of
+#' \code{per_record}.
 #'
 #' The autoencoder trains only on query data, modeling an attacker who knows
 #' the population structure but not the specific anonymization. Distances are
@@ -579,6 +623,8 @@ recordLinkage.default <- function(X,
                                   emb_latent_dim = NULL,
                                   emb_epochs = 50L,
                                   emb_global = FALSE,
+                                  compute_baseline = FALSE,
+                                  expected_risk = FALSE,
                                   Y = NULL,
                                   key_vars = NULL,
                                   ...) {
@@ -603,6 +649,18 @@ recordLinkage.default <- function(X,
     na_anon <- match.arg(na_anon)
     strategy <- match.arg(strategy)
     matching <- match.arg(matching)
+
+    if (isTRUE(expected_risk)) {
+        if (method != "pram") {
+            message("'expected_risk' is only available for method = 'pram'; ",
+                    "ignored.")
+            expected_risk <- FALSE
+        } else if (direction != "forward") {
+            message("'expected_risk' currently supports direction = 'forward' ",
+                    "only; ignored.")
+            expected_risk <- FALSE
+        }
+    }
 
     if (matching == "bijective") {
         if (!requireNamespace("clue", quietly = TRUE))
@@ -635,9 +693,9 @@ recordLinkage.default <- function(X,
                     "RF uses data-driven variable importance instead.")
         }
         if (!missing(strategy) && strategy != "nearest") {
-            message("method = 'rf': strategy '", strategy,
-                    "' uses proximity-based scores [0,1], ",
-                    "not distance-based thresholds.")
+            message("method = 'rf': 'strategy'/'threshold' apply on the ",
+                    "proximity-derived pseudo-distance (max proximity - ",
+                    "proximity), not on the raw proximity scale.")
         }
     }
 
@@ -651,9 +709,8 @@ recordLinkage.default <- function(X,
                     "Embedding uses learned variable representations instead.")
         }
         if (!missing(strategy) && strategy != "nearest") {
-            message("method = 'embedding': strategy '", strategy,
-                    "' uses distance-based scores [0,1], ",
-                    "not threshold-based matching.")
+            message("method = 'embedding': 'strategy'/'threshold' apply on the ",
+                    "normalized latent distance in [0,1].")
         }
     }
 
@@ -762,6 +819,27 @@ recordLinkage.default <- function(X,
             if (is.null(m_probs)) m_probs <- fs_est$m
             if (is.null(u_probs)) u_probs <- fs_est$u
         }
+        # Validate and clamp m/u to the open interval (0,1) so the
+        # log-likelihood ratios stay finite. Estimated values are already
+        # clamped; this guards user-supplied 0/1 (which would give +/-Inf/NaN).
+        .chk_prob <- function(p, nm) {
+            if (is.null(names(p)) || !all(key %in% names(p)))
+                stop("'", nm, "' must be a named vector containing all keys.",
+                     call. = FALSE)
+            p <- p[key]
+            if (any(!is.finite(p)))
+                stop("'", nm, "' must be finite.", call. = FALSE)
+            bad <- p <= 0 | p >= 1
+            if (any(bad)) {
+                warning("'", nm, "' values outside (0,1) clamped to ",
+                        "[0.01, 0.99]: ", paste(key[bad], collapse = ", "),
+                        call. = FALSE)
+                p <- pmin(pmax(p, 0.01), 0.99)
+            }
+            p
+        }
+        m_probs <- .chk_prob(m_probs, "m_probs")
+        u_probs <- .chk_prob(u_probs, "u_probs")
         if (is.null(fs_threshold)) fs_threshold <- 0
         fs_params <- list(m_probs = m_probs, u_probs = u_probs,
                           threshold_used = fs_threshold)
@@ -844,6 +922,10 @@ recordLinkage.default <- function(X,
     d_true <- rep(NA_real_, n_query)
     d_min <- rep(NA_real_, n_query)
     d_rank <- rep(NA_integer_, n_query)
+    # Nearest-neighbour similarity (diagnostic; populated by rf/embedding only)
+    nn_similarity <- rep(NA_real_, n_query)
+    # PRAM perturbation-aware expected risk (populated only when requested)
+    pram_exp <- rep(NA_real_, n_query)
     matches <- if (isTRUE(return_matches)) vector("list", n_query) else NULL
     # Bijective matching: cache full score vectors per record
     score_cache <- if (matching %in% c("bijective", "ot")) vector("list", n_query) else NULL
@@ -871,7 +953,8 @@ recordLinkage.default <- function(X,
                 x_row = query_data[i, key, drop = FALSE],
                 anon_block = search_data[cand, key, drop = FALSE],
                 key = key, pram_matrix = pram_matrix,
-                reverse = (direction == "reverse")
+                reverse = (direction == "reverse"),
+                na_anon = na_anon
             )
 
             tpos <- true_idx[i]
@@ -905,6 +988,18 @@ recordLinkage.default <- function(X,
                 norm_probs <- pram_probs[nonzero] / sum(pram_probs[nonzero])
                 true_local <- match(tpos, guess)
                 risk[i] <- norm_probs[true_local]
+            }
+
+            if (isTRUE(expected_risk)) {
+                # Perturbation-aware expected risk: hold all other records at
+                # their realized values, integrate record i's risk over its own
+                # transition distribution P(x_i -> .). S = realized PRAM mass on
+                # the non-true candidates.
+                S_i <- sum(pram_probs) -
+                    (if (!is.na(j_in)) pram_probs[j_in] else 0)
+                pram_exp[i] <- .pram_expected_risk(
+                    x_row = query_data[i, key, drop = FALSE],
+                    key = key, pram_matrix = pram_matrix, S = S_i)
             }
 
             if (isTRUE(return_matches)) matches[[i]] <- guess
@@ -994,7 +1089,7 @@ recordLinkage.default <- function(X,
                 anon_block = search_data[cand, key, drop = FALSE],
                 key = key, type = type, rng = rng,
                 m_probs = m_probs, u_probs = u_probs,
-                tol = fs_tol
+                tol = fs_tol, na_anon = na_anon
             )
 
             d_min[i] <- NA_real_
@@ -1052,16 +1147,29 @@ recordLinkage.default <- function(X,
         if (method == "rbrl") {
             # RBRL: weighted mean absolute rank difference
             di <- numeric(length(cand))
+            denom <- rep(wsum, length(cand))
             for (v in key) {
                 wv <- weights[v]
+                qi_v <- rbrl_query[[v]][i]
+                cand_v <- rbrl_search[[v]][cand]
                 if (type[v] == "nominal") {
-                    di <- di + wv * (rbrl_query[[v]][i] != rbrl_search[[v]][cand])
+                    dv <- as.numeric(qi_v != cand_v)
                 } else {
-                    di <- di + wv * abs(rbrl_query[[v]][i] -
-                                        rbrl_search[[v]][cand])
+                    dv <- abs(qi_v - cand_v)
                 }
+                na <- is.na(dv)
+                if (na_anon == "match") {
+                    dv[na] <- 0
+                } else if (na_anon == "mismatch") {
+                    dv[na] <- 1
+                } else {                  # ignore: drop the variable for that pair
+                    dv[na] <- 0
+                    denom[na] <- denom[na] - wv
+                }
+                di <- di + wv * dv
             }
-            di <- di / wsum
+            denom[denom <= 0] <- 1
+            di <- di / denom
 
             d_min[i] <- min(di)
             tpos <- true_idx[i]
@@ -1126,7 +1234,7 @@ recordLinkage.default <- function(X,
             di <- .mahal_dist(
                 x_row = query_data[i, key, drop = FALSE],
                 candidates = search_data[cand, key, drop = FALSE],
-                prep = mahal_prep, type = type
+                prep = mahal_prep, type = type, na_anon = na_anon
             )
 
             d_min[i] <- min(di)
@@ -1255,16 +1363,23 @@ recordLinkage.default <- function(X,
         for (r in seq_along(q_idx)) {
             qi <- q_idx[r]
             prox_vec <- cross_prox[r, ]
-            cand_n[qi] <<- length(s_idx)
-            best_col <- which.max(prox_vec)
-            risk[qi] <<- prox_vec[best_col]
-
-            # Truth evaluation
             tpos <- true_idx[qi]
+            # Nearest-neighbour similarity (diagnostic; the former risk value)
+            nn_similarity[qi] <<- max(prox_vec)
+            # Re-identification risk: probability of singling out the TRUE match
+            tm <- .true_match_risk(
+                scores = prox_vec, cand = s_idx, true_pos = tpos,
+                maximize = TRUE, strategy = strategy,
+                risk_weighting = risk_weighting, k = k, threshold = threshold,
+                kappa = kappa, bandwidth = bandwidth, kernel = kernel)
+            risk[qi] <<- tm$risk
+            cand_n[qi] <<- tm$cand_n
+            true_in_set[qi] <<- tm$true_in_set
+
+            # Truth diagnostics (proximity of the true match within the block)
             if (!is.na(tpos) && tpos > 0L) {
                 t_col <- match(tpos, s_idx)
                 if (!is.na(t_col)) {
-                    true_in_set[qi] <<- TRUE
                     d_true[qi] <<- prox_vec[t_col]
                     d_min[qi] <<- max(prox_vec)
                     d_rank[qi] <<- sum(prox_vec >= prox_vec[t_col])
@@ -1277,7 +1392,7 @@ recordLinkage.default <- function(X,
             }
 
             if (isTRUE(return_matches)) {
-                matches[[qi]] <<- s_idx[best_col]
+                matches[[qi]] <<- tm$guess
             }
         }
     }
@@ -1395,16 +1510,23 @@ recordLinkage.default <- function(X,
         for (r in seq_along(q_idx)) {
             qi <- q_idx[r]
             dist_vec <- dist_mat[r, ]
-            cand_n[qi] <<- length(s_idx)
-            best_col <- which.min(dist_vec)
-            risk[qi] <<- 1 - dist_vec[best_col]  # lower distance = higher risk
-
-            # Truth evaluation
             tpos <- true_idx[qi]
+            # Nearest-neighbour similarity (diagnostic; the former risk value)
+            nn_similarity[qi] <<- 1 - min(dist_vec)
+            # Re-identification risk: probability of singling out the TRUE match
+            tm <- .true_match_risk(
+                scores = dist_vec, cand = s_idx, true_pos = tpos,
+                maximize = FALSE, strategy = strategy,
+                risk_weighting = risk_weighting, k = k, threshold = threshold,
+                kappa = kappa, bandwidth = bandwidth, kernel = kernel)
+            risk[qi] <<- tm$risk
+            cand_n[qi] <<- tm$cand_n
+            true_in_set[qi] <<- tm$true_in_set
+
+            # Truth diagnostics (latent distance of the true match in the block)
             if (!is.na(tpos) && tpos > 0L) {
                 t_col <- match(tpos, s_idx)
                 if (!is.na(t_col)) {
-                    true_in_set[qi] <<- TRUE
                     d_true[qi] <<- dist_vec[t_col]
                     d_min[qi] <<- min(dist_vec)
                     d_rank[qi] <<- as.integer(sum(dist_vec <= dist_vec[t_col]))
@@ -1417,7 +1539,7 @@ recordLinkage.default <- function(X,
             }
 
             if (isTRUE(return_matches)) {
-                matches[[qi]] <<- s_idx[best_col]
+                matches[[qi]] <<- tm$guess
             }
         }
     }
@@ -1528,15 +1650,21 @@ recordLinkage.default <- function(X,
                             anon_block, key, type, weights,
                             wsum, rng, na_anon
                         )
-                        cand_n[qi] <- length(s_idx)
-                        best <- which.min(di)
-                        risk[qi] <- 1 - di[best]
-
                         tpos <- true_idx[qi]
+                        nn_similarity[qi] <- 1 - min(di)
+                        tm <- .true_match_risk(
+                            scores = di, cand = s_idx, true_pos = tpos,
+                            maximize = FALSE, strategy = strategy,
+                            risk_weighting = risk_weighting, k = k,
+                            threshold = threshold, kappa = kappa,
+                            bandwidth = bandwidth, kernel = kernel)
+                        risk[qi] <- tm$risk
+                        cand_n[qi] <- tm$cand_n
+                        true_in_set[qi] <- tm$true_in_set
+
                         if (!is.na(tpos) && tpos > 0L) {
                             t_col <- match(tpos, s_idx)
                             if (!is.na(t_col)) {
-                                true_in_set[qi] <- TRUE
                                 d_true[qi] <- di[t_col]
                                 d_min[qi] <- min(di)
                                 d_rank[qi] <- as.integer(
@@ -1549,7 +1677,7 @@ recordLinkage.default <- function(X,
                                 maximize = FALSE)
                         }
                         if (isTRUE(return_matches)) {
-                            matches[[qi]] <- s_idx[best]
+                            matches[[qi]] <- tm$guess
                         }
                     }
                 }
@@ -1690,6 +1818,9 @@ recordLinkage.default <- function(X,
         d_rank = d_rank,
         risk_band = risk_band
     )
+    # Nearest-neighbour similarity diagnostic (rf/embedding only; NA otherwise)
+    if (any(!is.na(nn_similarity)))
+        per_rec$nn_similarity <- nn_similarity
     if (!is.null(bijective_assigned))
         per_rec$bijective_assigned <- bijective_assigned
 
@@ -1732,7 +1863,9 @@ recordLinkage.default <- function(X,
                 emb_actual_latent_dim
             } else NULL,
             emb_epochs = if (method == "embedding") emb_epochs else NULL,
-            emb_global = if (method == "embedding") emb_global else NULL
+            emb_global = if (method == "embedding") emb_global else NULL,
+            compute_baseline = compute_baseline,
+            expected_risk = expected_risk
         )
     )
     if (isTRUE(return_matches)) out$matches <- matches
@@ -1756,8 +1889,51 @@ recordLinkage.default <- function(X,
                 mean(diag(pram_matrix[[v]]))
             }, numeric(1)))
         )
+        if (isTRUE(expected_risk)) {
+            out$pram_info$expected_risk <- pram_exp
+            out$pram_info$expected_mean_risk <- mean(pram_exp, na.rm = TRUE)
+        }
     }
     out$var_importance <- var_importance
+
+    # Baseline: re-identification risk with NO perturbation, obtained by linking
+    # X against itself (forward, truth = "row") under the same method/settings.
+    # Provides a reference point ("how identifiable were these records before
+    # anonymization?"). Doubles compute; guarded against infinite recursion.
+    if (isTRUE(compute_baseline)) {
+        base <- if (identical(X, x_anon)) out else tryCatch(
+            recordLinkage.default(
+                X = X, x_anon = X, key = key, method = method,
+                direction = "forward", risk_weighting = risk_weighting,
+                kappa = kappa, bandwidth = bandwidth, kernel = kernel,
+                truth = "row", id = NULL, type = type, weights = weights,
+                na_anon = na_anon, strategy = strategy, k = k,
+                threshold = threshold, block = block,
+                m_probs = m_probs, u_probs = u_probs,
+                fs_threshold = fs_threshold, pram_matrix = pram_matrix,
+                pred_model = pred_model, pred_se = pred_se,
+                return_matches = FALSE, matching = matching,
+                risk_threshold = risk_threshold, n_trees = n_trees,
+                rf_global = rf_global, robust = robust,
+                ot_epsilon = ot_epsilon, ot_max_iter = ot_max_iter,
+                emb_latent_dim = emb_latent_dim, emb_epochs = emb_epochs,
+                emb_global = emb_global,
+                compute_baseline = FALSE, expected_risk = FALSE),
+            error = function(e) {
+                warning("compute_baseline failed (", conditionMessage(e),
+                        "); baseline not computed.", call. = FALSE)
+                NULL
+            })
+        if (!is.null(base)) {
+            out$baseline <- list(
+                mean_risk = base$overall$mean_risk,
+                max_risk = base$overall$max_risk,
+                per_record_risk = base$per_record$risk,
+                pct_high_risk = base$overall$pct_high_risk,
+                risk_reduction = base$overall$mean_risk - out$overall$mean_risk
+            )
+        }
+    }
 
     class(out) <- "recordLinkageRisk"
     out
@@ -2269,6 +2445,65 @@ print.inspect_record <- function(x, ...) {
     w / wsum
 }
 
+#' Risk of correctly identifying the true match within a candidate set
+#'
+#' Shared back-end for the per-record re-identification risk: given the per-
+#' candidate scores for one query record, build the attacker's guess set and
+#' return the (weighted) probability mass on the \emph{true} match. This is the
+#' exact logic the deterministic / probabilistic / pram / predictive / rbrl /
+#' mahalanobis methods apply inline; the rf and embedding methods route their
+#' scores through it so that all eight methods share one risk definition.
+#'
+#' @param scores numeric vector of per-candidate scores (one per element of
+#'   \code{cand}). Either a distance (lower = closer) or a similarity
+#'   (higher = closer); see \code{maximize}.
+#' @param cand integer vector of candidate record indices.
+#' @param true_pos integer index of the true match (in the same space as
+#'   \code{cand}), or \code{NA}.
+#' @param maximize logical. \code{TRUE} if higher \code{scores} mean a closer
+#'   match (similarity / likelihood ratio / proximity); the scores are then
+#'   turned into a pseudo-distance \code{max(scores) - scores}. \code{FALSE} for
+#'   distances.
+#' @param strategy,risk_weighting,k,threshold,kappa,bandwidth,kernel as in
+#'   \code{\link{recordLinkage}}.
+#' @return list with \code{risk}, \code{cand_n}, \code{true_in_set}, \code{guess}.
+#' @keywords internal
+.true_match_risk <- function(scores, cand, true_pos, maximize,
+                             strategy, risk_weighting,
+                             k = NULL, threshold = NULL, kappa = NULL,
+                             bandwidth = NULL, kernel = "gaussian") {
+    if (length(cand) == 0L)
+        return(list(risk = 0, cand_n = 0L, true_in_set = FALSE,
+                    guess = integer(0)))
+
+    # Convert similarity scores to a pseudo-distance so that lower = closer,
+    # matching the distance convention of .choose_guess_set()/.softmax_risk().
+    d <- if (isTRUE(maximize)) max(scores) - scores else scores
+
+    guess <- .choose_guess_set(d = d, cand = cand, strategy = strategy,
+                               k = k, threshold = threshold)
+    cand_n <- length(guess)
+    if (cand_n == 0L)
+        return(list(risk = 0, cand_n = 0L, true_in_set = FALSE,
+                    guess = integer(0)))
+
+    true_in_set <- (!is.na(true_pos)) && (true_pos %in% guess)
+    if (!true_in_set) {
+        risk <- 0
+    } else if (risk_weighting == "softmax") {
+        w <- .softmax_risk(d[match(guess, cand)], kappa)
+        risk <- w[match(true_pos, guess)]
+    } else if (risk_weighting == "kernel") {
+        w <- .kernel_risk(d[match(guess, cand)], bandwidth, kernel)
+        risk <- w[match(true_pos, guess)]
+    } else {
+        risk <- 1 / cand_n
+    }
+
+    list(risk = risk, cand_n = cand_n, true_in_set = true_in_set,
+         guess = guess)
+}
+
 #' @keywords internal
 .fit_propensity <- function(X, x_anon, key, pred_model = "logit", ...) {
     X_key <- X[, key, drop = FALSE]
@@ -2430,7 +2665,7 @@ print.inspect_record <- function(x, ...) {
 
 #' @keywords internal
 .fs_log_lr <- function(x_row, anon_block, key, type, rng,
-                       m_probs, u_probs, tol = NULL) {
+                       m_probs, u_probs, tol = NULL, na_anon = "ignore") {
     m <- nrow(anon_block)
     lr <- numeric(m)
 
@@ -2440,6 +2675,7 @@ print.inspect_record <- function(x, ...) {
         av <- anon_block[[v]]
         mv <- m_probs[v]
         uv <- u_probs[v]
+        na <- is.na(av) | is.na(xv)
 
         if (type[[v]] %in% c("numeric", "ordinal")) {
             if (!is.null(tol) && !is.na(tol[v])) {
@@ -2452,16 +2688,17 @@ print.inspect_record <- function(x, ...) {
                 if (!is.finite(tol_v) || tol_v <= 0)
                     tol_v <- 0.1 * span
             }
-            gamma <- ifelse(!is.na(av) & !is.na(xv),
-                            abs(av - xv) <= tol_v, FALSE)
+            gamma <- ifelse(!na, abs(av - xv) <= tol_v, FALSE)
         } else {
-            gamma <- ifelse(!is.na(av) & !is.na(xv),
-                            as.character(av) == as.character(xv), FALSE)
+            gamma <- ifelse(!na, as.character(av) == as.character(xv), FALSE)
         }
 
-        lr <- lr + ifelse(gamma,
-                          log(mv / uv),
-                          log((1 - mv) / (1 - uv)))
+        # na_anon: how a missing value is scored as agreement evidence
+        if (na_anon == "match") gamma[na] <- TRUE   # NA treated as agreement
+        contrib <- ifelse(gamma, log(mv / uv), log((1 - mv) / (1 - uv)))
+        if (na_anon == "ignore") contrib[na] <- 0   # variable drops out
+        # "mismatch": NA keeps gamma = FALSE -> disagreement evidence
+        lr <- lr + contrib
     }
 
     lr
@@ -2469,13 +2706,15 @@ print.inspect_record <- function(x, ...) {
 
 #' @keywords internal
 .pram_risk <- function(x_row, anon_block, key, pram_matrix,
-                       reverse = FALSE) {
+                       reverse = FALSE, na_anon = "ignore") {
     m <- nrow(anon_block)
     log_probs <- numeric(m)
 
     for (v in key) {
         xv <- as.character(x_row[[v]])
         av <- as.character(anon_block[[v]])
+        xv_na <- is.na(xv)               # data-missingness, not an absent level
+        av_na <- is.na(av)
         tm <- pram_matrix[[v]]
         row_names <- rownames(tm)
         col_names <- colnames(tm)
@@ -2487,27 +2726,99 @@ print.inspect_record <- function(x, ...) {
         }
 
         for (j in seq_len(m)) {
-            if (reverse) {
-                # reverse: query=anon, search=original
-                # P(anon_value | original_value) = tm[original, anon]
-                ri <- match(av[j], row_names)
-                ci <- match(xv, col_names)
+            pair_na <- xv_na || av_na[j]
+            if (pair_na) {
+                # na_anon governs a genuinely MISSING value (distinct from a
+                # level that is simply absent from the supplied matrix).
+                if (na_anon == "ignore") {
+                    # variable drops out: multiply the transition factor by 1
+                } else if (na_anon == "match") {
+                    # treat as agreement: diagonal probability of the present
+                    # level (contribute nothing if both sides are missing)
+                    lvl <- if (!xv_na) xv else av[j]
+                    if (!is.na(lvl)) {
+                        di <- match(lvl, row_names)
+                        dj <- match(lvl, col_names)
+                        log_probs[j] <- log_probs[j] +
+                            if (!is.na(di) && !is.na(dj) && tm[di, dj] > 0)
+                                log(tm[di, dj]) else -Inf
+                    }
+                } else {                  # mismatch: exclude the candidate
+                    log_probs[j] <- -Inf
+                }
             } else {
-                # forward: query=original, search=anon
-                # P(anon_value | original_value) = tm[original, anon]
-                ri <- match(xv, row_names)
-                ci <- match(av[j], col_names)
-            }
-            if (is.na(ri) || is.na(ci)) {
-                log_probs[j] <- -Inf
-            } else {
-                p <- tm[ri, ci]
-                log_probs[j] <- log_probs[j] + if (p > 0) log(p) else -Inf
+                if (reverse) {
+                    # reverse: query=anon, search=original; tm[original, anon]
+                    ri <- match(av[j], row_names)
+                    ci <- match(xv, col_names)
+                } else {
+                    # forward: query=original, search=anon; tm[original, anon]
+                    ri <- match(xv, row_names)
+                    ci <- match(av[j], col_names)
+                }
+                # A level absent from the matrix stays -Inf regardless of na_anon
+                log_probs[j] <- log_probs[j] +
+                    if (!is.na(ri) && !is.na(ci) && tm[ri, ci] > 0)
+                        log(tm[ri, ci]) else -Inf
             }
         }
     }
 
     exp(log_probs)
+}
+
+#' Perturbation-aware expected PRAM risk for a single record
+#'
+#' Holding all other released records at their realized values, integrate
+#' record i's re-identification risk over its own PRAM transition distribution
+#' \eqn{P(x_i \to \cdot)}. With \eqn{S} the realized transition mass on the
+#' non-true candidates, the risk of a hypothetical output \eqn{o} is
+#' \eqn{P(x_i \to o) / (S + P(x_i \to o))}, so the expectation is
+#' \eqn{\sum_o P(x_i \to o)^2 / (S + P(x_i \to o))} (exact) or its Monte-Carlo
+#' estimate \eqn{E_{o \sim P}[P(o)/(S+P(o))]} when the support is large.
+#' Assumes per-variable independent PRAM (forward direction, \code{truth="row"}).
+#'
+#' @param x_row one-row data.frame of record i's quasi-identifiers.
+#' @param key character vector of key variable names.
+#' @param pram_matrix named list of per-variable transition matrices.
+#' @param S numeric, realized transition mass on the non-true candidates.
+#' @param max_support integer, exact-enumeration cap on the output support.
+#' @param n_mc integer, Monte-Carlo draws when the support exceeds the cap.
+#' @return numeric scalar in \eqn{[0,1]} (or \code{NA} if a value is absent
+#'   from the matrix).
+#' @keywords internal
+.pram_expected_risk <- function(x_row, key, pram_matrix, S,
+                                max_support = 1000L, n_mc = 500L) {
+    probs_list <- vector("list", length(key))
+    for (vi in seq_along(key)) {
+        tm <- pram_matrix[[key[vi]]]
+        rn <- rownames(tm)
+        if (is.null(rn)) rn <- as.character(seq_len(nrow(tm)))
+        ri <- match(as.character(x_row[[key[vi]]]), rn)
+        if (is.na(ri)) return(NA_real_)          # value absent from the matrix
+        pv <- as.numeric(tm[ri, ])
+        pv <- pv[pv > 0]
+        if (length(pv) == 0L) return(NA_real_)
+        probs_list[[vi]] <- pv
+    }
+
+    total <- prod(vapply(probs_list, length, numeric(1)))
+
+    if (is.finite(total) && total <= max_support) {
+        # Exact: P(o) over the full support = outer product of per-variable probs
+        Po <- Reduce(function(a, b) as.numeric(outer(a, b)), probs_list)
+        sum(Po^2 / (S + Po))
+    } else {
+        # Monte-Carlo: E[risk] = E_{o ~ P}[ P(o) / (S + P(o)) ]
+        acc <- 0
+        for (b in seq_len(n_mc)) {
+            p_o <- 1
+            for (pv in probs_list)
+                p_o <- p_o * pv[sample.int(length(pv), 1L, prob = pv)]
+            acc <- acc + p_o / (S + p_o)
+        }
+        acc / n_mc
+    }
 }
 
 
@@ -2586,6 +2897,15 @@ print.recordLinkageRisk <- function(x, ...) {
     thresh <- if (!is.null(x$settings$risk_threshold)) x$settings$risk_threshold else 0.1
     cat(sprintf("  High risk (>%.2g): %d (%.1f%%)\n",
                 thresh, o$n_high_risk, 100 * o$pct_high_risk))
+    if (!is.null(x$baseline)) {
+        cat(sprintf(
+            "  Baseline (no perturbation): %6.4f  -> risk reduction %6.4f\n",
+            x$baseline$mean_risk, x$baseline$risk_reduction))
+    }
+    if (!is.null(x$pram_info$expected_mean_risk)) {
+        cat(sprintf("  Expected risk (over PRAM mechanism): %6.4f\n",
+                    x$pram_info$expected_mean_risk))
+    }
 
     cat("\nPrivacy Assessment: ")
     if (x$privacy_pass) {
@@ -2670,7 +2990,9 @@ summary.recordLinkageRisk <- function(object, ...) {
         var_importance = object$var_importance,
         privacy_pass = object$privacy_pass,
         fs_params = object$fs_params,
-        propensity_info = object$propensity_info
+        propensity_info = object$propensity_info,
+        baseline = object$baseline,
+        expected_mean_risk = object$pram_info$expected_mean_risk
     )
 
     class(summ) <- "summary.recordLinkageRisk"
@@ -2719,6 +3041,16 @@ print.summary.recordLinkageRisk <- function(x, ...) {
         pct <- 100 * x$risk_bands[i] / n_denom
         cat(sprintf("  %-22s %5d (%5.1f%%)\n",
                     bn[i], x$risk_bands[i], pct))
+    }
+
+    if (!is.null(x$baseline)) {
+        cat("\nBaseline (no perturbation):\n")
+        cat(sprintf("  Mean risk:      %7.4f\n", x$baseline$mean_risk))
+        cat(sprintf("  Risk reduction: %7.4f\n", x$baseline$risk_reduction))
+    }
+    if (!is.null(x$expected_mean_risk)) {
+        cat(sprintf("\nExpected risk (over PRAM mechanism): %7.4f\n",
+                    x$expected_mean_risk))
     }
 
     if (!is.null(x$d_true_stats)) {
@@ -2823,11 +3155,23 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1,
              col = "steelblue", border = "white", ...)
         abline(v = thresh, col = "red", lty = 2, lwd = 2)
         abline(v = mean(risk), col = "darkblue", lty = 3, lwd = 1.5)
-        legend("topright",
-               legend = c(paste0("threshold = ", thresh),
-                           paste0("mean = ", round(mean(risk), 3))),
-               col = c("red", "darkblue"),
-               lty = c(2, 3), lwd = c(2, 1.5), cex = 0.8)
+        if (!is.null(x$baseline)) {
+            abline(v = x$baseline$mean_risk, col = "darkgreen",
+                   lty = 4, lwd = 1.5)
+            legend("topright",
+                   legend = c(paste0("threshold = ", thresh),
+                              paste0("mean = ", round(mean(risk), 3)),
+                              paste0("baseline = ",
+                                     round(x$baseline$mean_risk, 3))),
+                   col = c("red", "darkblue", "darkgreen"),
+                   lty = c(2, 3, 4), lwd = c(2, 1.5, 1.5), cex = 0.8)
+        } else {
+            legend("topright",
+                   legend = c(paste0("threshold = ", thresh),
+                               paste0("mean = ", round(mean(risk), 3))),
+                   col = c("red", "darkblue"),
+                   lty = c(2, 3), lwd = c(2, 1.5), cex = 0.8)
+        }
     }
 
     if (show[2]) {
