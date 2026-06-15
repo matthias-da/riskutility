@@ -767,7 +767,9 @@ independent (many-to-one), bijective (one-to-one via Hungarian algorithm,
 @herranz2016gdbrl), and optimal transport (Sinkhorn).
 
 ```{r recordlinkage-demo}
-rl_res <- recordLinkage(pair, method = "deterministic")
+# Namespace-qualified: sdcMicro (>= 5.8.2) also exports recordLinkage(), and
+# vignettes may be re-built in a shared session, so qualify to be unambiguous.
+rl_res <- riskutility::recordLinkage(pair, method = "deterministic")
 print(rl_res)
 ```
 

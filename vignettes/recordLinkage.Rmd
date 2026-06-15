@@ -48,11 +48,16 @@ knitr::opts_chunk$set(
   fig.width = 7, fig.height = 5,
   warning = FALSE, message = FALSE
 )
-library(riskutility)
 if (!requireNamespace("sdcMicro", quietly = TRUE))
   stop("This vignette requires the sdcMicro package. ",
        "Install it with install.packages('sdcMicro').")
+# Attach sdcMicro BEFORE riskutility. sdcMicro (>= 5.8.2) also exports a
+# recordLinkage() (its own GDBRL implementation), so it would otherwise mask
+# riskutility::recordLinkage() -- the subject of this vignette -- on the search
+# path. Loading riskutility last makes its recordLinkage() win; sdcMicro's
+# pram()/rankSwap() (used below) remain available.
 library(sdcMicro)
+library(riskutility, warn.conflicts = FALSE)
 
 # Backend-aware torch flag. The 'torch' package may be installed while its C++
 # backend (libtorch) is not -- e.g. on CRAN / win-builder, where it is only
