@@ -166,8 +166,8 @@ plot.missingCompare <- function(x, ...) {
             ylab = "Proportion Missing", ...)
   } else if (x$method == "pattern") {
     op <- par(mfrow = c(1,2))
+    on.exit(par(op))
     barplot(x$patterns_X, main = "Missing Patterns in X", col = "skyblue", ...)
     barplot(x$patterns_Y, main = "Missing Patterns in Y", col = "orange", ...)
-    par(op)
   }
 }

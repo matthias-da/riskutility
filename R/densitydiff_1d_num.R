@@ -350,7 +350,8 @@ plot.denratio <- function(x, y, ..., which = 1){
       ylab2 <- "density ratio"
     }
     if(sum(show) > 1){
-      par(mfrow = c(1,2))
+      op <- par(mfrow = c(1,2))
+      on.exit(par(op))
     }
     if(show[1L]){
       plot(x = x$points, y = x$denX, type = "l", ylab = ylab1, xlab = "")

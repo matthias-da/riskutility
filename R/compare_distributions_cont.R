@@ -517,75 +517,11 @@ print.summary.compare_distributions_cont <- function(x, ...) {
 #' # Plot the ECDF
 #' plot(result)
 #'
-#' \dontrun{
-#' # Interactive plot
-#' plot(result, interactive = TRUE)
-#'
-#' ## approx. 20 seconds computation time
-#' data("eusilc13puf", package = "simPop")
-#' # Function to replace NAs in factor columns with a new level
-#' replace_na_in_factor <- function(factor_col, new_level = "not unique") {
-#'   # Convert the factor to character
-#'   char_col <- as.character(factor_col)
-#'   # Replace NA with the new level
-#'   char_col[is.na(char_col)] <- new_level
-#'   # Convert back to factor and include the new level
-#'   factor_col <- factor(char_col, levels = unique(c(levels(factor_col), new_level)))
-#'   return(factor_col)
+#' \donttest{
+#' # Interactive version of the plot (requires the plotly package)
+#' if (requireNamespace("plotly", quietly = TRUE)) {
+#'   plot(result, interactive = TRUE)
 #' }
-#'
-#' # Apply the function to the relevant columns
-#' eusilc13puf$pb220a <- replace_na_in_factor(eusilc13puf$pb220a)
-#' eusilc13puf$pl031 <- replace_na_in_factor(eusilc13puf$pl031, new_level = "child")
-#' eusilc13puf[is.na(eusilc13puf)] <- 0
-#' eusilc13puf$age <- as.numeric(as.character(eusilc13puf$age))
-#'
-#' inp <- simPop::specifyInput(data=eusilc13puf, hhid="db030",
-#'                             hhsize="hsize", strata="db040", weight="rb050")
-#' simPop <- simPop::simStructure(data = inp, method = "direct",
-#'                               basicHHvars=c("age", "rb090", "hsize", "db040", "pb220a"))
-#' simPop <- simPop::simCategorical(simPop, additional=c("pl031"),
-#'                                  method = "multinom", nr_cpus = 1)
-#' # multinomial model with random draws
-#' simPop <- simPop::simContinuous(simPop, additional="pgrossIncome",
-#'                                 regModel = ~rb090+hsize+pl031+pb220a+age,
-#'                                 upper=200000, equidist=FALSE, nr_cpus=1)
-#'
-#' eusilc13puf_synth <- data.frame(simPop::pop(simPop))
-#' eusilc13puf_synth$age <- as.numeric(as.character(eusilc13puf_synth$age))
-#'
-#'
-#' c1 <- compare_distributions_cont(eusilc13puf, eusilc13puf_synth,
-#'               variables = c("age", "pgrossIncome"),
-#'               weights = "rb050",
-#'               n_approx = 10000)
-#' p1 <- plot(c1)
-#' p1
-#' p1$ggplot_object + theme_dark()
-#' c2 <- compare_distributions_cont(eusilc13puf, eusilc13puf_synth,
-#'               variables = c("age", "pgrossIncome"),
-#'               weights = "rb050",
-#'               conditional = "pb220a",
-#'               n_approx = 10000)
-#' plot(c2)
-#' c3 <- compare_distributions_cont(eusilc13puf, eusilc13puf_synth,
-#'               variables = c("pgrossIncome"),
-#'               weights = "rb050",
-#'               conditional = "rb090",
-#'               n_approx = 10000)
-#' plot(c3)
-#' c4 <- compare_distributions_cont(eusilc13puf, eusilc13puf_synth,
-#'                     variables = c("age"),
-#'                     weights = "rb050",
-#'                     conditional = "rb090",
-#'                    n_approx = 10000)
-#' plot(c4)
-#' c5 <- compareSU_cdf(eusilc13puf, eusilc13puf_synth,
-#'                     variables = c("age"),
-#'                     weights = "rb050",
-#'                     conditional = "db040",
-#'                     n_approx = 10000)
-#' plot(c5)
 #' }
 #'
 #' @export

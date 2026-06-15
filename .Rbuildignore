@@ -23,3 +23,8 @@
 ^vignettes/.*\.html$
 ^vignettes/riskutility\.R$
 ^paper$
+^.*\.tar\.gz$
+^.*\.Rcheck$
+^\.DS_Store$
+^AGENTS\.md$
+^\.agents$

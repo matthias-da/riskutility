@@ -53,50 +53,32 @@ The computation is done for both, X (typically a non-anonymized data set)
 and Y (typically the anonymized or synthetisized version of X) and compares
 the estimates.
 
-For a ratio above 1, the synthetic data have even better prediction
-quality than the original data.
+The ratio compares these estimates: a value close to 1 indicates comparable
+prediction quality, a ratio above 1 indicates that the synthetic data have
+lower prediction quality (they preserve less predictive structure) than the
+original data, and a ratio below 1 indicates that the synthetic data are at
+least as predictable as the original.
 }
 \examples{
-\dontrun{
-# Simple example (requires caret and caretEnsemble packages)
-set.seed(123)
-X <- data.frame(
-  y = factor(sample(c("A", "B"), 100, replace = TRUE)),
-  x1 = rnorm(100),
-  x2 = rnorm(100)
-)
-Y <- data.frame(
-  y = factor(sample(c("A", "B"), 100, replace = TRUE)),
-  x1 = rnorm(100, 0.1, 1),
-  x2 = rnorm(100, 0.1, 1)
-)
-m <- mqs(X, Y, form = y ~ x1 + x2, methods = c("glm", "rpart"))
+\donttest{
+# Requires the caret, caretEnsemble and rpart packages
+if (requireNamespace("caret", quietly = TRUE) &&
+    requireNamespace("caretEnsemble", quietly = TRUE) &&
+    requireNamespace("rpart", quietly = TRUE)) {
+  set.seed(123)
+  X <- data.frame(
+    y = factor(sample(c("A", "B"), 100, replace = TRUE)),
+    x1 = rnorm(100),
+    x2 = rnorm(100)
+  )
+  Y <- data.frame(
+    y = factor(sample(c("A", "B"), 100, replace = TRUE)),
+    x1 = rnorm(100, 0.1, 1),
+    x2 = rnorm(100, 0.1, 1)
+  )
+  m <- mqs(X, Y, form = y ~ x1 + x2, methods = c("glm", "rpart"))
+  m
 }
-
-\dontrun{
-## approx. 20 seconds computation time
-data(eusilc13puf, package="simPop")
-inp <- simPop::specifyInput(data=eusilc13puf, hhid="db030", hhsize="hsize",
-                    strata="db040", weight="rb050")
-simPop <- simPop::simStructure(data = inp, method = "direct",
-  basicHHvars=c("age", "rb090", "hsize", "db040"))
-simPop <- simPop::simCategorical(simPop, additional=c("pl031", "pb220a"),
-                         method = "multinom", nr_cpus = 1)
-# multinomial model with random draws
-simPop <- simPop::simContinuous(simPop, additional="pgrossIncome",
-              regModel = ~rb090+hsize+pl031+pb220a,
-              upper=200000, equidist=FALSE, nr_cpus=1)
-eusilc13puf_synth <- data.frame(simPop::pop(simPop))
-m1 <- mqs(eusilc13puf, eusilc13puf_synth, na = "remove",
-          form = formula("rb090 ~ age + rb090 + pl031 + pb220a +
-                          db040 + pgrossIncome"),
-          methods = c("glm", "rpart"))
-m1
-m2 <- mqs(eusilc13puf, eusilc13puf_synth, na = "remove",
-          form = formula("pgrossIncome ~ age + rb090 + pl031 +
-                          pb220a + db040"),
-          methods = c("glm", "rpart"))
-m2
 }
 }
 \seealso{

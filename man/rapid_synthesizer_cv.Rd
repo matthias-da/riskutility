@@ -80,17 +80,26 @@ distribution of risk scores that accounts for variability in both
 the synthesis and the evaluation.
 }
 \examples{
-\dontrun{
-cv <- rapid_synthesizer_cv(
-  original_data = df,
-  synthesizer = function(data, seed = NULL) {
-    synthpop::syn(data, m = 1, seed = seed, print.flag = FALSE)$syn
-  },
-  quasi_identifiers = c("age", "sex", "region"),
-  sensitive_attribute = "income",
-  model_type = "rf", k = 5
-)
-print(cv)
+\donttest{
+# Requires the 'synthpop' package for the default-style synthesizer
+if (requireNamespace("synthpop", quietly = TRUE)) {
+  df <- data.frame(
+    age = sample(20:80, 200, replace = TRUE),
+    sex = factor(sample(c("m", "f"), 200, replace = TRUE)),
+    region = factor(sample(LETTERS[1:4], 200, replace = TRUE)),
+    income = rnorm(200, 50000, 10000)
+  )
+  cv <- rapid_synthesizer_cv(
+    original_data = df,
+    synthesizer = function(data, seed = NULL) {
+      synthpop::syn(data, m = 1, seed = seed, print.flag = FALSE)$syn
+    },
+    quasi_identifiers = c("age", "sex", "region"),
+    sensitive_attribute = "income",
+    model_type = "rf", k = 5
+  )
+  print(cv)
+}
 }
 
 }

@@ -131,28 +131,23 @@ if (requireNamespace("simPop", quietly = TRUE) &&
 }
 }
 
-\dontrun{
-  ## approx. 20 seconds computation time
-  inp <- simPop::specifyInput(data=eusilc13puf, hhid="db030",
-                   hhsize="hsize", strata="db040", weight="rb050")
-  simPop <- simPop::simStructure(data = inp, method = "direct",
-                      basicHHvars=c("age", "rb090", "hsize", "db040"))
-  simPop <- simPop::simCategorical(simPop, additional=c("pl031", "pb220a"),
-                      method = "multinom", nr_cpus = 1)
-  # multinomial model with random draws
-  simPop <- simPop::simContinuous(simPop, additional="pgrossIncome",
-                                  regModel = ~rb090+hsize+pl031+pb220a,
-                                  upper=200000, equidist=FALSE, nr_cpus=1)
-  eusilc13puf_synth <- data.frame(simPop::pop(simPop))
-
-propscore(eusilc13puf, eusilc13puf_synth, na = "remove",
-  form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"))
-propscore(eusilc13puf, eusilc13puf_synth, na = "remove", cluster = "db030",
-  form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"))
-propscore(eusilc13puf, eusilc13puf_synth, na = "remove", cluster = "db030",
-  form = formula(" ~ age + rb090 + pl031 + db040 + pb220a + pgrossIncome"),
-  adjust_size = FALSE)
-}
+# Account for a survey cluster structure (e.g. households) and keep the
+# original/synthetic sizes as-is via adjust_size = FALSE
+set.seed(123)
+Xc <- data.frame(
+  age = sample(20:60, 100, replace = TRUE),
+  gender = sample(c("M", "F"), 100, replace = TRUE),
+  income = rnorm(100, 50000, 10000),
+  hid = factor(sample(1:25, 100, replace = TRUE))
+)
+Yc <- data.frame(
+  age = sample(20:60, 100, replace = TRUE),
+  gender = sample(c("M", "F"), 100, replace = TRUE),
+  income = rnorm(100, 48000, 12000),
+  hid = factor(sample(1:25, 100, replace = TRUE))
+)
+propscore(Xc, Yc, form = ~ age + gender + income,
+          cluster = "hid", adjust_size = FALSE)
 }
 \references{
 Templ, M. Statistical Disclosure Control for Microdata: Methods and Applications in R.

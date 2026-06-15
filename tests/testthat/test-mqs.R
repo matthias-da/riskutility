@@ -126,16 +126,16 @@ test_that("summary interpretation: comparable when ratio ~1", {
   expect_match(s$interpretation, "comparable")
 })
 
-test_that("summary interpretation: lower quality when ratio < 0.95", {
+test_that("summary interpretation: better quality when ratio < 0.95", {
   mock <- make_mock_mqs(ratio = 0.80)
   s <- summary(mock)
-  expect_match(s$interpretation, "lower prediction quality")
+  expect_match(s$interpretation, "better prediction quality")
 })
 
-test_that("summary interpretation: better quality when ratio > 1.05", {
+test_that("summary interpretation: lower quality when ratio > 1.05", {
   mock <- make_mock_mqs(ratio = 1.20)
   s <- summary(mock)
-  expect_match(s$interpretation, "better prediction quality")
+  expect_match(s$interpretation, "lower prediction quality")
 })
 
 test_that("summary interpretation edge case: ratio exactly 0.95", {
@@ -435,7 +435,7 @@ test_that("summary works for RMSE-based mqs", {
   mock <- make_mock_mqs_rmse(ratio = 1.10)
   s <- summary(mock)
   expect_s3_class(s, "summary.mqs")
-  expect_match(s$interpretation, "better prediction quality")
+  expect_match(s$interpretation, "lower prediction quality")
 })
 
 # --- S3 methods: plot (mock-based) ---
