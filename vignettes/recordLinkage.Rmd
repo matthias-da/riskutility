@@ -1,4 +1,4 @@
----
+﻿---
 title: "riskutility: Record Linkage Risk Assessment for Perturbative Disclosure Control"
 author:
   - name: Matthias Templ
@@ -11,13 +11,12 @@ author:
 abstract: >
   The **riskutility** package for R provides a unified framework for
   measuring re-identification risk in perturbed microdata. The
-  `recordLinkage()` function implements eight linkage methods under a
+  `recordLinkage()` function implements six linkage methods under a
   single S3 interface with consistent risk weighting, blocking, and
-  forward/reverse direction support. This paper covers the five core
+  forward/reverse direction support. This paper covers the three core
   methods in detail -- deterministic (Gower distance), probabilistic
-  (Fellegi-Sunter), PRAM (transition matrix), predictive (propensity
-  score), and embedding (autoencoder latent-space distance) -- while
-  three additional methods (random forest proximity, rank-based, and
+  (Fellegi-Sunter), and embedding (autoencoder latent-space distance) --
+  while three additional methods (random forest proximity, rank-based, and
   Mahalanobis) are documented in the package help pages.
   While several R packages provide record linkage functionality
   (RecordLinkage, fastLink, reclin2) and sdcMicro offers distance-based
@@ -29,7 +28,7 @@ abstract: >
   perturbation. Practical guidance on method selection, risk
   interpretation, and common pitfalls is provided.
 keywords: [record linkage, re-identification risk, statistical disclosure control,
-  perturbative methods, PRAM, Fellegi-Sunter, R]
+  perturbative methods, Fellegi-Sunter, R]
 output:
   rmarkdown::html_vignette:
     toc: true
@@ -55,7 +54,7 @@ if (!requireNamespace("sdcMicro", quietly = TRUE))
 # recordLinkage() (its own GDBRL implementation), so it would otherwise mask
 # riskutility::recordLinkage() -- the subject of this vignette -- on the search
 # path. Loading riskutility last makes its recordLinkage() win; sdcMicro's
-# pram()/rankSwap() (used below) remain available.
+# rankSwap() (used below) remains available.
 library(sdcMicro)
 library(riskutility, warn.conflicts = FALSE)
 
@@ -77,10 +76,9 @@ at the level of running functions and reading data frames is sufficient.
 
 Statistical disclosure control (SDC) encompasses a range of techniques for
 protecting individual privacy in released microdata
-[@hundepool2012statistical]. *Perturbative* methods -- such as PRAM
-(Post-Randomization Method), record swapping, noise addition, and
-microaggregation -- modify the original records rather than generating
-entirely new ones [@templ2015sdcmicro]. This makes perturbative data
+[@hundepool2012statistical]. *Perturbative* methods -- such as record
+swapping, noise addition, and microaggregation -- modify the original
+records rather than generating entirely new ones [@templ2015sdcmicro]. This makes perturbative data
 fundamentally different from fully synthetic data: every released record
 has a real individual behind it, and the attacker's task is to undo the
 perturbation and re-identify that individual.
@@ -160,15 +158,13 @@ Several R packages address record linkage or disclosure risk:
 These packages focus primarily on *linking* records (classification into
 match/non-match) rather than *quantifying re-identification risk* per
 record. The `recordLinkage()` function in **riskutility** fills this gap
-by combining eight linkage methods with risk-focused output: per-record
+by combining six linkage methods with risk-focused output: per-record
 risk scores, candidate set diagnostics, and configurable risk weighting.
 
 | Feature | sdcMicro | RecordLinkage | fastLink | riskutility |
 |:--------|:--------:|:-------------:|:--------:|:-----------:|
 | Deterministic (distance) | Yes | -- | -- | Yes |
 | Probabilistic (Fellegi-Sunter) | -- | Yes | Yes | Yes |
-| PRAM (transition matrix) | -- | -- | -- | Yes |
-| Predictive (propensity score) | -- | -- | -- | Yes |
 | Embedding (autoencoder) | -- | -- | -- | Yes |
 | RF proximity | -- | -- | -- | Yes |
 | Rank-based (RBRL) | -- | -- | -- | Yes |
@@ -182,18 +178,16 @@ risk scores, candidate set diagnostics, and configurable risk weighting.
 
 ## Scope of This Paper
 
-The `recordLinkage()` function in **riskutility** implements eight
+The `recordLinkage()` function in **riskutility** implements six
 linkage methods under a single S3 interface with consistent risk
-weighting, blocking, and direction support. This paper covers the five
+weighting, blocking, and direction support. This paper covers the three
 core methods in detail, each following the same pedagogical structure:
 *mathematical formulation* $\to$ *hand-traceable toy example* $\to$
 *realistic demonstration*:
 
 1. **Deterministic** (Gower distance)
 2. **Probabilistic** (Fellegi-Sunter log-likelihood ratios)
-3. **PRAM** (transition matrix products)
-4. **Predictive** (propensity-score-based)
-5. **Embedding** (autoencoder latent-space distance)
+3. **Embedding** (autoencoder latent-space distance)
 
 Three additional methods -- **random forest proximity** (`"rf"`),
 **rank-based record linkage** (`"rbrl"`;
@@ -209,7 +203,7 @@ provide practical guidance for method selection and risk interpretation.
 For the theoretical background on record linkage see @fellegi1969theory,
 @winkler2006overview, and @domingo2002validating; for empirical
 disclosure risk assessment via record linkage see
-@domingoferrer2003disclosure; for PRAM see @gouweleeuw1998post; for the
+@domingoferrer2003disclosure; for the
 general framework of record linkage risk see @dewolf2002framework; for a
 textbook treatment of SDC risk estimation see @templ2017statistical
 (Chapter 6).
@@ -263,11 +257,9 @@ record, search the anonymized data for matches. The *reverse*
 perspective iterates over anonymized records and searches the original
 data, answering "how easily can each released record be traced back
 to an individual?" For symmetric
-distance methods (deterministic, predictive), the two perspectives
-yield similar but not identical results because the evaluation criterion
-changes (different records serve as query vs. search). For PRAM, the
-asymmetric transition matrices cause forward and reverse risks to differ
-substantially (see the PRAM Forward vs. Reverse subsection).
+distance methods (deterministic), the two perspectives yield similar but
+not identical results because the evaluation criterion changes (different
+records serve as query vs. search).
 
 ## Risk Weighting Schemes
 
@@ -786,473 +778,6 @@ disagreement. Variables with high $\log(m/u)$ are the most discriminating
 for identifying matches.
 
 
-# PRAM Method
-
-## Transition Matrices
-
-For data protected via the Post-Randomization Method (PRAM)
-[@gouweleeuw1998post], the perturbation mechanism is fully described by
-transition matrices. For each categorical variable $v$, the matrix
-$T_v$ has entry $T_v[a, b] = P(\text{output} = b \mid \text{input} = a)$.
-
-The probability that original record $x_i$ produced anonymized record
-$x^a_j$ is the product over all variables:
-$$P(x^a_j \mid x_i) = \prod_{v \in \mathcal{K}} T_v[x_{iv}, x^a_{jv}].$$
-
-The re-identification risk is then the normalized probability:
-$$r_i = \frac{P(x^a_{j^*_i} \mid x_i)}{\sum_{j \in C_i} P(x^a_j \mid x_i)},$$
-where $C_i = \{j : P(x^a_j \mid x_i) > 0\}$ is restricted to
-records with nonzero transition probability (and within the blocking
-window, if applicable). This assumes independence of
-perturbation across variables, which is exact when PRAM is applied
-independently to each variable.
-
-## Toy Example: 5 Records
-
-We use abstract categorical variables (`color`, `shape`) here with
-$3 \times 3$ transition matrices that exhibit richer structure than
-binary QIs. The abstract names make the transition matrix entries easier
-to follow without domain-specific connotations (e.g., one can see that
-$T[\text{R}, \text{G}] = 0.1$ without wondering whether "R" and "G"
-represent adjacent regions).
-
-```{r pram-toy-data}
-orig_pram <- data.frame(
-  color = factor(c("R", "G", "B", "R", "G")),
-  shape = factor(c("C", "S", "T", "C", "T"))
-)
-anon_pram <- data.frame(
-  color = factor(c("R", "B", "B", "G", "G")),
-  shape = factor(c("C", "S", "T", "S", "T"))
-)
-
-tm_color <- matrix(
-  c(0.8, 0.1, 0.1,
-    0.1, 0.7, 0.2,
-    0.1, 0.2, 0.7),
-  3, 3, byrow = TRUE,
-  dimnames = list(c("R", "G", "B"), c("R", "G", "B"))
-)
-
-tm_shape <- matrix(
-  c(0.9, 0.05, 0.05,
-    0.1, 0.8,  0.1,
-    0.05, 0.05, 0.9),
-  3, 3, byrow = TRUE,
-  dimnames = list(c("C", "S", "T"), c("C", "S", "T"))
-)
-
-knitr::kable(tm_color, caption = "Transition matrix for 'color'")
-knitr::kable(tm_shape, caption = "Transition matrix for 'shape'")
-```
-
-**Hand-tracing record 1** (R, C) $\to$ anonymized record 1 (R, C):
-
-- $T_{\text{color}}[\text{R}, \text{R}] = 0.8$
-- $T_{\text{shape}}[\text{C}, \text{C}] = 0.9$
-- $P(x^a_1 \mid x_1) = 0.8 \times 0.9 = 0.720$
-
-**Record 4** (R, C) $\to$ anonymized record 4 (G, S):
-
-- $T_{\text{color}}[\text{R}, \text{G}] = 0.1$
-- $T_{\text{shape}}[\text{C}, \text{S}] = 0.05$
-- $P(x^a_4 \mid x_4) = 0.1 \times 0.05 = 0.005$
-
-```{r pram-toy-allprobs, echo=FALSE}
-# Compute all transition probabilities for records 1 and 4
-probs <- matrix(0, nrow = 5, ncol = 2,
-                dimnames = list(paste0("Anon ", 1:5),
-                                c("P(anon_j | orig_1)", "P(anon_j | orig_4)")))
-for (j in 1:5) {
-  probs[j, 1] <- tm_color[as.character(orig_pram$color[1]),
-                           as.character(anon_pram$color[j])] *
-                 tm_shape[as.character(orig_pram$shape[1]),
-                          as.character(anon_pram$shape[j])]
-  probs[j, 2] <- tm_color[as.character(orig_pram$color[4]),
-                           as.character(anon_pram$color[j])] *
-                 tm_shape[as.character(orig_pram$shape[4]),
-                          as.character(anon_pram$shape[j])]
-}
-probs_df <- as.data.frame(probs)
-probs_df$`Normalized risk (rec 1)` <- round(probs[, 1] / sum(probs[, 1]), 4)
-probs_df$`Normalized risk (rec 4)` <- round(probs[, 2] / sum(probs[, 2]), 4)
-knitr::kable(probs_df, digits = 4,
-             caption = "Transition probabilities and normalized risks for records 1 and 4")
-```
-
-Records 1 and 4 have identical original values (R, C) but completely
-different risks. Record 1's output (R, C) has high probability under
-the original (the diagonal is large), giving risk $\approx 0.97$.
-Record 4's output (G, S) has very low probability, giving risk
-$\approx 0.007$. **PRAM risk depends on the actual output, not just
-the input.**
-
-This is fundamentally different from the deterministic method, where risk
-depends only on the distance between original and anonymized values.
-Here, risk depends on the *transition probability* of the actual output
-given the input, reflecting the perturbation mechanism directly. A
-record that retains its original categories (record 1) is easy to
-re-identify because the diagonal entries are large; a record that was
-heavily perturbed (record 4) is protected because the off-diagonal
-probability product is small relative to the total.
-
-Now verify with `recordLinkage()`:
-
-```{r pram-toy-verify}
-res_pram <- recordLinkage(orig_pram, anon_pram,
-                          key = c("color", "shape"),
-                          method = "pram",
-                          pram_matrix = list(color = tm_color,
-                                            shape = tm_shape))
-knitr::kable(res_pram$per_record[, c("risk", "d_true")],
-             digits = 4, caption = "Per-record risk (PRAM)")
-```
-
-## Forward vs. Reverse Asymmetry
-
-The PRAM method is unique among the five methods in that it is
-*asymmetric*: the transition matrix $T_v[a, b]$ is not symmetric, so
-forward risk (given the original, sum over anonymized candidates) and
-reverse risk (given the anonymized record, sum over original candidates)
-can differ.
-
-```{r pram-direction-data}
-orig_dir <- data.frame(grade = factor(c("A", "B", "C", "A", "B")))
-anon_dir <- data.frame(grade = factor(c("A", "C", "C", "B", "A")))
-
-tm_grade <- matrix(
-  c(0.7, 0.2, 0.1,
-    0.1, 0.6, 0.3,
-    0.3, 0.1, 0.6),
-  3, 3, byrow = TRUE,
-  dimnames = list(c("A", "B", "C"), c("A", "B", "C"))
-)
-knitr::kable(tm_grade, caption = "Asymmetric transition matrix for 'grade'")
-```
-
-```{r pram-direction-compare}
-res_fwd <- recordLinkage(orig_dir, anon_dir,
-                         key = "grade", method = "pram",
-                         pram_matrix = list(grade = tm_grade),
-                         direction = "forward")
-res_rev <- recordLinkage(orig_dir, anon_dir,
-                         key = "grade", method = "pram",
-                         pram_matrix = list(grade = tm_grade),
-                         direction = "reverse")
-
-dir_df <- data.frame(
-  Record = 1:5,
-  Orig_grade = as.character(orig_dir$grade),
-  Anon_grade = as.character(anon_dir$grade),
-  Forward_risk = round(res_fwd$per_record$risk, 4),
-  Reverse_risk = round(res_rev$per_record$risk, 4)
-)
-knitr::kable(dir_df,
-             caption = "Forward vs. reverse risk (PRAM with asymmetric matrix)")
-```
-
-In forward mode, for each original record's value (fixing a row of $T$),
-the function evaluates $T[\text{original}, b]$ for each anonymized
-candidate $b$. In reverse mode, for each anonymized record's value
-(fixing a column of $T$), the function evaluates
-$T[\text{original}_j, \text{anon}]$ for each original candidate $j$.
-Both use the same transition matrix $P(\text{output} \mid \text{input})$;
-only the roles of query and search change. Note that reverse PRAM risk
-is *not* the Bayesian posterior $P(\text{input} \mid \text{output})$,
-which would require prior information about the marginal distribution.
-When $T$ is asymmetric, the normalization denominators differ, yielding
-different risk profiles.
-
-## Baseline and Expected Risk
-
-Two options aid the interpretation of perturbative risk. Setting
-`compute_baseline = TRUE` re-links the data against itself (no perturbation)
-under the same method and settings, so the *reduction* achieved by the
-mechanism can be read directly. Setting `expected_risk = TRUE` (forward PRAM)
-reports a perturbation-aware *expectation*: holding all other records at their
-realized values, each record's risk is integrated over its own transition
-distribution $P(x_i \to \cdot)$, rather than evaluated only at the single
-realized output.
-
-```{r pram-baseline-expected}
-res_be <- recordLinkage(orig_dir, anon_dir,
-                        key = "grade", method = "pram",
-                        pram_matrix = list(grade = tm_grade),
-                        direction = "forward",
-                        compute_baseline = TRUE, expected_risk = TRUE)
-
-be_df <- data.frame(
-  Record    = 1:5,
-  Realized  = round(res_be$per_record$risk, 4),
-  Expected  = round(res_be$pram_info$expected_risk, 4)
-)
-knitr::kable(be_df, caption = "Realized vs. expected PRAM risk (forward)")
-```
-
-The baseline (no-perturbation) mean risk is
-`r round(res_be$baseline$mean_risk, 3)`, against a perturbed mean of
-`r round(res_be$overall$mean_risk, 3)` (a reduction of
-`r round(res_be$baseline$risk_reduction, 3)`); the expected risk averages
-`r round(res_be$pram_info$expected_mean_risk, 3)` over the mechanism, capturing
-the fact that the released table is only one of many possible PRAM outputs.
-
-## Real-World Example (n = 500)
-
-The toy examples above used hand-specified transition matrices.
-In practice, transition matrices are generated by the perturbation
-software. Here we use `sdcMicro::pram()` [@templ2015sdcmicro; @gouweleeuw1998post],
-which generates the matrices internally and applies the perturbation.
-We then extract the matrices and pass them directly to
-`recordLinkage()`.
-
-The `pd` parameter in `sdcMicro::pram()` sets the minimum diagonal
-probability of the transition matrix -- the probability that a record
-retains its original category. With `pd = 0.8`, each category is
-preserved with at least 80% probability. The `alpha` parameter
-controls the invariance property: `alpha = 1` produces a fully
-invariant PRAM (marginal distributions are preserved in expectation),
-while `alpha = 0` maximizes perturbation. The value `alpha = 0.5` is
-a common compromise.
-
-```{r pram-real}
-set.seed(456)  # ensures reproducibility for PRAM data
-n <- 500
-pram_data <- data.frame(
-  sex    = factor(sample(c("M", "F"), n, replace = TRUE)),
-  region = factor(sample(c("N", "S", "E", "W"), n, replace = TRUE)),
-  educ   = factor(sample(c("low", "mid", "high"), n, replace = TRUE,
-                         prob = c(0.3, 0.5, 0.2)))
-)
-
-# Apply PRAM via sdcMicro
-pram_vars <- c("sex", "region", "educ")
-pram_res <- pram(pram_data, variables = pram_vars, pd = 0.8, alpha = 0.5)
-
-# Build the anonymized dataset from _pram columns
-pram_anon <- data.frame(
-  sex    = pram_res$sex_pram,
-  region = pram_res$region_pram,
-  educ   = pram_res$educ_pram
-)
-
-# Extract transition matrices generated by sdcMicro
-pram_params <- attr(pram_res, "pram_params")
-tm_list <- setNames(
-  lapply(pram_vars, function(v) pram_params[[v]]$Rs),
-  pram_vars
-)
-
-# Inspect the perturbation summary
-print(attr(pram_res, "summary"))
-
-# Record linkage using the actual transition matrices
-res_pram_real <- recordLinkage(
-  pram_data, pram_anon,
-  key = pram_vars,
-  method = "pram",
-  pram_matrix = tm_list
-)
-print(res_pram_real)
-```
-
-The PRAM risk distribution reflects the perturbation parameters
-directly: with `pd = 0.8` (minimum diagonal probability), records
-that retained their original categories appear with high probability
-and thus receive high risk, while records that were perturbed (moved
-off the diagonal) receive lower risk. The intermediate `alpha = 0.5`
-balances perturbation strength against marginal preservation.
-
-```{r pram-real-plot, fig.height=4, fig.cap="Risk distribution for the PRAM method on 500 records with sdcMicro-generated transition matrices."}
-plot(res_pram_real, which = 1)
-```
-
-The histogram shows the characteristic bimodal pattern of PRAM risk:
-a cluster of high-risk records (those retaining their original
-categories) and a spread of lower-risk records (those that were
-perturbed). Increasing `pd` (higher diagonal probability) would shift
-mass toward the high-risk peak; decreasing it would spread mass
-toward lower risk.
-
-
-# Predictive Method (Propensity Score)
-
-When quasi-identifiers are high-dimensional or exhibit nonlinear
-interactions, pairwise distance computation may miss important
-structure. The predictive method addresses this by using a propensity
-score model to project the multivariate QI space into a single
-informative dimension.
-
-## Propensity Score Linkage
-
-The concept of propensity scores originates in causal inference
-[@rosenbaum1983propensity], where they are used to balance treatment
-groups on observed covariates. Here we repurpose the idea for record
-linkage: the propensity score measures how "original-like" a record
-is, providing a natural 1D summary for matching.
-
-The predictive method fits a logistic regression on the stacked
-original + anonymized data to predict record origin (original = 1,
-anonymized = 0) from the quasi-identifiers:
-$$\log\frac{e(x)}{1 - e(x)} = \beta_0 + \sum_{v \in \mathcal{K}} \beta_v x_v,$$
-where $e(x) = P(\text{original} \mid \text{QIs} = x)$ is the
-propensity score. This projects the multivariate QI space into a single
-dimension that captures the discriminability between the two datasets.
-When the logistic model is correctly specified, this projection
-effectively discriminates between original and anonymized records; when
-misspecified (e.g., important interactions are missing), the projection
-may compress relevant variation. A random forest alternative
-(`pred_model = "rf"`) is available for cases where nonlinearity is
-suspected.
-
-Records are then linked in the 1D propensity-score space. The distance
-between original record $i$ and anonymized record $j$ is simply:
-$$d(i,j) = |e(x_i) - e(x^a_j)|.$$
-
-The standard strategies (nearest, threshold, top-$k$) and weighting
-schemes apply to these propensity-score distances.
-
-## Fisher SE Bandwidth
-
-When `pred_se = TRUE` (default) and `pred_model = "logit"`, the
-bandwidth for kernel weighting is derived from the Fisher information
-matrix:
-$$\text{SE}_i = \hat{e}_i(1 - \hat{e}_i) \sqrt{\mathbf{x}_i^\top \hat{V} \mathbf{x}_i},$$
-where $\hat{V}$ is the variance-covariance matrix of the logistic
-regression coefficients. Records with uncertain predictions (near 0.5)
-get wider kernels, while confidently classified records get narrow
-kernels -- and hence higher individual risk. Note that `pred_se` only
-affects the bandwidth when `risk_weighting = "kernel"`; with uniform or
-softmax weighting it has no effect.
-
-## Toy Example: 6 Records
-
-```{r pred-toy-data}
-orig_pred <- data.frame(
-  age = c(20, 40, 40, 60, 60, 80),
-  sex = factor(c("F", "M", "F", "M", "F", "M"))
-)
-anon_pred <- data.frame(
-  age = c(20, 40, 60, 40, 60, 80),  # rows 3 and 4 swapped ages
-  sex = factor(c("F", "M", "F", "M", "F", "M"))
-)
-```
-
-```{r pred-toy-run}
-res_pred <- recordLinkage(orig_pred, anon_pred,
-                          key = c("age", "sex"),
-                          method = "predictive")
-print(res_pred)
-```
-
-To understand the linkage, we inspect the propensity scores. The model
-stacks original and anonymized records (12 rows total) and fits a
-logistic regression predicting origin from `age` and `sex`.
-
-```{r pred-toy-scores}
-# Extract propensity scores from the result
-p_orig <- res_pred$propensity_info$propensity_original
-p_anon <- res_pred$propensity_info$propensity_synthetic
-
-score_df <- data.frame(
-  Record = 1:6,
-  Age_orig = orig_pred$age,
-  Sex_orig = as.character(orig_pred$sex),
-  Score_orig = round(p_orig, 4),
-  Age_anon = anon_pred$age,
-  Score_anon = round(p_anon, 4)
-)
-knitr::kable(score_df, caption = "Propensity scores for original and anonymized records")
-```
-
-With only 12 records (6 + 6), the logistic model has limited ability to
-separate the two groups, so all propensity scores cluster near 0.5.
-The ordering is nonetheless informative: the model uses `age` and `sex`
-jointly to distinguish original from anonymized records.
-
-Rows 3 and 4 had their ages swapped (40 $\leftrightarrow$ 60).
-Records that were not perturbed (rows 1, 2, 5, 6) share identical
-covariates with their anonymized counterparts and thus receive the
-same propensity score, giving $d(i,j) = 0$ and risk $r_i = 1.0$.
-For swapped records 3 and 4, the perturbation shifts the propensity
-score and the nearest anonymized record may no longer be the true match.
-
-```{r pred-toy-risk}
-knitr::kable(res_pred$per_record[, c("risk", "cand_n", "true_in_set", "d_true")],
-             digits = 4, caption = "Per-record risk (predictive method)")
-```
-
-**Key insight**: The propensity score projects the multivariate QI
-space into a single dimension that captures discriminability between
-the two datasets. With this small toy example, the projection is
-nearly flat. With larger samples and more QIs, the 1D projection may
-capture multivariate structure that pairwise Gower distances miss.
-
-```{r pred-toy-propensity, fig.height=4, fig.cap="Propensity score densities for original and anonymized records. Well-separated distributions indicate easy-to-link records."}
-plot(res_pred, which = 4)
-```
-
-## Real-World Example (n = 500)
-
-With 500 records and 4 QIs, the logistic model can meaningfully
-separate original from anonymized records, producing a wider range
-of propensity scores than the toy example. Using the same census
-dataset:
-
-```{r pred-real}
-res_pred_real <- recordLinkage(census, census_anon,
-                               key = c("age", "sex", "region", "educ"),
-                               method = "predictive")
-print(res_pred_real)
-```
-
-```{r pred-real-riskhist, fig.height=4, fig.cap="Per-record risk distribution (predictive method, nearest strategy)."}
-plot(res_pred_real, which = 1)
-```
-
-To compare weighting schemes, we must use a strategy that produces
-candidate sets with more than one record. With the default `nearest`
-strategy, continuous propensity scores rarely produce ties -- nearly
-every record has a unique nearest neighbor with `cand_n = 1`, giving
-$r_i = 1$ regardless of the weighting scheme. Using `topk` with $k = 5$
-ensures at least 5 candidates per record, making the weighting choice
-meaningful:
-
-```{r pred-real-compare}
-res_pred_topk <- recordLinkage(census, census_anon,
-                                key = c("age", "sex", "region", "educ"),
-                                method = "predictive",
-                                strategy = "topk", k = 5)
-res_pred_kernel <- recordLinkage(census, census_anon,
-                                 key = c("age", "sex", "region", "educ"),
-                                 method = "predictive",
-                                 strategy = "topk", k = 5,
-                                 risk_weighting = "kernel")
-
-comp_pred <- data.frame(
-  Weighting = c("Uniform (top-5)", "Kernel (Fisher SE, top-5)"),
-  Mean_risk = c(res_pred_topk$overall$mean_risk,
-                res_pred_kernel$overall$mean_risk),
-  Max_risk = c(res_pred_topk$overall$max_risk,
-               res_pred_kernel$overall$max_risk),
-  Pct_high = c(100 * res_pred_topk$overall$pct_high_risk,
-               100 * res_pred_kernel$overall$pct_high_risk)
-)
-knitr::kable(comp_pred, digits = 4,
-             caption = "Predictive method: uniform vs kernel weighting (top-5 strategy)")
-```
-
-The kernel weighting with Fisher SE bandwidth concentrates risk on records
-where the propensity model is confident about the match, giving a more
-nuanced risk profile than uniform weighting.  Note that the
-propensity-score approach to record linkage risk is novel and its
-properties are not yet fully established; see the Limitations section
-for caveats.
-
-```{r pred-real-plot, fig.height=4, fig.cap="Propensity score densities for the 500-record census dataset (predictive method)."}
-plot(res_pred_real, which = 4)
-```
-
-
 # Embedding Method (Autoencoder)
 
 *This method requires the **torch** package and is most relevant for
@@ -1301,7 +826,7 @@ distances $d_z(i, \cdot)$ form the attacker's candidate scores, from which
 `recordLinkage()` returns the (weighted) probability mass on the *true* match,
 and $0$ when the true record is not in the attacker's candidate set. Embedding
 risk is therefore directly comparable on the same scale as the deterministic,
-probabilistic, PRAM, and predictive methods. The nearest-neighbour similarity
+probabilistic methods. The nearest-neighbour similarity
 $1 - d_z(i, j^*)$ — the closeness of the single nearest released record,
 whoever it is — is retained separately in the `nn_similarity` column of
 `per_record` as a distinctiveness diagnostic. (The random-forest method behaves
@@ -1396,72 +921,39 @@ the **torch** package.
 
 ## Side-by-Side Comparison
 
-We run all five methods on the same 500-record census dataset and compare
-results. For the PRAM method we use the categorical-only subset since
-PRAM requires transition matrices. The embedding method requires the
-**torch** package; if unavailable, it is omitted from the comparison.
+We run the deterministic, probabilistic, and (when torch is available)
+embedding methods on the same 500-record census dataset and compare results.
 
 ```{r compare-methods}
 # Deterministic (already computed)
 # Probabilistic (already computed)
-# Predictive (already computed)
 
 # For fair comparison, also run deterministic on categorical-only keys
 res_det_cat <- recordLinkage(census, census_anon,
                              key = c("sex", "region", "educ"))
 
-# Apply sdcMicro::pram() to the census categorical variables
-set.seed(789)
-cat_vars <- c("sex", "region", "educ")
-pram_census_res <- pram(census[, cat_vars], variables = cat_vars,
-                        pd = 0.85, alpha = 0.5)
-census_pram <- census
-census_pram$sex    <- pram_census_res$sex_pram
-census_pram$region <- pram_census_res$region_pram
-census_pram$educ   <- pram_census_res$educ_pram
-
-# Extract the actual transition matrices from sdcMicro
-pp <- attr(pram_census_res, "pram_params")
-tm_census <- setNames(lapply(cat_vars, function(v) pp[[v]]$Rs), cat_vars)
-
-res_pram_census <- recordLinkage(
-  census, census_pram,
-  key = cat_vars,
-  method = "pram",
-  pram_matrix = tm_census
-)
-
 compare_df <- data.frame(
   Method = c("Deterministic (4 QIs)", "Probabilistic (4 QIs)",
-             "Predictive (4 QIs)", "Deterministic (3 cat QIs)",
-             "PRAM (3 cat QIs)"),
+             "Deterministic (3 cat QIs)"),
   Mean_risk = c(
     res_real$overall$mean_risk,
     res_prob_real$overall$mean_risk,
-    res_pred_real$overall$mean_risk,
-    res_det_cat$overall$mean_risk,
-    res_pram_census$overall$mean_risk
+    res_det_cat$overall$mean_risk
   ),
   Max_risk = c(
     res_real$overall$max_risk,
     res_prob_real$overall$max_risk,
-    res_pred_real$overall$max_risk,
-    res_det_cat$overall$max_risk,
-    res_pram_census$overall$max_risk
+    res_det_cat$overall$max_risk
   ),
   Pct_high = c(
     100 * res_real$overall$pct_high_risk,
     100 * res_prob_real$overall$pct_high_risk,
-    100 * res_pred_real$overall$pct_high_risk,
-    100 * res_det_cat$overall$pct_high_risk,
-    100 * res_pram_census$overall$pct_high_risk
+    100 * res_det_cat$overall$pct_high_risk
   ),
   Pct_true_in_set = c(
     100 * res_real$overall$pct_true_in_set,
     100 * res_prob_real$overall$pct_true_in_set,
-    100 * res_pred_real$overall$pct_true_in_set,
-    100 * res_det_cat$overall$pct_true_in_set,
-    100 * res_pram_census$overall$pct_true_in_set
+    100 * res_det_cat$overall$pct_true_in_set
   )
 )
 
@@ -1486,23 +978,15 @@ knitr::kable(compare_df, digits = 3,
 ```
 
 **Important caveat**: This comparison is *illustrative*, not a
-controlled experiment. The configurations differ in three ways
-simultaneously: (1) the linkage method, (2) the set of quasi-identifiers
-(4 QIs including numeric `age` vs. 3 categorical QIs), and (3) the
-perturbation mechanism (rank swapping vs. PRAM). In particular, the
-PRAM row uses a *different anonymized dataset* (PRAM-perturbed) than
-the other rows (rank-swapped), so differences in risk reflect the
-combined effect of method, QI set, and perturbation strength. A fair
-comparison of methods would require applying all methods to the same
-anonymized data with the same QIs.
+controlled experiment. The configurations differ in two ways
+simultaneously: (1) the linkage method, and (2) the set of
+quasi-identifiers (4 QIs including numeric `age` vs. 3 categorical QIs).
+A fair comparison of methods would require applying all methods to the
+same anonymized data with the same QIs.
 
-That said, two patterns are noteworthy: (1) the deterministic and
-probabilistic methods with 4 QIs (including numeric `age`) tend to give
-finer discrimination because continuous variables provide more
-information for distinguishing records; (2) the PRAM method, which
-uses the actual transition matrices, gives a risk profile that directly
-reflects the perturbation mechanism rather than relying on distance
-heuristics.
+The deterministic and probabilistic methods with 4 QIs (including numeric
+`age`) tend to give finer discrimination because continuous variables
+provide more information for distinguishing records.
 
 ## Weighting Scheme Comparison
 
@@ -1572,8 +1056,6 @@ lower risk to well-protected ones.
 |:-------|:------------|:----------|:-----------|
 | Deterministic | Minimal (distance metric) | Default / first pass | Ignores agreement rarity |
 | Probabilistic | m/u available or estimable | Audit documentation | Sensitive to m/u misspecification |
-| PRAM | Transition matrix known | PRAM / swapping mechanism | Only categorical; requires exact matrices |
-| Predictive | Logistic model adequate | Potentially useful for high-dimensional / mixed QIs | Model uncertainty; not yet established in SDC literature |
 | Embedding | torch available; sufficient data for training | Complex interactions between mixed-type QIs | Requires torch; non-deterministic; needs sufficient data |
 
 
@@ -1601,8 +1083,6 @@ object of class `"recordLinkageRisk"` with the following components:
   strategy, and other parameters used.
 - For the probabilistic method: `$fs_params` with estimated or
   supplied m/u probabilities.
-- For the predictive method: `$propensity_info` with fitted scores
-  and, if `pred_se = TRUE`, Fisher standard errors.
 - `$var_importance`: per-variable importance scores (available for all
   methods; the computation varies: distance contributions for
   deterministic, log-LR weights for probabilistic, permutation-based
@@ -1618,9 +1098,8 @@ Standard S3 methods are provided:
   an object of class `"summary.recordLinkageRisk"`.
 - `plot(x, which = ...)`: up to 8 plot types: (1) risk histogram,
   (2) distance vs. risk scatter, (3) per-variable importance / log-LR
-  barplot, (4) propensity score densities (predictive only),
-  (5) risk band barplot, (6) true-match rank distribution,
-  (7) risk by subgroup, (8) Lorenz curve of risk concentration.
+  barplot, (4) risk band barplot, (5) true-match rank distribution,
+  (6) risk by subgroup, (7) Lorenz curve of risk concentration.
 
 ## Computational Complexity
 
@@ -1631,8 +1110,6 @@ and $p = |\mathcal{K}|$ the number of quasi-identifiers.
 |:-------|:-----------|:------|
 | Deterministic | $O(nmp)$ | Full Gower distance matrix |
 | Probabilistic | $O(nmp)$ | Log-LR computation per pair per variable |
-| PRAM | $O(nmp)$ | Transition probability lookup per pair per variable |
-| Predictive | $O((n+m)p + nm)$ | $O((n+m)p)$ for model fitting + $O(nm)$ for score comparison |
 | Embedding | $O(E \cdot n \cdot d + nm \cdot d)$ | $E$ epochs of autoencoder training ($d$ = latent dim) + $O(nm \cdot d)$ for latent-space distances |
 
 Without blocking, all methods require $O(nm)$ pairwise comparisons.
@@ -1643,8 +1120,8 @@ number of pairs. As a rough guideline:
 | Dataset size | Recommendation |
 |:-------------|:---------------|
 | $n < 5{,}000$ | Any method, no blocking needed |
-| $5{,}000 < n < 50{,}000$ | Use blocking; the predictive method may be faster (single model fit vs. full distance matrix) |
-| $n > 50{,}000$ | Blocking required; consider the predictive method for its lower constant factor |
+| $5{,}000 < n < 50{,}000$ | Use blocking |
+| $n > 50{,}000$ | Blocking required |
 
 As a rough benchmark, the deterministic method on 500 records with
 4 QIs takes well under one second; at $n = 5{,}000$ without blocking,
@@ -1660,7 +1137,7 @@ method). Optional method-specific dependencies include: **torch**
 algorithm), **robustbase** (Mahalanobis method, robust covariance),
 and **ranger** (RF proximity method).
 The examples in this paper additionally use **sdcMicro**
-[@templ2015sdcmicro] for perturbation (rank swapping and PRAM).
+[@templ2015sdcmicro] for perturbation (rank swapping).
 All optional packages are listed in `Suggests` in the package `DESCRIPTION`.
 
 
@@ -1734,13 +1211,11 @@ knitr::kable(dir_comp, digits = 4,
              caption = "Forward vs. reverse direction (deterministic)")
 ```
 
-For the deterministic and predictive methods, distances are symmetric,
-so only the evaluation perspective changes when switching direction.
-For the probabilistic method, the log-likelihood ratios are also
-symmetric, though auto-estimated m/u parameters are always fitted in the
-forward direction. For PRAM, direction changes which side of the
-transition matrix is used, so forward and reverse risks can differ
-substantially (see the forward vs. reverse example in the PRAM section).
+For the deterministic method, distances are symmetric, so only the
+evaluation perspective changes when switching direction. For the
+probabilistic method, the log-likelihood ratios are also symmetric,
+though auto-estimated m/u parameters are always fitted in the forward
+direction.
 
 ## Ground Truth Options
 
@@ -1792,9 +1267,7 @@ need to specify `key` again.
 | What you know | Recommended method |
 |:--------------|:-------------------|
 | Nothing about the perturbation mechanism | `"deterministic"` |
-| Transition matrices available (PRAM, swapping) | `"pram"` |
 | m/u probabilities available or formal audit needed | `"probabilistic"` |
-| Many QIs, nonlinear interactions suspected | `"predictive"` |
 | Complex interactions, high-cardinality categoricals, torch available | `"embedding"` |
 | Quick initial assessment | `"deterministic"` with `strategy = "nearest"` |
 | Conservative upper bound | `"deterministic"` with `risk_weighting = "uniform"` |
@@ -1804,24 +1277,14 @@ assumptions beyond a sensible distance metric and gives a reasonable
 baseline. Use the other methods when additional information about the
 perturbation mechanism is available.
 
-Two scenarios deserve special attention. First, when nonlinear
-interactions among quasi-identifiers are suspected (e.g., age $\times$
-education jointly identifying a record), the deterministic method may
-underestimate risk because it computes variable-wise dissimilarities
-and sums them -- it cannot capture that a *combination* of values is
-unique even when individual values are common. The predictive method's
-logistic model can include interaction terms and may detect such
-patterns. Second, when the perturbation mechanism is known exactly
-(transition matrices from PRAM, or m/u probabilities from a formal
-audit), the mechanism-specific methods (PRAM or probabilistic) give
-more accurate risk estimates than the distance-based default.
+When the perturbation mechanism is known exactly (m/u probabilities from
+a formal audit), the probabilistic method gives more accurate risk
+estimates than the distance-based default.
 
 When multiple perturbation methods have been applied to different
 variables (e.g., local suppression for some, microaggregation for
 income, rank swapping for age), use the deterministic method as a
 default -- it makes no assumptions about the perturbation mechanism.
-If PRAM transition matrices are available for a categorical subset,
-complement with a separate PRAM assessment on those variables.
 
 ## Interpreting Risk Bands
 
@@ -2065,29 +1528,11 @@ the actual re-identification probability is approximately $f \cdot r_i$
    Monitor `pct_true_in_set` -- if it drops below 80%, blocking may
    be too aggressive.
 
-5. **Ignoring direction asymmetry in PRAM**: The transition matrix
-   $T_v[a, b]$ is generally not symmetric, so the probability of
-   observing output $b$ given input $a$ differs from the probability
-   of input $a$ given observed output $b$. Forward and reverse risks
-   can differ substantially. Always run both directions for a complete
-   picture.
+5. **Direction asymmetry**: Forward and reverse directions answer
+   different attacker questions -- always run both for a complete
+   picture when the direction of the attack is uncertain.
 
-6. **PRAM with numeric variables**: The PRAM method requires transition
-   matrices and is only applicable to categorical variables. For
-   mixed-type data, use the deterministic or predictive method for
-   numeric QIs, and optionally complement with PRAM for the categorical
-   subset.
-
-7. **Degenerate propensity scores**: When the predictive method
-   produces propensity scores that all cluster near 0.5, the logistic
-   model cannot separate original from anonymized records. This can
-   occur with very few records, low-dimensional QIs, or when the
-   perturbation preserves the covariate structure almost exactly.
-   Inspect `res$propensity_info$propensity_original` -- if the
-   standard deviation is less than 0.05, the risk estimates may be
-   unreliable. Consider using the deterministic method instead.
-
-8. **Overconfidence in `privacy_pass`**: A mean risk of 0.098 passes
+6. **Overconfidence in `privacy_pass`**: A mean risk of 0.098 passes
    the default 0.1 threshold, but this does not guarantee adequate
    protection -- individual records may have $r_i = 1$ (unique match).
    Always examine the full risk distribution, including `max_risk`,
@@ -2109,7 +1554,7 @@ These metrics address different disclosure scenarios and are
 complementary rather than competing. Record linkage risk
 (`recordLinkage()`) measures *identity disclosure*: can an attacker
 match a released record to the original individual? This is the primary
-concern for perturbative methods (PRAM, swapping, noise) where
+concern for perturbative methods (swapping, noise addition) where
 records correspond to real individuals. TCAP and DCAP measure
 *attribute disclosure*: can an attacker infer a sensitive attribute
 from quasi-identifiers? These are most relevant for synthetic data,
@@ -2183,7 +1628,7 @@ rarely has the full membership knowledge and computational resources
 required for GDBRL. Nevertheless, reporting both independent and
 bijective risk provides a useful bracket on the true risk level.
 
-Bijective (and OT) matching works with all eight methods and with blocking. When
+Bijective (and OT) matching works with all six methods and with blocking. When
 blocking is enabled, the Hungarian algorithm runs independently within
 each block:
 
@@ -2200,22 +1645,20 @@ cat("Bijective + blocking: mean risk =",
 # Discussion and Conclusion
 
 The `recordLinkage()` function provides a unified framework for
-assessing re-identification risk in perturbed microdata. The five
-methods covered in this paper span a range of scenarios: deterministic linkage for general-purpose
-assessment, probabilistic linkage for formal audits, PRAM linkage when
-the perturbation mechanism is known, predictive linkage for
-high-dimensional or mixed-type quasi-identifiers, and embedding-based
-linkage for capturing complex non-linear interactions via learned
-latent representations.
+assessing re-identification risk in perturbed microdata. The three
+methods covered in this paper span a range of scenarios: deterministic
+linkage for general-purpose assessment, probabilistic linkage for formal
+audits, and embedding-based linkage for capturing complex non-linear
+interactions via learned latent representations.
 
 ## Key Takeaways
 
 The deterministic method provides a robust starting point for any
 risk assessment -- it requires no knowledge of the perturbation
 mechanism and gives a reasonable baseline. When additional information
-is available (transition matrices for PRAM, m/u probabilities for
-formal audits, or complex interaction patterns for the predictive
-method), the specialized methods can refine the assessment. The choice
+is available (m/u probabilities for formal audits, or complex
+interaction patterns with high-cardinality categoricals), the
+specialized methods can refine the assessment. The choice
 of risk weighting scheme matters: uniform weighting is conservative
 (equal weight to all candidates), while softmax and kernel weighting
 concentrate risk on the closest candidate, producing more nuanced risk
@@ -2245,40 +1688,32 @@ Several limitations should be noted:
 3. **Conditional independence**: The probabilistic method assumes
    conditional independence of agreement across variables, which is
    approximate when QIs are correlated.
-4. **Predictive method**: The propensity-score approach to record
-   linkage risk assessment is, to our knowledge, not yet established
-   in the SDC literature. While it draws on well-understood methodology
-   [@rosenbaum1983propensity], its properties for risk quantification
-   (calibration, power) require further empirical investigation.
-5. **Quasi-identifier selection**: Risk estimates are conditional on
+4. **Quasi-identifier selection**: Risk estimates are conditional on
    the assumed set of quasi-identifiers. Adding or removing a single
    QI can dramatically change risk levels. Practitioners must make
    judgment calls about which variables an attacker might know, and
    should consider running the assessment with multiple QI sets to
    gauge sensitivity.
-6. **Embedding method**: The autoencoder-based embedding method requires
+5. **Embedding method**: The autoencoder-based embedding method requires
    **torch** and sufficient training data (blocks with fewer than
    $\max(30, 5d)$ rows fall back to deterministic matching). Training
    is non-deterministic across platforms even with fixed seeds, and the
    method adds computational overhead compared to distance-based methods.
-7. **Sample vs. census**: The current implementation computes
+6. **Sample vs. census**: The current implementation computes
    sample-level risk. For sample surveys where the attacker does not
    know whether the target is in the dataset, population-level
    adjustments [@franconi2004individual] are needed.
-8. **Realized vs. expected risk**: For perturbative mechanisms the reported
-   risk reflects the single *realized* output. For PRAM, `expected_risk = TRUE`
-   adds a perturbation-aware *expectation* over the transition distribution
-   (forward direction, assuming per-variable independence): holding all other
-   records fixed, each record's risk is integrated over its own
-   $P(x_i \to \cdot)$. A general mechanism-level expectation for arbitrary
-   swapping schemes remains future work.
-9. **Naive vs. informed attacker**: The function models an attacker who matches
+7. **Realized vs. expected risk**: For perturbative mechanisms the reported
+   risk reflects the single *realized* output. A mechanism-level expectation
+   integrated over the perturbation distribution for arbitrary swapping
+   schemes remains future work.
+8. **Naive vs. informed attacker**: The function models an attacker who matches
    on all quasi-identifiers. An *informed* attacker who knows which variables
    were perturbed and matches only on the unchanged ones is not yet supported.
-10. **Missing-value handling**: `na_anon` controls NA treatment uniformly across
-    all methods (`"ignore"`, `"match"`, `"mismatch"`). For the numeric part of
-    the Mahalanobis distance, `"ignore"` uses a zero-contribution approximation
-    rather than the exact conditional sub-Mahalanobis distance.
+9. **Missing-value handling**: `na_anon` controls NA treatment uniformly across
+   all methods (`"ignore"`, `"match"`, `"mismatch"`). For the numeric part of
+   the Mahalanobis distance, `"ignore"` uses a zero-contribution approximation
+   rather than the exact conditional sub-Mahalanobis distance.
 
 ## Future Directions
 

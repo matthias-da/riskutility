@@ -47,7 +47,7 @@ All major functions return S3 objects with `print()`, `summary()`, and `plot()` 
 | `dcr` | `dcr()` | Distance to Closest Record |
 | `nndr` | `nndr()` | Nearest Neighbor Distance Ratio |
 | `ims` | `ims()` | Identical Match Share |
-| `recordLinkageRisk` | `recordLinkage()` | Record linkage risk (deterministic/probabilistic/PRAM/predictive/RF/RBRL/Mahalanobis/embedding; independent/bijective/OT matching) |
+| `recordLinkageRisk` | `recordLinkage()` | Record linkage risk (deterministic/probabilistic/RF/RBRL/Mahalanobis/embedding; independent/bijective/OT matching) |
 | `tcloseness` | `tcloseness()` | t-Closeness (EMD-based) |
 | `ldiversity` | `ldiversity()` | l-Diversity (distinct/entropy/recursive) |
 | `kanonymity` | `kanonymity()` | k-Anonymity assessment |
@@ -192,7 +192,7 @@ rumap(original, synthetic,
 - `R/rapid.R`: RAPID metric with ML-based attribute inference risk assessment (~1940 lines; includes all S3 methods, internal plot helpers, and model fitting)
 - `R/dcap.R`, `R/tcap.R`: CAP-based attribution metrics
 - `R/dcr.R`, `R/nndr.R`, `R/ims.R`: Distance-based metrics
-- `R/recordLinkage.R`: Record linkage risk (~3385 lines; 8 methods, independent/bijective/OT matching, S3 dispatch, blocking, direction; shared risk back-end `.true_match_risk()`, PRAM `.pram_expected_risk()`)
+- `R/recordLinkage.R`: Record linkage risk (~3385 lines; 6 methods, independent/bijective/OT matching, S3 dispatch, blocking, direction; shared risk back-end `.true_match_risk()`)
 - `R/embedding_internal.R`: Torch autoencoder engine for embedding-based record linkage (~580 lines; `.ae_model`, `.ae_train`, `.ae_encode`, `.ae_distance`, `.ae_var_importance`)
 - `R/sinkhorn_internal.R`: Sinkhorn optimal transport engine (`.sinkhorn()` and `.solve_ot()`)
 - `R/mahalanobis_internal.R`: Robust Mahalanobis distance helpers (`.mahal_prepare`, `.mahal_dist`)
@@ -200,7 +200,7 @@ rumap(original, synthetic,
 - `R/regression_fidelity.R`: Regression coefficient comparison (~472 lines; forest plot + CI overlap bar chart)
 - `R/contingency_fidelity.R`: Bivariate contingency table fidelity (~423 lines; TV distance heatmap)
 - `vignettes/riskutility.Rmd`: Comprehensive JSS-style vignette (main package vignette)
-- `vignettes/recordLinkage.Rmd`: Deep-dive vignette on record linkage risk (~2240 lines; JSS paper candidate)
+- `vignettes/recordLinkage.Rmd`: Deep-dive vignette on record linkage risk (~1840 lines; JSS paper candidate)
 - `vignettes/references.bib`: Shared bibliography for all vignettes
 
 ### Record Linkage: Independent vs Bijective Matching
@@ -212,20 +212,18 @@ rumap(original, synthetic,
 - **OT** (optimal transport): Entropy-regularized soft global assignment via Sinkhorn-Knopp algorithm. Produces continuous risk in [0,1] that interpolates between independent (smooth) and bijective (hard). Controlled by `ot_epsilon` (regularization) and `ot_max_iter`.
 
 Cost direction per method (bijective/OT cost transform):
-- Deterministic/Predictive/Embedding: distance (minimize)
+- Deterministic/Embedding: distance (minimize)
 - Probabilistic: likelihood ratio (maximize → `max - LR` transformation)
-- PRAM: transition probability (maximize → `max - prob` transformation)
 - RF: proximity (maximize)
 
 Key internals: score caching per record during main loop → `.solve_bijective()` or `.solve_ot()` builds cost matrix per block → `clue::solve_LSAP()` (bijective) or `.sinkhorn()` (OT) → override risk. Bijective adds `bijective_assigned` column; OT stores `transport_plans`. `clue` and `torch` are in Suggests.
 
 ### Record Linkage: Per-Record Risk Definition, NA Handling, Options
 
-All 8 methods share one risk definition via the internal `.true_match_risk()`: the (weighted) probability mass on the **true** match within the attacker's candidate set (0 if the true record is not in the set), using `risk_weighting` (`uniform`/`softmax`/`kernel`) and the `strategy` candidate-set filter. The rf and embedding methods route their proximity / latent-distance scores through this same helper, so their `risk` is a re-identification probability comparable with the other methods; their former nearest-neighbour similarity is kept in the `nn_similarity` column of `per_record` as a diagnostic.
+All 6 methods share one risk definition via the internal `.true_match_risk()`: the (weighted) probability mass on the **true** match within the attacker's candidate set (0 if the true record is not in the set), using `risk_weighting` (`uniform`/`softmax`/`kernel`) and the `strategy` candidate-set filter. The rf and embedding methods route their proximity / latent-distance scores through this same helper, so their `risk` is a re-identification probability comparable with the other methods; their former nearest-neighbour similarity is kept in the `nn_similarity` column of `per_record` as a diagnostic.
 
-- **`na_anon`** (`ignore`/`match`/`mismatch`) is honored by **all** methods (Gower, `.fs_log_lr`, `.pram_risk`, RBRL, `.mahal_dist`, embedding deterministic fallback), not just the Gower path. Default `ignore`; NA-free data is byte-identical. PRAM `ignore` multiplies the transition factor by 1 instead of collapsing a missing-QI record to 0 risk. Mahalanobis numeric `ignore` is a zero-contribution approximation (documented).
+- **`na_anon`** (`ignore`/`match`/`mismatch`) is honored by **all** methods (Gower, `.fs_log_lr`, RBRL, `.mahal_dist`, embedding deterministic fallback), not just the Gower path. Default `ignore`; NA-free data is byte-identical. Mahalanobis numeric `ignore` is a zero-contribution approximation (documented).
 - **`compute_baseline = TRUE`**: also links X against itself (forward, `truth="row"`) for a no-perturbation reference → `$baseline` (with `risk_reduction`); shown in print/summary and `plot(which=1)`.
-- **`expected_risk = TRUE`** (PRAM, forward): perturbation-aware expected risk over the transition distribution `E[r_i] = sum_o P(x_i->o)^2/(S+P(x_i->o))` via `.pram_expected_risk()` (exact ≤ `max_support`, else Monte-Carlo) → `$pram_info$expected_risk`.
 - User-supplied `m_probs`/`u_probs` are validated and clamped to (0,1).
 
 ### Embedding Method (Autoencoder)

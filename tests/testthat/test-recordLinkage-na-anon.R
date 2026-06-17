@@ -1,32 +1,6 @@
-# na_anon (ignore / match / mismatch) is now honored by all methods, not only
-# the deterministic Gower path. Key regression: PRAM 'ignore' must NOT collapse
-# a record with a missing key to 0 risk (the former -Inf -> prob 0 bug).
+# na_anon (ignore / match / mismatch) honored across methods.
 
 library(testthat)
-
-test_that("PRAM: na_anon='ignore' keeps nonzero risk on a missing key", {
-  lv <- c("a", "b")
-  tm <- matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2, dimnames = list(lv, lv))
-  pm <- list(k1 = tm, k2 = tm)
-  set.seed(1)
-  n <- 6
-  x <- data.frame(
-    k1 = factor(sample(lv, n, TRUE), levels = lv),
-    k2 = factor(sample(lv, n, TRUE), levels = lv)
-  )
-  x_anon <- x
-  x_anon$k1[1] <- NA      # candidate 1 (the true match of record 1) misses k1
-
-  res_ig <- recordLinkage(x, x_anon, key = c("k1", "k2"), method = "pram",
-                          pram_matrix = pm, truth = "row", na_anon = "ignore")
-  res_mm <- recordLinkage(x, x_anon, key = c("k1", "k2"), method = "pram",
-                          pram_matrix = pm, truth = "row", na_anon = "mismatch")
-
-  # ignore: variable k1 drops out, risk comes from k2 -> nonzero
-  expect_gt(res_ig$per_record$risk[1], 0)
-  # mismatch: the true candidate is excluded -> risk 0
-  expect_equal(res_mm$per_record$risk[1], 0)
-})
 
 test_that("probabilistic: na_anon changes the evidence on a missing key", {
   set.seed(2)

@@ -55,15 +55,6 @@ test_that("recordLinkage(matching = 'ot') works with RF method", {
   expect_true(all(res$per_record$risk <= 1))
 })
 
-test_that("recordLinkage(matching = 'ot') works with predictive", {
-  set.seed(1)
-  X <- data.frame(a = rnorm(30), b = rnorm(30))
-  Y <- X + rnorm(60, 0, 0.2)
-  res <- recordLinkage(X, Y, key = c("a", "b"), method = "predictive",
-                       matching = "ot", truth = "row")
-  expect_s3_class(res, "recordLinkageRisk")
-})
-
 test_that("recordLinkage(matching = 'ot') works with mahalanobis", {
   set.seed(1)
   X <- data.frame(a = rnorm(20), b = rnorm(20))
@@ -211,27 +202,6 @@ test_that("recordLinkage(matching = 'ot') risk capped at 1", {
                         ot_epsilon = 0.001, truth = "row")
   expect_true(all(res$per_record$risk <= 1))
   expect_true(all(res$per_record$risk >= 0))
-})
-
-test_that("recordLinkage(matching = 'ot') with PRAM method", {
-  set.seed(1)
-  X <- data.frame(
-    sex = factor(c("M","F","M","F","M")),
-    edu = factor(c("low","mid","high","low","mid"))
-  )
-  Y <- X  # same data
-  tm_sex <- matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
-                    dimnames = list(c("F","M"), c("F","M")))
-  tm_edu <- matrix(c(0.8, 0.1, 0.1,
-                      0.1, 0.8, 0.1,
-                      0.1, 0.1, 0.8), 3, 3,
-                    dimnames = list(c("high","low","mid"),
-                                    c("high","low","mid")))
-  res <- recordLinkage(X, Y, key = c("sex", "edu"), method = "pram",
-                        pram_matrix = list(sex = tm_sex, edu = tm_edu),
-                        matching = "ot", truth = "row")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_true(all(is.finite(res$per_record$risk)))
 })
 
 test_that("recordLinkage(matching = 'ot') risk_weighting message", {

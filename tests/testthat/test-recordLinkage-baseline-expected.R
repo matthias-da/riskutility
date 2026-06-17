@@ -1,5 +1,4 @@
-# compute_baseline (no-perturbation reference) and PRAM expected_risk
-# (perturbation-aware expected risk over the transition distribution).
+# compute_baseline (no-perturbation reference).
 
 library(testthat)
 
@@ -37,35 +36,3 @@ test_that("compute_baseline short-circuits when X == x_anon", {
   expect_equal(res$baseline$risk_reduction, 0)
 })
 
-test_that("PRAM expected_risk is bounded and present", {
-  lv <- c("a", "b", "c")
-  # diagonal-dominant transition matrix
-  tm <- matrix(0.1, 3, 3, dimnames = list(lv, lv)); diag(tm) <- 0.8
-  pm <- list(k1 = tm, k2 = tm)
-  set.seed(3)
-  n <- 12
-  x <- data.frame(k1 = factor(sample(lv, n, TRUE), levels = lv),
-                  k2 = factor(sample(lv, n, TRUE), levels = lv))
-  x_anon <- x
-  res <- recordLinkage(x, x_anon, key = c("k1", "k2"), method = "pram",
-                       pram_matrix = pm, truth = "row", expected_risk = TRUE)
-  expect_false(is.null(res$pram_info$expected_risk))
-  expect_length(res$pram_info$expected_risk, n)
-  expect_true(all(res$pram_info$expected_risk >= 0 &
-                  res$pram_info$expected_risk <= 1))
-  expect_true(is.finite(res$pram_info$expected_mean_risk))
-})
-
-test_that("PRAM expected_risk ~ realized risk for a near-deterministic matrix", {
-  lv <- c("a", "b", "c")
-  tm <- matrix(0.005, 3, 3, dimnames = list(lv, lv)); diag(tm) <- 0.99
-  pm <- list(k1 = tm, k2 = tm)
-  set.seed(4)
-  n <- 10
-  x <- data.frame(k1 = factor(sample(lv, n, TRUE), levels = lv),
-                  k2 = factor(sample(lv, n, TRUE), levels = lv))
-  res <- recordLinkage(x, x, key = c("k1", "k2"), method = "pram",
-                       pram_matrix = pm, truth = "row", expected_risk = TRUE)
-  # Near-deterministic mechanism: expectation close to the realized risk.
-  expect_lt(mean(abs(res$pram_info$expected_risk - res$per_record$risk)), 0.15)
-})

@@ -341,50 +341,6 @@ test_that("probabilistic with softmax weighting works", {
 })
 
 
-# ── PRAM method tests ──────────────────────────────────────────────────
-
-test_that("PRAM method returns pram_info", {
-  set.seed(1)
-  x <- data.frame(a = factor(c("x", "y", "x")), b = factor(c("1", "2", "1")))
-  x_anon <- x  # no perturbation
-  pram_m <- list(
-    a = matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
-               dimnames = list(c("x", "y"), c("x", "y"))),
-    b = matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2,
-               dimnames = list(c("1", "2"), c("1", "2")))
-  )
-  res <- recordLinkage(x, x_anon, key = c("a", "b"),
-                       method = "pram", pram_matrix = pram_m)
-  expect_true(!is.null(res$pram_info))
-  expect_equal(res$pram_info$variables_used, c("a", "b"))
-})
-
-test_that("PRAM: diagonal-dominant matrix gives high risk for unperturbed data", {
-  set.seed(1)
-  x <- data.frame(a = factor(c("x", "y")), b = factor(c("1", "2")))
-  x_anon <- x  # identical
-  pram_m <- list(
-    a = matrix(c(0.99, 0.01, 0.01, 0.99), 2, 2,
-               dimnames = list(c("x", "y"), c("x", "y"))),
-    b = matrix(c(0.99, 0.01, 0.01, 0.99), 2, 2,
-               dimnames = list(c("1", "2"), c("1", "2")))
-  )
-  res <- recordLinkage(x, x_anon, key = c("a", "b"),
-                       method = "pram", pram_matrix = pram_m)
-  # With 99% diagonal, risk should be very high
-
-  expect_gt(res$overall$mean_risk, 0.5)
-})
-
-test_that("PRAM errors without pram_matrix", {
-  d <- .make_test_data(10)
-  expect_error(
-    recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                  method = "pram"),
-    "pram_matrix"
-  )
-})
-
 
 # ── synth_pair method tests ─────────────────────────────────────────────
 
@@ -585,136 +541,6 @@ test_that("quantile threshold works", {
 })
 
 
-# ── Predictive method tests ────────────────────────────────────────────
-
-test_that("predictive method returns propensity_info", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive")
-  expect_true(!is.null(res$propensity_info))
-  expect_equal(res$propensity_info$pred_model, "logit")
-  expect_equal(length(res$propensity_info$propensity_original), 50)
-  expect_equal(length(res$propensity_info$propensity_synthetic), 50)
-})
-
-test_that("predictive: propensity scores are in [0,1]", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive")
-  expect_true(all(res$propensity_info$propensity_original >= 0))
-  expect_true(all(res$propensity_info$propensity_original <= 1))
-  expect_true(all(res$propensity_info$propensity_synthetic >= 0))
-  expect_true(all(res$propensity_info$propensity_synthetic <= 1))
-})
-
-test_that("predictive: identical data gives propensity near 0.5", {
-  set.seed(42)
-  n <- 50
-  x <- data.frame(a = 1:n, b = factor(rep(c("x", "y"), n / 2)))
-  res <- recordLinkage(x, x, key = c("a", "b"), method = "predictive")
-  p <- res$propensity_info$mean_propensity_original
-  expect_true(abs(p - 0.5) < 0.2)
-})
-
-test_that("predictive: independent data gives valid risk", {
-  set.seed(123)
-  n <- 100
-  x <- data.frame(a = sample(1:20, n, TRUE),
-                  b = factor(sample(c("x", "y", "z"), n, TRUE)))
-  x_anon <- data.frame(a = sample(1:20, n, TRUE),
-                        b = factor(sample(c("x", "y", "z"), n, TRUE)))
-  res <- recordLinkage(x, x_anon, key = c("a", "b"),
-                       method = "predictive")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_true(all(res$per_record$risk >= 0))
-  expect_true(all(res$per_record$risk <= 1))
-})
-
-test_that("predictive: Fisher SE bandwidth used by default (logit)", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive", risk_weighting = "kernel")
-  expect_equal(res$settings$pred_se, TRUE)
-  expect_equal(res$settings$pred_model, "logit")
-})
-
-test_that("predictive: user bandwidth overrides Fisher SE", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive", risk_weighting = "kernel",
-                       bandwidth = 0.1)
-  expect_equal(res$settings$bandwidth, 0.1)
-})
-
-test_that("predictive: works with softmax weighting", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive", risk_weighting = "softmax")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_true(all(res$per_record$risk >= 0))
-  expect_true(all(res$per_record$risk <= 1))
-})
-
-test_that("predictive: works with uniform weighting", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive", risk_weighting = "uniform")
-  expect_s3_class(res, "recordLinkageRisk")
-})
-
-test_that("predictive: d_true and d_min populated", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive")
-  expect_true(any(!is.na(res$per_record$d_true)))
-  expect_true(all(!is.na(res$per_record$d_min)))
-})
-
-test_that("predictive: strategy parameter works", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive",
-                       strategy = "threshold", threshold = 0.1)
-  expect_s3_class(res, "recordLinkageRisk")
-})
-
-test_that("predictive: blocking works", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive", block = "region")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_equal(nrow(res$per_record), 50)
-})
-
-test_that("predictive: print shows propensity info", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive")
-  expect_output(print(res), "predictive")
-  expect_output(print(res), "propensity")
-})
-
-test_that("predictive: summary includes propensity info", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive")
-  s <- summary(res)
-  expect_output(print(s), "Propensity")
-})
-
-test_that("predictive: plot which=4 works", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive")
-  expect_no_error(plot(res, which = 4))
-})
-
-test_that("predictive: plot which=4 placeholder for non-predictive", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
-  expect_no_error(plot(res, which = 4))
-})
-
 
 # ── Reverse direction tests ──────────────────────────────────────────────
 
@@ -773,45 +599,6 @@ test_that("reverse deterministic differs from forward", {
   expect_equal(rev$direction, "reverse")
 })
 
-test_that("reverse PRAM works", {
-  set.seed(1)
-  x <- data.frame(a = factor(c("x", "y", "x")), b = factor(c("1", "2", "1")))
-  x_anon <- x
-  pram_m <- list(
-    a = matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
-               dimnames = list(c("x", "y"), c("x", "y"))),
-    b = matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2,
-               dimnames = list(c("1", "2"), c("1", "2")))
-  )
-  res <- recordLinkage(x, x_anon, key = c("a", "b"),
-                       method = "pram", pram_matrix = pram_m,
-                       direction = "reverse")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_equal(res$direction, "reverse")
-  expect_true(all(res$per_record$risk >= 0))
-  expect_true(all(res$per_record$risk <= 1))
-})
-
-test_that("reverse PRAM asymmetric differs from forward", {
-  set.seed(1)
-  x <- data.frame(a = factor(c("x", "y")), b = factor(c("1", "2")))
-  x_anon <- data.frame(a = factor(c("y", "x")), b = factor(c("2", "1")))
-  # Asymmetric transition matrix
-  pram_m <- list(
-    a = matrix(c(0.9, 0.3, 0.1, 0.7), 2, 2,
-               dimnames = list(c("x", "y"), c("x", "y"))),
-    b = matrix(c(0.8, 0.4, 0.2, 0.6), 2, 2,
-               dimnames = list(c("1", "2"), c("1", "2")))
-  )
-  fwd <- recordLinkage(x, x_anon, key = c("a", "b"),
-                       method = "pram", pram_matrix = pram_m)
-  rev <- recordLinkage(x, x_anon, key = c("a", "b"),
-                       method = "pram", pram_matrix = pram_m,
-                       direction = "reverse")
-  # Asymmetric matrix should give different risks
-  expect_false(identical(fwd$per_record$risk, rev$per_record$risk))
-})
-
 test_that("reverse probabilistic works", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
@@ -820,15 +607,6 @@ test_that("reverse probabilistic works", {
   expect_true(!is.null(res$fs_params))
   expect_true(all(res$per_record$risk >= 0))
   expect_true(all(res$per_record$risk <= 1))
-})
-
-test_that("reverse predictive works", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive", direction = "reverse")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_true(!is.null(res$propensity_info))
-  expect_equal(res$direction, "reverse")
 })
 
 test_that("reverse blocking works", {
@@ -970,33 +748,6 @@ test_that("d_rank computed for probabilistic method", {
   expect_true(any(!is.na(res$per_record$d_rank)))
 })
 
-test_that("d_rank computed for PRAM method", {
-  x <- data.frame(a = factor(c("x", "y")), b = factor(c("1", "2")))
-  pram_m <- list(
-    a = matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
-               dimnames = list(c("x", "y"), c("x", "y"))),
-    b = matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2,
-               dimnames = list(c("1", "2"), c("1", "2")))
-  )
-  res <- recordLinkage(x, x, key = c("a", "b"),
-                       method = "pram", pram_matrix = pram_m)
-  expect_true("d_rank" %in% names(res$per_record))
-  expect_true(any(!is.na(res$per_record$d_rank)))
-})
-
-test_that("d_true is populated for PRAM method", {
-  x <- data.frame(a = factor(c("x", "y")), b = factor(c("1", "2")))
-  pram_m <- list(
-    a = matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
-               dimnames = list(c("x", "y"), c("x", "y"))),
-    b = matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2,
-               dimnames = list(c("1", "2"), c("1", "2")))
-  )
-  res <- recordLinkage(x, x, key = c("a", "b"),
-                       method = "pram", pram_matrix = pram_m)
-  expect_true(any(!is.na(res$per_record$d_true)))
-})
-
 
 # ── var_importance tests ─────────────────────────────────────────────────
 
@@ -1015,28 +766,6 @@ test_that("var_importance is named numeric for probabilistic method", {
                        method = "probabilistic")
   expect_type(res$var_importance, "double")
   expect_equal(names(res$var_importance), c("age", "sex", "region"))
-})
-
-test_that("var_importance for PRAM reflects perturbation strength", {
-  x <- data.frame(a = factor(c("x", "y")), b = factor(c("1", "2")))
-  pram_m <- list(
-    a = matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
-               dimnames = list(c("x", "y"), c("x", "y"))),
-    b = matrix(c(0.5, 0.5, 0.5, 0.5), 2, 2,
-               dimnames = list(c("1", "2"), c("1", "2")))
-  )
-  res <- recordLinkage(x, x, key = c("a", "b"),
-                       method = "pram", pram_matrix = pram_m)
-  # b has more perturbation (50% off-diagonal) than a (10%)
-  expect_gt(res$var_importance["b"], res$var_importance["a"])
-})
-
-test_that("var_importance for predictive method", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive")
-  expect_type(res$var_importance, "double")
-  expect_equal(length(res$var_importance), 3)
 })
 
 
@@ -1178,33 +907,6 @@ test_that("plot which=3 works for deterministic method", {
   expect_no_error(plot(res, which = 3))
 })
 
-test_that("plot which=3 works for PRAM method", {
-  x <- data.frame(a = factor(c("x", "y", "x")), b = factor(c("1", "2", "1")))
-  pram_m <- list(
-    a = matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
-               dimnames = list(c("x", "y"), c("x", "y"))),
-    b = matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2,
-               dimnames = list(c("1", "2"), c("1", "2")))
-  )
-  res <- recordLinkage(x, x, key = c("a", "b"),
-                       method = "pram", pram_matrix = pram_m)
-  expect_no_error(plot(res, which = 3))
-})
-
-test_that("plot which=2 works for PRAM method with d_true populated", {
-  x <- data.frame(a = factor(c("x", "y")), b = factor(c("1", "2")))
-  pram_m <- list(
-    a = matrix(c(0.9, 0.1, 0.1, 0.9), 2, 2,
-               dimnames = list(c("x", "y"), c("x", "y"))),
-    b = matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2,
-               dimnames = list(c("1", "2"), c("1", "2")))
-  )
-  res <- recordLinkage(x, x, key = c("a", "b"),
-                       method = "pram", pram_matrix = pram_m)
-  # d_true should now be populated for PRAM
-  expect_no_error(plot(res, which = 2))
-})
-
 
 # ── summary uses per_record$risk_band ────────────────────────────────────
 
@@ -1343,44 +1045,6 @@ test_that("bijective: works with probabilistic method", {
   d <- .make_test_data(30)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
                        method = "probabilistic", matching = "bijective")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_true(all(res$per_record$risk %in% c(0, 1)))
-})
-
-test_that("bijective: works with pram method", {
-  skip_if_not_installed("clue")
-  n <- 20
-  set.seed(42)
-  x <- data.frame(
-    sex    = factor(sample(c("m", "f"), n, TRUE)),
-    region = factor(sample(c("N", "S", "E"), n, TRUE)),
-    stringsAsFactors = FALSE
-  )
-  # Simple PRAM perturbation
-  pm_sex <- matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2,
-                   dimnames = list(c("f", "m"), c("f", "m")))
-  pm_reg <- matrix(c(0.7, 0.15, 0.15, 0.15, 0.7, 0.15, 0.15, 0.15, 0.7),
-                   3, 3,
-                   dimnames = list(c("E", "N", "S"), c("E", "N", "S")))
-  x_anon <- x
-  for (i in seq_len(n)) {
-    x_anon$sex[i] <- sample(levels(x$sex), 1, prob = pm_sex[x$sex[i], ])
-    x_anon$region[i] <- sample(levels(x$region), 1,
-                               prob = pm_reg[x$region[i], ])
-  }
-  res <- recordLinkage(x, x_anon, key = c("sex", "region"),
-                       method = "pram",
-                       pram_matrix = list(sex = pm_sex, region = pm_reg),
-                       matching = "bijective")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_true(all(res$per_record$risk %in% c(0, 1)))
-})
-
-test_that("bijective: works with predictive method", {
-  skip_if_not_installed("clue")
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "predictive", matching = "bijective")
   expect_s3_class(res, "recordLinkageRisk")
   expect_true(all(res$per_record$risk %in% c(0, 1)))
 })
@@ -1721,79 +1385,6 @@ test_that("deterministic: epanechnikov kernel zero beyond bandwidth", {
   expect_equal(res$per_record$risk[1], 0)
 })
 
-test_that("PRAM: hand-computed risk with 2-level transition matrix", {
-  # T: M->M=0.9, M->F=0.1, F->M=0.2, F->F=0.8. Rows sum to 1.
-  pm <- matrix(c(0.8, 0.2, 0.1, 0.9), 2, 2, byrow = TRUE,
-               dimnames = list(c("F","M"), c("F","M")))
-  x <- data.frame(sex = factor(c("M", "F")))
-  res <- recordLinkage(x, x, key = "sex", method = "pram",
-                        pram_matrix = list(sex = pm))
-  # rec1(M): P(M|M)=0.9, P(F|M)=0.1. sum=1. risk=0.9.
-  # rec2(F): P(M|F)=0.2, P(F|F)=0.8. sum=1. risk=0.8.
-  expect_equal(res$per_record$risk, c(0.9, 0.8), tolerance = 1e-10)
-})
-
-test_that("PRAM: 3-level hand-computed risk", {
-  pm3 <- matrix(c(0.7, 0.2, 0.1,
-                   0.1, 0.6, 0.3,
-                   0.1, 0.1, 0.8), 3, 3, byrow = TRUE,
-                dimnames = list(c("A","B","C"), c("A","B","C")))
-  x <- data.frame(grp = factor(c("A","B","C"), levels = c("A","B","C")))
-  res <- recordLinkage(x, x, key = "grp", method = "pram",
-                        pram_matrix = list(grp = pm3))
-  expect_equal(res$per_record$risk, c(0.7, 0.6, 0.8), tolerance = 1e-10)
-})
-
-test_that("PRAM: forward vs reverse asymmetry with hand-computed values", {
-  pm <- matrix(c(0.8, 0.2, 0.1, 0.9), 2, 2, byrow = TRUE,
-               dimnames = list(c("F","M"), c("F","M")))
-  x <- data.frame(sex = factor(c("M", "F", "M")))
-  xa <- data.frame(sex = factor(c("M", "M", "F")))
-  rf <- recordLinkage(x, xa, key = "sex", method = "pram",
-                       pram_matrix = list(sex = pm))
-  rr <- recordLinkage(x, xa, key = "sex", method = "pram",
-                       pram_matrix = list(sex = pm), direction = "reverse")
-  # Forward: [9/19, 2/12, 1/19]
-  expect_equal(rf$per_record$risk, c(9/19, 2/12, 1/19), tolerance = 1e-4)
-  # Reverse: [0.45, 0.1, 0.1]
-  expect_equal(rr$per_record$risk, c(0.45, 0.1, 0.1), tolerance = 1e-4)
-  # They must differ
-
-  expect_false(isTRUE(all.equal(rf$per_record$risk, rr$per_record$risk)))
-})
-
-test_that("PRAM: identity matrix gives expected indistinguishable-level risk", {
-  pm_id <- matrix(c(1, 0, 0, 1), 2, 2, dimnames = list(c("F","M"), c("F","M")))
-  x <- data.frame(sex = factor(c("M","F","M")))
-  res <- recordLinkage(x, x, key = "sex", method = "pram",
-                        pram_matrix = list(sex = pm_id))
-  # rec2(F) is unique → risk=1. rec1,3(M) are indistinguishable → risk=0.5.
-  expect_equal(res$per_record$risk[2], 1)
-  expect_equal(res$per_record$risk[c(1, 3)], c(0.5, 0.5))
-})
-
-test_that("PRAM: impossible transition gives risk = 0", {
-  pm_id <- matrix(c(1, 0, 0, 1), 2, 2, dimnames = list(c("F","M"), c("F","M")))
-  x <- data.frame(sex = factor(c("M", "F")))
-  xa <- data.frame(sex = factor(c("F", "M")))  # swapped
-  res <- recordLinkage(x, xa, key = "sex", method = "pram",
-                        pram_matrix = list(sex = pm_id))
-  expect_equal(res$per_record$risk, c(0, 0))
-})
-
-test_that("PRAM: 2-variable product of transition probabilities", {
-  pm_sex <- matrix(c(0.8, 0.2, 0.1, 0.9), 2, 2, byrow = TRUE,
-                   dimnames = list(c("F","M"), c("F","M")))
-  pm_job <- matrix(c(1, 0, 0, 1), 2, 2,
-                   dimnames = list(c("A","B"), c("A","B")))
-  x <- data.frame(sex = factor(c("M", "F")), job = factor(c("A", "B")))
-  # With identity T_job, cross-variable combos get zero prob.
-  # rec1(M,A): P(M,A|M,A)=0.9*1=0.9, P(F,B|M,A)=0.1*0=0. Risk=1.
-  res <- recordLinkage(x, x, key = c("sex", "job"), method = "pram",
-                        pram_matrix = list(sex = pm_sex, job = pm_job))
-  expect_equal(res$per_record$risk, c(1, 1))
-})
-
 test_that("probabilistic: hand-computed risk with user m/u (categorical)", {
   # LR_agree = log(0.9/0.3) = log(3). LR_disagree = log(0.1/0.7).
   x <- data.frame(sex = factor(c("M", "F", "M")))
@@ -1913,18 +1504,3 @@ test_that("truth='id' maps records by ID column", {
   expect_equal(res$per_record$d_true, c(0.1, 0.1), tolerance = 1e-10)
 })
 
-test_that("bijective PRAM: hand-computed cost matrix", {
-  skip_if_not_installed("clue")
-  pm <- matrix(c(0.8, 0.2, 0.1, 0.9), 2, 2, byrow = TRUE,
-               dimnames = list(c("F","M"), c("F","M")))
-  x <- data.frame(sex = factor(c("M", "F", "M")))
-  xa <- data.frame(sex = factor(c("M", "M", "F")))
-  res <- recordLinkage(x, xa, key = "sex", method = "pram",
-                        pram_matrix = list(sex = pm), matching = "bijective")
-  ba <- res$per_record$bijective_assigned
-  # r2(F) must go to a3(F): highest probability match
-  expect_equal(ba[2], 3L)
-  expect_true(setequal(ba[c(1, 3)], c(1L, 2L)))
-  # r2 true=a2, assigned=a3 → risk=0
-  expect_equal(res$per_record$risk[2], 0)
-})
