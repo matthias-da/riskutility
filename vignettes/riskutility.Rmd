@@ -247,8 +247,7 @@ not guarantee privacy (the "DCR Delusion"). See Section \@ref(sec-distance).
 deterministic (Gower distance), probabilistic (Fellegi-Sunter), PRAM-aware,
 predictive (propensity-score), or random forest linkage
 [@fellegi1969theory; @domingoferrer2003disclosure]. See
-Section \@ref(sec-recordlinkage) and the companion vignette
-`vignette("recordLinkage")`.
+Section \@ref(sec-recordlinkage).
 
 **Membership inference.** Shadow model attacks [@shokri2017membership],
 density-based detection [@hu2023domias], and GDPR failure criteria
@@ -766,14 +765,15 @@ autoencoder embedding [@guo2016entity]. Three matching modes are available:
 independent (many-to-one), bijective (one-to-one via Hungarian algorithm,
 @herranz2016gdbrl), and optimal transport (Sinkhorn).
 
-```{r recordlinkage-demo}
-# Namespace-qualified: sdcMicro (>= 5.8.2) also exports recordLinkage(), and
-# vignettes may be re-built in a shared session, so qualify to be unambiguous.
-rl_res <- riskutility::recordLinkage(pair, method = "deterministic")
-print(rl_res)
-```
+<!--
+recordLinkage() is demonstrated in depth in the dedicated recordLinkage vignette,
+which is kept in the package's GitHub repository but excluded from the CRAN build.
+Example usage (not evaluated here):
+    rl_res <- riskutility::recordLinkage(pair, method = "deterministic")
+    print(rl_res)
+-->
 
-For full details, see the companion vignette `vignette("recordLinkage")`.
+For full details on all methods and matching modes, see `?recordLinkage`.
 
 ```{r recordlinkage-table, echo=FALSE}
 rl <- data.frame(
