@@ -24,26 +24,6 @@ test_that("probabilistic: na_anon changes the evidence on a missing key", {
                                 r_mm$per_record$d_true[1])))
 })
 
-test_that("mahalanobis: na_anon honored on a missing nominal key", {
-  set.seed(3)
-  n <- 12
-  x <- data.frame(age = round(rnorm(n, 45, 10)),
-                  sex = factor(sample(c("f", "m"), n, TRUE)))
-  x_anon <- x
-  x_anon$sex[1] <- NA
-
-  r_match <- recordLinkage(x, x_anon, key = c("age", "sex"),
-                           method = "mahalanobis", truth = "row",
-                           na_anon = "match")
-  r_mis   <- recordLinkage(x, x_anon, key = c("age", "sex"),
-                           method = "mahalanobis", truth = "row",
-                           na_anon = "mismatch")
-  # d_true (distance of the true match) for record 1 differs: match treats the
-  # NA as agreement (smaller distance) than mismatch.
-  expect_false(isTRUE(all.equal(r_match$per_record$d_true[1],
-                                r_mis$per_record$d_true[1])))
-})
-
 test_that("na-free data is unaffected by the na_anon default change", {
   set.seed(4)
   n <- 20

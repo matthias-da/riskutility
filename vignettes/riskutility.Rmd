@@ -244,8 +244,7 @@ However, @yao2025dcr demonstrate that passing distance-based tests does
 not guarantee privacy (the "DCR Delusion"). See Section \@ref(sec-distance).
 
 **Record linkage.** Directly simulates a re-identification attack using
-deterministic (Gower distance), probabilistic (Fellegi-Sunter), random
-forest, rank-based (RBRL), Mahalanobis, or embedding-based linkage
+deterministic (Gower distance) or probabilistic (Fellegi-Sunter) linkage
 [@fellegi1969theory; @domingoferrer2003disclosure]. See
 Section \@ref(sec-recordlinkage).
 
@@ -757,13 +756,10 @@ capturing non-linear proximity that fixed distance metrics may miss. Use
 
 The `recordLinkage()` function directly simulates a re-identification attack by
 linking each original record to the most similar record(s) in the anonymized
-dataset. Six methods are implemented, spanning deterministic (Gower distance),
-probabilistic (Fellegi-Sunter, @fellegi1969theory), random forest proximity,
-rank-based (RBRL, @muralidhar2016rankbased), robust Mahalanobis
-[@templ2008robust], and autoencoder embedding [@guo2016entity]. Three matching
-modes are available:
-independent (many-to-one), bijective (one-to-one via Hungarian algorithm,
-@herranz2016gdbrl), and optimal transport (Sinkhorn).
+dataset. Two methods are implemented: deterministic (Gower distance) and
+probabilistic (Fellegi-Sunter, @fellegi1969theory). Three matching modes are
+available: independent (many-to-one), bijective (one-to-one via Hungarian
+algorithm, @herranz2016gdbrl), and optimal transport (Sinkhorn).
 
 <!--
 recordLinkage() is demonstrated in depth in the dedicated recordLinkage vignette,
@@ -777,12 +773,10 @@ For full details on all methods and matching modes, see `?recordLinkage`.
 
 ```{r recordlinkage-table, echo=FALSE}
 rl <- data.frame(
-  Method = c("Deterministic", "Probabilistic", "RF", "RBRL",
-             "Mahalanobis", "Embedding"),
-  Distance = c("Gower", "Fellegi-Sunter", "RF proximity", "Rank-based",
-               "Mahalanobis", "Autoencoder"),
-  `Mixed types` = c("Yes", "Yes", "Yes", "Yes", "Numeric", "Yes"),
-  Matching = c("All 3", "All 3", "All 3", "Independent", "All 3", "All 3"),
+  Method = c("Deterministic", "Probabilistic"),
+  Distance = c("Gower", "Fellegi-Sunter"),
+  `Mixed types` = c("Yes", "Yes"),
+  Matching = c("All 3", "All 3"),
   check.names = FALSE
 )
 knitr::kable(rl,

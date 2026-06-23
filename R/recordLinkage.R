@@ -2,9 +2,8 @@
 #'
 #' Measures targeted re-identification risk by linking each original record to
 #' the most similar record(s) in a perturbed dataset using quasi-identifiers.
-#' Supports deterministic (distance-based), probabilistic (Fellegi-Sunter),
-#' random forest proximity-based, rank-based (RBRL), Mahalanobis distance, and
-#' autoencoder embedding-based linkage methods.
+#' Supports deterministic (Gower distance-based) and probabilistic
+#' (Fellegi-Sunter) linkage methods.
 #'
 #' @section Attacker scenario:
 #' Targeted record linkage with membership knowledge and exact quasi-identifier knowledge:
@@ -71,66 +70,6 @@
 #' User-supplied \code{m_probs} and \code{u_probs} override the supervised
 #' estimation. The \code{fs_threshold} controls the minimum log-likelihood
 #' ratio for inclusion in the candidate set.
-#'
-#' @section RF method:
-#' When \code{method = "rf"}, a random forest (ranger) is trained on the
-#' stacked original + anonymized records to learn a supervised similarity.
-#' Terminal-node co-occurrence across trees yields a proximity matrix in \eqn{[0, 1]}.
-#' Each original record is linked to the anonymized record with highest
-#' proximity.  Per-block RF is used by default; set \code{rf_global = TRUE}
-#' to train a single global forest and restrict proximity lookups within blocks.
-#' Blocks with fewer than 2 records per class fall back to a global RF
-#' second pass.  Bijective matching is supported via the existing
-#' \code{matching = "bijective"} mechanism with \code{maximize = TRUE}.
-#'
-#' Note: \code{risk} for the RF method is the re-identification probability of
-#' the \emph{true} match within the attacker's candidate set (consistent with
-#' the distance/probability methods), obtained by treating the proximity as a
-#' similarity and routing it through the shared candidate-set / risk-weighting
-#' logic. The nearest-neighbour proximity (the former \code{risk}) is retained
-#' in the \code{nn_similarity} column of \code{per_record}. The \code{d_min}
-#' and \code{d_true} fields still store proximity values (higher = more
-#' similar), inverted from the distance convention used by other methods.
-#'
-#' @section RBRL method:
-#' When \code{method = "rbrl"}, rank-based record linkage is used following
-#' Muralidhar & Domingo-Ferrer (2016). Each numeric/ordinal variable is
-#' replaced by its normalized rank (within each dataset independently),
-#' yielding values in \eqn{[0, 1]}. Linkage distance is the weighted mean absolute
-#' rank difference across variables. Nominal variables use exact matching
-#' (0 if equal, 1 if not), consistent with Gower distance.
-#'
-#' RBRL is robust to monotone perturbations (additive noise, rounding,
-#' top/bottom coding) because rank order is preserved under such
-#' transformations. This makes it particularly useful for assessing risk
-#' when the anonymization method preserves variable ordering.
-#' All \code{strategy}, \code{risk_weighting}, \code{matching},
-#' and \code{block} parameters work with RBRL.
-#'
-#' @section Mahalanobis method:
-#' When \code{method = "mahalanobis"}, distances are computed using the
-#' Mahalanobis metric, which accounts for correlations between variables.
-#' Records that appear 'close' in Gower distance may be 'far' in
-#' Mahalanobis distance if their difference goes against the data's
-#' correlation structure, and vice versa.
-#'
-#' By default (\code{robust = TRUE}), the covariance matrix is estimated
-#' using the Minimum Covariance Determinant (MCD) via
-#' \code{robustbase::covMcd()}, with fallback to \code{MASS::cov.rob()}
-#' then classical \code{cov()} if MCD fails. The covariance is always
-#' estimated from the original data regardless of \code{direction},
-#' modelling an attacker who knows the population covariance structure
-#' (Templ & Meindl, 2008).
-#'
-#' For mixed data, numeric/ordinal variables use Mahalanobis distance
-#' (normalized by a chi-squared threshold) while nominal variables use
-#' Gower-style exact matching. The two components are combined as a
-#' weighted average, where the weight is the proportion of each variable
-#' type. For purely nominal data, use \code{method = "deterministic"}
-#' instead.
-#'
-#' Ordinal factors are converted to integer codes (1, 2, 3, ...),
-#' assuming approximately equal spacing between levels.
 #'
 #' @section OT matching:
 #' When \code{matching = "ot"}, an entropy-regularized optimal transport
@@ -223,12 +162,9 @@
 #' @param key_vars Alias for \code{key}, matching the name used by
 #'   \code{\link{synth_pair}} and \code{\link{rumap}}. If \code{key} is not
 #'   supplied but \code{key_vars} is, \code{key_vars} is used.
-#' @param method character. Linkage method: \code{"deterministic"} (default),
-#'   \code{"probabilistic"} (Fellegi-Sunter),
-#'   \code{"rf"} (random forest proximity-based; requires \pkg{ranger}),
-#'   \code{"rbrl"} (rank-based record linkage),
-#'   \code{"mahalanobis"} (Mahalanobis distance with robust covariance), or
-#'   \code{"embedding"} (autoencoder latent-space distance; requires \pkg{torch}).
+#' @param method character. Linkage method: \code{"deterministic"} (default,
+#'   weighted Gower distance) or \code{"probabilistic"} (Fellegi-Sunter
+#'   log-likelihood ratios).
 #' @param direction character. Direction of the linkage attack:
 #'   \code{"forward"} (default) loops over original records and searches in the
 #'   anonymized data, answering "how safe is each original individual?";
@@ -257,9 +193,8 @@
 #' @param weights named numeric vector or NULL. Optional nonnegative weights for keys.
 #'   If NULL, equal weights are used.
 #' @param na_anon character. How a missing quasi-identifier value is handled
-#'   during matching, applied consistently across all methods (deterministic,
-#'   probabilistic, rbrl, mahalanobis, and the embedding deterministic
-#'   fallback): \code{"ignore"} (default), \code{"match"}, or \code{"mismatch"}.
+#'   during matching: \code{"ignore"} (default), \code{"match"}, or
+#'   \code{"mismatch"}.
 #'   \itemize{
 #'     \item \code{"ignore"} drops the variable from that pairwise comparison
 #'       (no contribution to the distance or likelihood ratio).
@@ -268,10 +203,6 @@
 #'     \item \code{"mismatch"} treats the missing value as disagreement
 #'       (distance contribution 1).
 #'   }
-#'   For \code{method = "embedding"} the torch encoder handles NA internally
-#'   (entity-embedding UNK / numeric pass-through); \code{na_anon} applies only
-#'   to its deterministic fallback. The numeric part of \code{"mahalanobis"}
-#'   uses a zero-contribution approximation for \code{"ignore"} (see Details).
 #' @param strategy character. Adversary strategy variant:
 #'   \code{"nearest"}, \code{"threshold"}, \code{"topk"}, \code{"topk_threshold"},
 #'   or \code{"nearest_threshold"}.
@@ -300,19 +231,6 @@
 #'   and for the \code{privacy_pass} flag (default 0.1). Records with risk above
 #'   this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
 #'   The \code{privacy_pass} flag is TRUE when \code{mean_risk <= risk_threshold}.
-#' @param n_trees integer. Number of trees for \code{method = "rf"} (default 500).
-#'   Must be at least 10.
-#' @param rf_global logical. For \code{method = "rf"} with blocking: if
-#'   \code{TRUE}, train a single global forest on all data and restrict
-#'   proximity computation within blocks. If \code{FALSE} (default), train
-#'   a separate forest per block (with automatic global fallback for blocks
-#'   that are too small).
-#' @param robust logical. For \code{method = "mahalanobis"}: if \code{TRUE}
-#'   (default), use the Minimum Covariance Determinant (MCD) estimator
-#'   via \code{robustbase::covMcd()} for robust covariance estimation,
-#'   with automatic fallback to \code{MASS::cov.rob()} or classical
-#'   \code{cov()} if MCD fails. If \code{FALSE}, use classical covariance.
-#'   Ignored for other methods.
 #' @param ot_epsilon numeric or NULL. Regularization strength for OT matching.
 #'   Smaller values produce sharper (more bijective-like) assignments;
 #'   larger values produce smoother (more uniform) risk. If \code{NULL}
@@ -320,18 +238,6 @@
 #'   Ignored unless \code{matching = "ot"}.
 #' @param ot_max_iter integer. Maximum Sinkhorn iterations for OT matching
 #'   (default 100). Ignored unless \code{matching = "ot"}.
-#' @param emb_latent_dim integer or NULL. For \code{method = "embedding"}:
-#'   bottleneck dimension. If \code{NULL} (default), auto-computed as
-#'   \code{max(2, floor(input_dim / 3))} where \code{input_dim} includes
-#'   entity embedding dimensions for categoricals.
-#' @param emb_epochs integer. For \code{method = "embedding"}: maximum
-#'   training epochs (default 50). Early stopping with patience 5 may
-#'   terminate training earlier.
-#' @param emb_global logical. For \code{method = "embedding"} with blocking:
-#'   if \code{TRUE}, train a single autoencoder on all query data and
-#'   restrict distance computation within blocks. If \code{FALSE} (default),
-#'   train a separate autoencoder per block (with deterministic fallback for
-#'   blocks smaller than \code{max(30, 5 * latent_dim)}).
 #' @param compute_baseline logical. If \code{TRUE}, also compute the
 #'   re-identification risk with NO perturbation by linking \code{X} against
 #'   itself (forward, \code{truth = "row"}) under the same method and settings,
@@ -368,11 +274,7 @@
 #'       values from the main loop (useful for diagnostics).
 #'       When \code{return_matches = TRUE} with OT, the returned
 #'       \code{matches} also reflect independent scoring; use
-#'       \code{transport_plans} for the OT assignment.
-#'       When \code{method} is \code{"rf"} or \code{"embedding"}, an additional
-#'       column \code{nn_similarity} gives the similarity to the nearest
-#'       released record (the pre-recast \code{risk} definition), retained as a
-#'       diagnostic alongside the true-match \code{risk}.}
+#'       \code{transport_plans} for the OT assignment.}
 #'     \item{overall}{list with aggregate statistics including \code{risk_gini}
 #'       (Gini coefficient of risk concentration).}
 #'     \item{var_importance}{named numeric vector of per-variable importance.}
@@ -393,32 +295,6 @@
 #'   Use \code{\link{top_at_risk}}, \code{\link{risk_by_group}},
 #'   \code{\link{merge_per_record}}, and \code{\link{inspect_record}} for
 #'   post-hoc per-record analysis.
-#'
-#' @section Embedding method:
-#' The \code{method = "embedding"} approach trains an autoencoder with entity
-#' embeddings (Guo & Berkhahn, 2016) on the original (query) data, projects
-#' both query and search records into a latent space, and measures
-#' re-identification risk via Euclidean distance. This captures nonlinear
-#' dependencies between quasi-identifiers that Gower and Mahalanobis distances
-#' may miss.
-#'
-#' As with the RF method, \code{risk} is the re-identification probability of
-#' the \emph{true} match within the attacker's candidate set (the shared
-#' candidate-set / risk-weighting logic applied to the latent distance); the
-#' nearest-neighbour similarity (\code{1 -} the smallest latent distance, the
-#' former \code{risk}) is kept in the \code{nn_similarity} column of
-#' \code{per_record}.
-#'
-#' The autoencoder trains only on query data, modeling an attacker who knows
-#' the population structure but not the specific anonymization. Distances are
-#' normalized to \eqn{[0, 1]} using the 97.5th percentile of within-query pairwise
-#' distances. Variable importance is permutation-based: each variable is
-#' shuffled and the mean embedding shift is measured.
-#'
-#' Requires the \pkg{torch} package together with its C++ backend (libtorch),
-#' which is downloaded once via \code{torch::install_torch()}. Entity embeddings
-#' handle mixed data naturally; all-numeric and all-categorical datasets are
-#' supported.
 #'
 #' @examples
 #' set.seed(1)
@@ -501,9 +377,6 @@
 #' Cuturi, M. (2013). Sinkhorn Distances: Lightspeed Computation of Optimal
 #' Transport. Advances in Neural Information Processing Systems, 26.
 #'
-#' Guo, C., & Berkhahn, F. (2016). Entity Embeddings of Categorical Variables.
-#' arXiv preprint arXiv:1604.06737.
-#'
 #' @seealso \code{\link{individual_risk}}, \code{\link{dcr}},
 #'   \code{\link{nndr}}
 #' @family privacy-models
@@ -530,9 +403,7 @@ recordLinkage.synth_pair <- function(X, ...) {
 recordLinkage.default <- function(X,
                                   x_anon,
                                   key,
-                                  method = c("deterministic", "probabilistic",
-                                             "rf", "rbrl", "mahalanobis",
-                                             "embedding"),
+                                  method = c("deterministic", "probabilistic"),
                                   direction = c("forward", "reverse"),
                                   risk_weighting = c("uniform", "softmax",
                                                      "kernel"),
@@ -557,14 +428,8 @@ recordLinkage.default <- function(X,
                                   return_matches = FALSE,
                                   matching = c("independent", "bijective", "ot"),
                                   risk_threshold = 0.1,
-                                  n_trees = 500L,
-                                  rf_global = FALSE,
-                                  robust = TRUE,
                                   ot_epsilon = NULL,
                                   ot_max_iter = 100L,
-                                  emb_latent_dim = NULL,
-                                  emb_epochs = 50L,
-                                  emb_global = FALSE,
                                   compute_baseline = FALSE,
                                   Y = NULL,
                                   key_vars = NULL,
@@ -609,43 +474,6 @@ recordLinkage.default <- function(X,
         if (risk_weighting != "uniform")
             message("Note: matching = 'ot' computes risk from the transport plan; ",
                     "'risk_weighting' applies only to independent-scoring diagnostics.")
-    }
-
-    if (method == "rf") {
-        if (!requireNamespace("ranger", quietly = TRUE)) {
-            stop("Package 'ranger' required for recordLinkage(method = 'rf'). ",
-                 "Install with install.packages('ranger')", call. = FALSE)
-        }
-        if (!missing(weights)) {
-            message("method = 'rf': weights ignored. ",
-                    "RF uses data-driven variable importance instead.")
-        }
-        if (!missing(strategy) && strategy != "nearest") {
-            message("method = 'rf': 'strategy'/'threshold' apply on the ",
-                    "proximity-derived pseudo-distance (max proximity - ",
-                    "proximity), not on the raw proximity scale.")
-        }
-    }
-
-    if (method == "embedding") {
-        if (!requireNamespace("torch", quietly = TRUE)) {
-            stop("Package 'torch' required for recordLinkage(method = 'embedding'). ",
-                 "Install with install.packages('torch')", call. = FALSE)
-        }
-        if (!isTRUE(tryCatch(torch::torch_is_installed(),
-                             error = function(e) FALSE))) {
-            stop("recordLinkage(method = 'embedding') requires the torch backend ",
-                 "(libtorch), which is not installed. Install it once with ",
-                 "torch::install_torch().", call. = FALSE)
-        }
-        if (!missing(weights)) {
-            message("method = 'embedding': weights ignored. ",
-                    "Embedding uses learned variable representations instead.")
-        }
-        if (!missing(strategy) && strategy != "nearest") {
-            message("method = 'embedding': 'strategy'/'threshold' apply on the ",
-                    "normalized latent distance in [0,1].")
-        }
     }
 
     stopifnot(is.data.frame(X), is.data.frame(x_anon))
@@ -784,39 +612,6 @@ recordLinkage.default <- function(X,
         }, numeric(1))
     }
 
-    # RBRL: rank-transform numeric/ordinal variables ----
-    rbrl_query <- NULL
-    rbrl_search <- NULL
-    rbrl_var_dist_acc <- NULL
-    if (method == "rbrl") {
-        rbrl_query <- query_data[, key, drop = FALSE]
-        rbrl_search <- search_data[, key, drop = FALSE]
-        for (v in key) {
-            if (type[v] %in% c("numeric", "ordinal")) {
-                qv <- rbrl_query[[v]]
-                sv <- rbrl_search[[v]]
-                if (is.factor(qv)) qv <- as.integer(qv)
-                if (is.factor(sv)) sv <- as.integer(sv)
-                rq <- rank(qv, ties.method = "average", na.last = "keep")
-                rs <- rank(sv, ties.method = "average", na.last = "keep")
-                nq <- sum(!is.na(rq))
-                ns <- sum(!is.na(rs))
-                rbrl_query[[v]] <- if (nq > 0) rq / nq else rq
-                rbrl_search[[v]] <- if (ns > 0) rs / ns else rs
-            }
-            # Nominal: leave as-is (exact match in distance computation)
-        }
-        rbrl_var_dist_acc <- setNames(numeric(length(key)), key)
-    }
-
-    # Mahalanobis: prepare covariance from original data ----
-    # Always use X (original) regardless of direction, because the attacker
-    # model assumes knowledge of the population covariance (Templ & Meindl 2008).
-    mahal_prep <- NULL
-    if (method == "mahalanobis") {
-        mahal_prep <- .mahal_prepare(X, key, type, robust = robust)
-    }
-
     # blocking ----
     if (!is.null(block)) {
         if (!is.character(block) || length(block) < 1L)
@@ -838,8 +633,6 @@ recordLinkage.default <- function(X,
     d_true <- rep(NA_real_, n_query)
     d_min <- rep(NA_real_, n_query)
     d_rank <- rep(NA_integer_, n_query)
-    # Nearest-neighbour similarity (diagnostic; populated by rf/embedding only)
-    nn_similarity <- rep(NA_real_, n_query)
     matches <- if (isTRUE(return_matches)) vector("list", n_query) else NULL
     # Bijective matching: cache full score vectors per record
     score_cache <- if (matching %in% c("bijective", "ot")) vector("list", n_query) else NULL
@@ -851,7 +644,6 @@ recordLinkage.default <- function(X,
     }
 
     # main loop ----
-    if (!method %in% c("rf", "embedding")) {
     for (i in seq_len(n_query)) {
         cand <- split_search[[blk_query[i]]]
         if (is.null(cand) || length(cand) == 0L) {
@@ -923,146 +715,6 @@ recordLinkage.default <- function(X,
             next
         }
 
-        if (method == "rbrl") {
-            # RBRL: weighted mean absolute rank difference
-            di <- numeric(length(cand))
-            denom <- rep(wsum, length(cand))
-            for (v in key) {
-                wv <- weights[v]
-                qi_v <- rbrl_query[[v]][i]
-                cand_v <- rbrl_search[[v]][cand]
-                if (type[v] == "nominal") {
-                    dv <- as.numeric(qi_v != cand_v)
-                } else {
-                    dv <- abs(qi_v - cand_v)
-                }
-                na <- is.na(dv)
-                if (na_anon == "match") {
-                    dv[na] <- 0
-                } else if (na_anon == "mismatch") {
-                    dv[na] <- 1
-                } else {                  # ignore: drop the variable for that pair
-                    dv[na] <- 0
-                    denom[na] <- denom[na] - wv
-                }
-                di <- di + wv * dv
-            }
-            denom[denom <= 0] <- 1
-            di <- di / denom
-
-            d_min[i] <- min(di)
-            tpos <- true_idx[i]
-            j_in <- match(tpos, cand)
-            if (!is.na(j_in)) {
-                d_true[i] <- di[j_in]
-                d_rank[i] <- as.integer(rank(di, ties.method = "min")[j_in])
-            }
-
-            # Per-variable rank distance accumulation
-            for (v in key) {
-                if (type[v] == "nominal") {
-                    rbrl_var_dist_acc[v] <- rbrl_var_dist_acc[v] +
-                        min(as.numeric(rbrl_query[[v]][i] !=
-                                       rbrl_search[[v]][cand]))
-                } else {
-                    rbrl_var_dist_acc[v] <- rbrl_var_dist_acc[v] +
-                        min(abs(rbrl_query[[v]][i] - rbrl_search[[v]][cand]))
-                }
-            }
-
-            guess <- .choose_guess_set(
-                d = di, cand = cand, strategy = strategy,
-                k = k, threshold = threshold
-            )
-
-            cand_n[i] <- length(guess)
-            if (cand_n[i] == 0L) {
-                risk[i] <- 0
-                true_in_set[i] <- FALSE
-                if (isTRUE(return_matches)) matches[[i]] <- integer(0)
-                next
-            }
-
-            true_in_set[i] <- (true_idx[i] %in% guess)
-
-            if (!true_in_set[i]) {
-                risk[i] <- 0
-            } else if (risk_weighting == "softmax") {
-                guess_local_idx <- match(guess, cand)
-                w <- .softmax_risk(di[guess_local_idx], kappa)
-                true_local <- match(true_idx[i], guess)
-                risk[i] <- w[true_local]
-            } else if (risk_weighting == "kernel") {
-                guess_local_idx <- match(guess, cand)
-                w <- .kernel_risk(di[guess_local_idx], bandwidth, kernel)
-                true_local <- match(true_idx[i], guess)
-                risk[i] <- w[true_local]
-            } else {
-                risk[i] <- 1 / cand_n[i]
-            }
-
-            if (isTRUE(return_matches)) matches[[i]] <- guess
-            if (!is.null(score_cache))
-                score_cache[[i]] <- list(cand = cand, scores = di,
-                                          maximize = FALSE)
-            next
-        }
-
-        if (method == "mahalanobis") {
-            # Mahalanobis distance
-            di <- .mahal_dist(
-                x_row = query_data[i, key, drop = FALSE],
-                candidates = search_data[cand, key, drop = FALSE],
-                prep = mahal_prep, type = type, na_anon = na_anon
-            )
-
-            d_min[i] <- min(di)
-
-            tpos <- true_idx[i]
-            j_in <- match(tpos, cand)
-            if (!is.na(j_in)) {
-                d_true[i] <- di[j_in]
-                d_rank[i] <- as.integer(rank(di, ties.method = "min")[j_in])
-            }
-
-            guess <- .choose_guess_set(
-                d = di, cand = cand, strategy = strategy,
-                k = k, threshold = threshold
-            )
-
-            cand_n[i] <- length(guess)
-            if (cand_n[i] == 0L) {
-                risk[i] <- 0
-                true_in_set[i] <- FALSE
-                if (isTRUE(return_matches)) matches[[i]] <- integer(0)
-                next
-            }
-
-            true_in_set[i] <- (true_idx[i] %in% guess)
-
-            if (!true_in_set[i]) {
-                risk[i] <- 0
-            } else if (risk_weighting == "softmax") {
-                guess_local_idx <- match(guess, cand)
-                w <- .softmax_risk(di[guess_local_idx], kappa)
-                true_local <- match(true_idx[i], guess)
-                risk[i] <- w[true_local]
-            } else if (risk_weighting == "kernel") {
-                guess_local_idx <- match(guess, cand)
-                w <- .kernel_risk(di[guess_local_idx], bandwidth, kernel)
-                true_local <- match(true_idx[i], guess)
-                risk[i] <- w[true_local]
-            } else {
-                risk[i] <- 1 / cand_n[i]
-            }
-
-            if (isTRUE(return_matches)) matches[[i]] <- guess
-            if (!is.null(score_cache))
-                score_cache[[i]] <- list(cand = cand, scores = di,
-                                          maximize = FALSE)
-            next
-        }
-
         # --- Deterministic method ---
         di <- .dist_to_candidates(
             x_row = query_data[i, key, drop = FALSE],
@@ -1130,353 +782,6 @@ recordLinkage.default <- function(X,
             score_cache[[i]] <- list(cand = cand, scores = di,
                                       maximize = FALSE)
     }
-    } else if (method == "rf") {
-
-    # RF method: proximity-based record linkage ----
-    if (n_query + nrow(search_data) > 10000 && is.null(block))
-        message("RF proximity with >10,000 records and no blocking variable ",
-                "may be slow. Consider setting 'block'.")
-    rf_var_importance <- NULL
-
-    .rf_process_block <- function(q_idx, s_idx, cross_prox) {
-        for (r in seq_along(q_idx)) {
-            qi <- q_idx[r]
-            prox_vec <- cross_prox[r, ]
-            tpos <- true_idx[qi]
-            # Nearest-neighbour similarity (diagnostic; the former risk value)
-            nn_similarity[qi] <<- max(prox_vec)
-            # Re-identification risk: probability of singling out the TRUE match
-            tm <- .true_match_risk(
-                scores = prox_vec, cand = s_idx, true_pos = tpos,
-                maximize = TRUE, strategy = strategy,
-                risk_weighting = risk_weighting, k = k, threshold = threshold,
-                kappa = kappa, bandwidth = bandwidth, kernel = kernel)
-            risk[qi] <<- tm$risk
-            cand_n[qi] <<- tm$cand_n
-            true_in_set[qi] <<- tm$true_in_set
-
-            # Truth diagnostics (proximity of the true match within the block)
-            if (!is.na(tpos) && tpos > 0L) {
-                t_col <- match(tpos, s_idx)
-                if (!is.na(t_col)) {
-                    d_true[qi] <<- prox_vec[t_col]
-                    d_min[qi] <<- max(prox_vec)
-                    d_rank[qi] <<- sum(prox_vec >= prox_vec[t_col])
-                }
-            }
-
-            if (!is.null(score_cache)) {
-                score_cache[[qi]] <<- list(cand = s_idx, scores = prox_vec,
-                                           maximize = TRUE)
-            }
-
-            if (isTRUE(return_matches)) {
-                matches[[qi]] <<- tm$guess
-            }
-        }
-    }
-
-    if (is.null(block) || length(split_search) == 1) {
-        # No blocking: single RF
-        block_res <- .rf_linkage_block(query_data, search_data, key,
-                                       n_trees = n_trees, ...)
-        s_idx <- seq_len(nrow(search_data))
-        .rf_process_block(seq_len(n_query), s_idx, block_res$cross_prox)
-        rf_var_importance <- block_res$var_importance
-
-    } else {
-        # Blocked matching
-        all_blocks <- names(split_search)
-        rf_var_importance <- NULL
-        small_blocks <- 0L
-        total_blocks <- length(all_blocks)
-        fallback_blocks <- character(0)
-        importance_list <- list()
-        block_sizes <- integer(0)
-
-        if (rf_global) {
-            # Global RF: train once, restrict proximity within blocks
-            global_rf <- .rf_proximity(query_data[, key, drop = FALSE],
-                                       search_data[, key, drop = FALSE],
-                                       n_trees = n_trees, importance = TRUE,
-                                       ...)
-            rf_var_importance <- global_rf$importance
-            n_q_all <- nrow(query_data)
-
-            for (blk in all_blocks) {
-                s_idx <- split_search[[blk]]
-                q_idx <- which(blk_query == blk)
-                if (length(q_idx) == 0 || length(s_idx) == 0) next
-
-                tn_q <- q_idx
-                tn_s <- n_q_all + s_idx
-                cross_prox <- .proximity_from_nodes(
-                    global_rf$terminal_nodes, tn_s, tn_q
-                )
-                .rf_process_block(q_idx, s_idx, cross_prox)
-            }
-
-        } else {
-            # Per-block RF
-            for (blk in all_blocks) {
-                s_idx <- split_search[[blk]]
-                q_idx <- which(blk_query == blk)
-                if (length(q_idx) == 0 || length(s_idx) == 0) next
-
-                min_per_class <- min(length(q_idx), length(s_idx))
-
-                if (min_per_class < 2) {
-                    small_blocks <- small_blocks + 1L
-                    fallback_blocks <- c(fallback_blocks, blk)
-                    next
-                }
-
-                block_res <- .rf_linkage_block(
-                    query_data[q_idx, , drop = FALSE],
-                    search_data[s_idx, , drop = FALSE],
-                    key, n_trees = n_trees, ...
-                )
-                .rf_process_block(q_idx, s_idx, block_res$cross_prox)
-                importance_list[[blk]] <- block_res$var_importance
-                block_sizes <- c(block_sizes, length(q_idx) + length(s_idx))
-            }
-
-            # Second pass: global RF fallback for blocks with < 2 per class
-            if (length(fallback_blocks) > 0) {
-                global_rf_fb <- .rf_proximity(
-                    query_data[, key, drop = FALSE],
-                    search_data[, key, drop = FALSE],
-                    n_trees = n_trees, importance = TRUE, ...
-                )
-                n_q_all <- nrow(query_data)
-
-                for (blk in fallback_blocks) {
-                    s_idx <- split_search[[blk]]
-                    q_idx <- which(blk_query == blk)
-                    if (length(q_idx) == 0 || length(s_idx) == 0) next
-
-                    cross_prox <- .proximity_from_nodes(
-                        global_rf_fb$terminal_nodes,
-                        n_q_all + s_idx, q_idx
-                    )
-                    .rf_process_block(q_idx, s_idx, cross_prox)
-                }
-            }
-
-            # Aggregate variable importance (weighted by block size)
-            if (length(importance_list) > 0) {
-                imp_mat <- do.call(rbind, importance_list)
-                rf_var_importance <- colSums(imp_mat * block_sizes) /
-                    sum(block_sizes)
-            }
-
-            if (small_blocks > 0) {
-                message(small_blocks, " of ", total_blocks,
-                        " blocks have < 2 records per class. ",
-                        "Consider rf_global = TRUE or coarser blocking.")
-            }
-        }
-    }
-    }
-
-    if (method == "embedding") {
-
-    # Embedding method: autoencoder-based record linkage ----
-    emb_var_importance <- NULL
-    emb_actual_latent_dim <- NULL
-
-    .emb_process_block <- function(q_idx, s_idx, dist_mat) {
-        for (r in seq_along(q_idx)) {
-            qi <- q_idx[r]
-            dist_vec <- dist_mat[r, ]
-            tpos <- true_idx[qi]
-            # Nearest-neighbour similarity (diagnostic; the former risk value)
-            nn_similarity[qi] <<- 1 - min(dist_vec)
-            # Re-identification risk: probability of singling out the TRUE match
-            tm <- .true_match_risk(
-                scores = dist_vec, cand = s_idx, true_pos = tpos,
-                maximize = FALSE, strategy = strategy,
-                risk_weighting = risk_weighting, k = k, threshold = threshold,
-                kappa = kappa, bandwidth = bandwidth, kernel = kernel)
-            risk[qi] <<- tm$risk
-            cand_n[qi] <<- tm$cand_n
-            true_in_set[qi] <<- tm$true_in_set
-
-            # Truth diagnostics (latent distance of the true match in the block)
-            if (!is.na(tpos) && tpos > 0L) {
-                t_col <- match(tpos, s_idx)
-                if (!is.na(t_col)) {
-                    d_true[qi] <<- dist_vec[t_col]
-                    d_min[qi] <<- min(dist_vec)
-                    d_rank[qi] <<- as.integer(sum(dist_vec <= dist_vec[t_col]))
-                }
-            }
-
-            if (!is.null(score_cache)) {
-                score_cache[[qi]] <<- list(cand = s_idx, scores = dist_vec,
-                                           maximize = FALSE)
-            }
-
-            if (isTRUE(return_matches)) {
-                matches[[qi]] <<- tm$guess
-            }
-        }
-    }
-
-    if (is.null(block) || length(split_search) == 1) {
-        # No blocking: single autoencoder
-        block_res <- .embedding_linkage_block(
-            query_data, search_data, key, type,
-            latent_dim = emb_latent_dim, epochs = emb_epochs
-        )
-        s_idx <- seq_len(nrow(search_data))
-        .emb_process_block(seq_len(n_query), s_idx, block_res$dist_mat)
-        emb_var_importance <- block_res$var_importance
-        emb_actual_latent_dim <- block_res$latent_dim
-
-    } else {
-        # Blocked matching
-        all_blocks <- names(split_search)
-        small_blocks <- 0L
-        total_blocks <- length(all_blocks)
-        fallback_blocks <- character(0)
-        importance_list <- list()
-        block_sizes <- integer(0)
-
-        # Determine latent_dim for fallback threshold
-        if (is.null(emb_latent_dim)) {
-            # Estimate from full data
-            prep_est <- .ae_preprocess(query_data, key, type)
-            auto_latent <- as.integer(max(2L, floor(prep_est$input_dim / 3)))
-        } else {
-            auto_latent <- emb_latent_dim
-        }
-        min_block_size <- as.integer(max(30L, 5L * auto_latent))
-
-        if (emb_global) {
-            # Global embedding: train once on all query data
-            trained <- .ae_train(query_data, key, type,
-                                 latent_dim = emb_latent_dim,
-                                 epochs = emb_epochs)
-            emb_actual_latent_dim <- trained$latent_dim
-
-            emb_all_query <- .ae_encode(trained$model, query_data,
-                                        trained$prep, key, type)
-            emb_all_search <- .ae_encode(trained$model, search_data,
-                                         trained$prep, key, type)
-
-            # Variable importance from global model
-            emb_var_importance <- .ae_var_importance(
-                trained$model, query_data, trained$prep, key, type,
-                emb_original = emb_all_query
-            )
-
-            # Global threshold for consistent cross-block normalization
-            global_dist <- .ae_distance(emb_all_query, emb_all_query)
-            global_threshold <- global_dist$threshold
-
-            for (blk in all_blocks) {
-                s_idx <- split_search[[blk]]
-                q_idx <- which(blk_query == blk)
-                if (length(q_idx) == 0 || length(s_idx) == 0) next
-
-                # Within-block distances, using global threshold
-                dist_res <- .ae_distance(emb_all_query[q_idx, , drop = FALSE],
-                                         emb_all_search[s_idx, , drop = FALSE],
-                                         threshold = global_threshold)
-                .emb_process_block(q_idx, s_idx, dist_res$dist_mat)
-            }
-
-        } else {
-            # Per-block embedding
-            for (blk in all_blocks) {
-                s_idx <- split_search[[blk]]
-                q_idx <- which(blk_query == blk)
-                if (length(q_idx) == 0 || length(s_idx) == 0) next
-
-                if (length(q_idx) < min_block_size) {
-                    small_blocks <- small_blocks + 1L
-                    fallback_blocks <- c(fallback_blocks, blk)
-                    next
-                }
-
-                block_res <- .embedding_linkage_block(
-                    query_data[q_idx, , drop = FALSE],
-                    search_data[s_idx, , drop = FALSE],
-                    key, type,
-                    latent_dim = emb_latent_dim, epochs = emb_epochs
-                )
-                .emb_process_block(q_idx, s_idx, block_res$dist_mat)
-                importance_list[[blk]] <- block_res$var_importance
-                block_sizes <- c(block_sizes, length(q_idx))
-                if (is.null(emb_actual_latent_dim)) {
-                    emb_actual_latent_dim <- block_res$latent_dim
-                }
-            }
-
-            # Fallback blocks: use deterministic (Gower distance)
-            if (length(fallback_blocks) > 0) {
-                for (blk in fallback_blocks) {
-                    s_idx <- split_search[[blk]]
-                    q_idx <- which(blk_query == blk)
-                    if (length(q_idx) == 0 || length(s_idx) == 0) next
-
-                    anon_block <- search_data[s_idx, , drop = FALSE]
-                    for (r in seq_along(q_idx)) {
-                        qi <- q_idx[r]
-                        di <- .dist_to_candidates(
-                            query_data[qi, , drop = FALSE],
-                            anon_block, key, type, weights,
-                            wsum, rng, na_anon
-                        )
-                        tpos <- true_idx[qi]
-                        nn_similarity[qi] <- 1 - min(di)
-                        tm <- .true_match_risk(
-                            scores = di, cand = s_idx, true_pos = tpos,
-                            maximize = FALSE, strategy = strategy,
-                            risk_weighting = risk_weighting, k = k,
-                            threshold = threshold, kappa = kappa,
-                            bandwidth = bandwidth, kernel = kernel)
-                        risk[qi] <- tm$risk
-                        cand_n[qi] <- tm$cand_n
-                        true_in_set[qi] <- tm$true_in_set
-
-                        if (!is.na(tpos) && tpos > 0L) {
-                            t_col <- match(tpos, s_idx)
-                            if (!is.na(t_col)) {
-                                d_true[qi] <- di[t_col]
-                                d_min[qi] <- min(di)
-                                d_rank[qi] <- as.integer(
-                                    sum(di <= di[t_col]))
-                            }
-                        }
-                        if (!is.null(score_cache)) {
-                            score_cache[[qi]] <- list(
-                                cand = s_idx, scores = di,
-                                maximize = FALSE)
-                        }
-                        if (isTRUE(return_matches)) {
-                            matches[[qi]] <- tm$guess
-                        }
-                    }
-                }
-            }
-
-            # Aggregate variable importance
-            if (length(importance_list) > 0) {
-                imp_mat <- do.call(rbind, importance_list)
-                emb_var_importance <- colSums(imp_mat * block_sizes) /
-                    sum(block_sizes)
-            }
-
-            if (small_blocks > 0) {
-                message(small_blocks, " of ", total_blocks,
-                        " blocks have < ", min_block_size,
-                        " query records; using deterministic fallback.")
-            }
-        }
-    }
-    }
 
     # bijective matching override ----
     bijective_assigned <- NULL
@@ -1516,33 +821,6 @@ recordLinkage.default <- function(X,
     } else if (method == "probabilistic" && !is.null(fs_params)) {
         var_importance <- log(fs_params$m_probs / fs_params$u_probs)
         names(var_importance) <- key
-    } else if (method == "rf") {
-        var_importance <- if (!is.null(rf_var_importance)) {
-            rf_var_importance
-        } else {
-            setNames(rep(NA_real_, length(key)), key)
-        }
-    } else if (method == "rbrl") {
-        # Mean per-variable rank distance to best match
-        var_importance <- rbrl_var_dist_acc / n_query
-    } else if (method == "mahalanobis") {
-        # Diagonal of precision matrix, normalized to proportions (scale-free).
-        # diag(Sigma^{-1})_j = 1/Var(x_j|x_{-j}): larger = more discriminating.
-        vi <- setNames(rep(NA_real_, length(key)), key)
-        if (!is.null(mahal_prep) && length(mahal_prep$numeric_keys) > 0) {
-            diag_inv <- diag(mahal_prep$cov_inv)
-            diag_inv <- diag_inv / sum(diag_inv)
-            for (j in seq_along(mahal_prep$numeric_keys)) {
-                vi[mahal_prep$numeric_keys[j]] <- diag_inv[j]
-            }
-        }
-        var_importance <- vi
-    } else if (method == "embedding") {
-        var_importance <- if (!is.null(emb_var_importance)) {
-            emb_var_importance
-        } else {
-            setNames(rep(NA_real_, length(key)), key)
-        }
     } else {
         var_importance <- setNames(rep(NA_real_, length(key)), key)
     }
@@ -1576,9 +854,6 @@ recordLinkage.default <- function(X,
         d_rank = d_rank,
         risk_band = risk_band
     )
-    # Nearest-neighbour similarity diagnostic (rf/embedding only; NA otherwise)
-    if (any(!is.na(nn_similarity)))
-        per_rec$nn_similarity <- nn_similarity
     if (!is.null(bijective_assigned))
         per_rec$bijective_assigned <- bijective_assigned
 
@@ -1610,16 +885,8 @@ recordLinkage.default <- function(X,
             kernel = kernel,
             matching = matching,
             risk_threshold = risk_threshold,
-            n_trees = if (method == "rf") n_trees else NULL,
-            rf_global = if (method == "rf") rf_global else NULL,
-            robust = if (method == "mahalanobis") robust else NULL,
             ot_epsilon = if (matching == "ot") ot_epsilon else NULL,
             ot_max_iter = if (matching == "ot") ot_max_iter else NULL,
-            emb_latent_dim = if (method == "embedding") {
-                emb_actual_latent_dim
-            } else NULL,
-            emb_epochs = if (method == "embedding") emb_epochs else NULL,
-            emb_global = if (method == "embedding") emb_global else NULL,
             compute_baseline = compute_baseline
         )
     )
@@ -1645,11 +912,8 @@ recordLinkage.default <- function(X,
                 m_probs = m_probs, u_probs = u_probs,
                 fs_threshold = fs_threshold,
                 return_matches = FALSE, matching = matching,
-                risk_threshold = risk_threshold, n_trees = n_trees,
-                rf_global = rf_global, robust = robust,
+                risk_threshold = risk_threshold,
                 ot_epsilon = ot_epsilon, ot_max_iter = ot_max_iter,
-                emb_latent_dim = emb_latent_dim, emb_epochs = emb_epochs,
-                emb_global = emb_global,
                 compute_baseline = FALSE),
             error = function(e) {
                 warning("compute_baseline failed (", conditionMessage(e),
@@ -2182,9 +1446,8 @@ print.inspect_record <- function(x, ...) {
 #' Shared back-end for the per-record re-identification risk: given the per-
 #' candidate scores for one query record, build the attacker's guess set and
 #' return the (weighted) probability mass on the \emph{true} match. This is the
-#' exact logic the deterministic / probabilistic / rbrl / mahalanobis methods
-#' apply inline; the rf and embedding methods route their scores through it so
-#' that all six methods share one risk definition.
+#' exact logic the deterministic and probabilistic methods apply inline so
+#' that both methods share one risk definition.
 #'
 #' @param scores numeric vector of per-candidate scores (one per element of
 #'   \code{cand}). Either a distance (lower = closer) or a similarity
@@ -2418,16 +1681,6 @@ print.recordLinkageRisk <- function(x, ...) {
         cat("Blocking:    ", paste(s$block, collapse = ", "), "\n", sep = "")
     }
 
-    if (meth == "mahalanobis") {
-        cat("Robust MCD:  ", if (isTRUE(s$robust)) "yes" else "no", "\n", sep = "")
-    }
-    if (meth == "embedding") {
-        ldim <- if (!is.null(s$emb_latent_dim)) s$emb_latent_dim else "?"
-        epc <- if (!is.null(s$emb_epochs)) s$emb_epochs else "?"
-        cat("Embedding:   autoencoder (latent_dim = ", ldim,
-            ", epochs = ", epc, ")\n", sep = "")
-    }
-
     cat("\nRisk Summary\n")
     cat(sprintf("  Mean risk:       %6.4f\n", o$mean_risk))
     cat(sprintf("  Max risk:        %6.4f\n", o$max_risk))
@@ -2602,8 +1855,6 @@ print.summary.recordLinkageRisk <- function(x, ...) {
         vi_label <- switch(x$method,
             deterministic = "Variable Importance (mean weighted distance):",
             probabilistic = "Variable Importance (log-LR on agreement):",
-            mahalanobis   = "Variable Importance (precision matrix proportion):",
-            embedding     = "Variable Importance (permutation-based embedding shift):",
             "Variable Importance:")
         cat("\n", vi_label, "\n", sep = "")
         for (v in names(x$var_importance)) {
@@ -2742,9 +1993,7 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1,
             vi <- x$var_importance
             vi_label <- switch(x$method,
                 deterministic = "Mean Weighted Distance",
-                rf            = "RF Impurity Importance",
-                mahalanobis   = "Precision Matrix Proportion",
-                embedding     = "Permutation Embedding Shift",
+                probabilistic = "Log-LR on Agreement",
                 "Importance")
             barplot(vi[order(vi, decreasing = TRUE)],
                     main = paste0("Variable Importance", dir_suffix),

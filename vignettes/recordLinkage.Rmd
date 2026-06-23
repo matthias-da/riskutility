@@ -11,13 +11,9 @@ author:
 abstract: >
   The **riskutility** package for R provides a unified framework for
   measuring re-identification risk in perturbed microdata. The
-  `recordLinkage()` function implements six linkage methods under a
-  single S3 interface with consistent risk weighting, blocking, and
-  forward/reverse direction support. This paper covers the three core
-  methods in detail -- deterministic (Gower distance), probabilistic
-  (Fellegi-Sunter), and embedding (autoencoder latent-space distance) --
-  while three additional methods (random forest proximity, rank-based, and
-  Mahalanobis) are documented in the package help pages.
+  `recordLinkage()` function implements deterministic (Gower distance) and
+  probabilistic (Fellegi-Sunter) linkage under a single S3 interface with
+  consistent risk weighting, blocking, and forward/reverse direction support.
   While several R packages provide record linkage functionality
   (RecordLinkage, fastLink, reclin2) and sdcMicro offers distance-based
   risk measures, no existing package combines multiple linkage methods with
@@ -58,12 +54,6 @@ if (!requireNamespace("sdcMicro", quietly = TRUE))
 library(sdcMicro)
 library(riskutility, warn.conflicts = FALSE)
 
-# Backend-aware torch flag. The 'torch' package may be installed while its C++
-# backend (libtorch) is not -- e.g. on CRAN / win-builder, where it is only
-# fetched via torch::install_torch(). Embedding chunks are gated on this so the
-# vignette knits without the backend present.
-has_torch <- requireNamespace("torch", quietly = TRUE) &&
-  isTRUE(tryCatch(torch::torch_is_installed(), error = function(e) FALSE))
 ```
 
 # Introduction
@@ -178,22 +168,15 @@ risk scores, candidate set diagnostics, and configurable risk weighting.
 
 ## Scope of This Paper
 
-The `recordLinkage()` function in **riskutility** implements six
+The `recordLinkage()` function in **riskutility** implements two
 linkage methods under a single S3 interface with consistent risk
-weighting, blocking, and direction support. This paper covers the three
-core methods in detail, each following the same pedagogical structure:
+weighting, blocking, and direction support. This paper covers both
+methods in detail, each following the same pedagogical structure:
 *mathematical formulation* $\to$ *hand-traceable toy example* $\to$
 *realistic demonstration*:
 
 1. **Deterministic** (Gower distance)
 2. **Probabilistic** (Fellegi-Sunter log-likelihood ratios)
-3. **Embedding** (autoencoder latent-space distance)
-
-Three additional methods -- **random forest proximity** (`"rf"`),
-**rank-based record linkage** (`"rbrl"`;
-@muralidhar2016rankbased), and **Mahalanobis distance** (`"mahalanobis"`;
-@templ2008robust) -- are available in the package and documented in the
-help pages but not covered here for brevity.
 
 The remaining sections compare methods and weighting schemes
 side by side, present computational details of the implementation,
@@ -778,151 +761,12 @@ disagreement. Variables with high $\log(m/u)$ are the most discriminating
 for identifying matches.
 
 
-# Embedding Method (Autoencoder)
-
-*This method requires the **torch** package and is most relevant for
-datasets with many high-cardinality categorical variables or complex
-nonlinear dependencies. If your data has standard census-type variables
-(age, sex, region, education) with moderate cardinality, the
-deterministic or probabilistic methods are usually sufficient.*
-
-When quasi-identifiers interact nonlinearly or include a mix of numeric
-and high-cardinality categorical variables, the Gower and Mahalanobis
-distances used by deterministic methods may miss important structure.
-The embedding method addresses this by training an autoencoder
-[@guo2016entity] to learn a compact latent representation that captures
-nonlinear dependencies between quasi-identifiers.
-
-## Entity Embeddings and Latent-Space Distance
-
-The idea is borrowed from the entity-embedding literature: categorical
-variables are mapped to learned continuous vectors (entity embeddings),
-while numeric variables are min-max scaled to $[0,1]$. The concatenated
-representation is fed through a 2-layer encoder to produce a latent
-bottleneck of dimension $d_z = \max(2, \lfloor d_\text{input}/3 \rfloor)$
-(user-overridable via `emb_latent_dim`). A symmetric decoder
-reconstructs the input, and the model is trained with a composite loss:
-MSE for numeric outputs (after sigmoid activation) and cross-entropy for
-categorical outputs (raw logits), weighted by the proportion of each
-variable type.
-
-Training uses the Adam optimizer ($\text{lr} = 0.001$), a 20\%
-validation holdout with patience-5 early stopping, and a maximum of 50
-epochs (adjustable via `emb_epochs`). Crucially, the autoencoder trains
-only on the original (query) data, modeling an attacker who knows the
-population structure but not the specific anonymization applied. This
-means the latent space is optimized for the original distribution:
-search-side records that closely resemble originals will project nearby,
-while heavily perturbed records will project further away.
-
-After training, both query and search records are encoded. The pairwise
-Euclidean distance in latent space is computed:
-$$d_z(i,j) = \lVert z_i^\text{orig} - z_j^\text{anon} \rVert_2,$$
-normalized to $[0,1]$ using the 97.5th percentile of within-query
-pairwise distances (a pragmatic heuristic for robustness to outlier
-embeddings; blocks with fewer than 40 records fall back to the maximum).
-Risk follows the **same definition as the other methods**: the latent
-distances $d_z(i, \cdot)$ form the attacker's candidate scores, from which
-`recordLinkage()` returns the (weighted) probability mass on the *true* match,
-and $0$ when the true record is not in the attacker's candidate set. Embedding
-risk is therefore directly comparable on the same scale as the deterministic,
-probabilistic methods. The nearest-neighbour similarity
-$1 - d_z(i, j^*)$ — the closeness of the single nearest released record,
-whoever it is — is retained separately in the `nn_similarity` column of
-`per_record` as a distinctiveness diagnostic. (The random-forest method behaves
-analogously, with proximity in place of latent distance.)
-
-Variable importance is permutation-based: each variable is shuffled in
-the query data, re-encoded, and the mean embedding shift is measured.
-This is normalized to sum to 1.
-
-## Unseen Categories and Small Blocks
-
-Categorical levels in the search data not seen during training receive
-an `<UNK>` embedding, initialized to the mean of all learned level
-embeddings for that variable. This avoids crashes on novel categories
-while providing a reasonable default representation.
-
-When blocking is used with `emb_global = FALSE` (default), each block
-trains its own autoencoder. Blocks with fewer than $\max(30, 5 \times d_z)$
-records fall back to the deterministic (Gower distance) method, since
-such small blocks lack sufficient data for meaningful autoencoder
-training. Setting `emb_global = TRUE` trains a single autoencoder on all
-query data and restricts distance computation within blocks, which is
-useful when blocks are small but the overall dataset is large.
-
-## Toy Example: 6 Records
-
-```{r emb-toy, eval=has_torch}
-orig_emb <- data.frame(
-  age = c(20, 40, 40, 60, 60, 80),
-  sex = factor(c("F", "M", "F", "M", "F", "M"))
-)
-anon_emb <- data.frame(
-  age = c(20, 40, 60, 40, 60, 80),  # rows 3 and 4 swapped ages
-  sex = factor(c("F", "M", "F", "M", "F", "M"))
-)
-
-set.seed(42)  # controls R-level randomness; exact results may vary across platforms
-res_emb <- recordLinkage(orig_emb, anon_emb,
-                          key = c("age", "sex"),
-                          method = "embedding",
-                          emb_epochs = 30L)
-print(res_emb)
-```
-
-```{r emb-toy-risk, eval=has_torch}
-knitr::kable(res_emb$per_record[, c("risk", "cand_n", "true_in_set", "d_true")],
-             digits = 4,
-             caption = "Per-record risk (embedding method)")
-```
-
-The autoencoder learns a joint representation of `age` and `sex`.
-Records with identical covariates to their anonymized counterparts
-(rows 1, 2, 5, 6) tend to receive higher risk, while the swapped
-records (rows 3, 4) may show lower risk depending on how the latent
-space separates the age values.
-
-## Real-World Example (n = 500)
-
-```{r emb-real, eval=has_torch}
-set.seed(42)
-res_emb_real <- recordLinkage(census, census_anon,
-                               key = c("age", "sex", "region", "educ"),
-                               method = "embedding",
-                               emb_epochs = 30L)
-print(res_emb_real)
-```
-
-```{r emb-real-riskhist, fig.height=4, fig.cap="Per-record risk distribution (embedding method).", eval=has_torch}
-plot(res_emb_real, which = 1)
-```
-
-```{r emb-real-vi, fig.height=4, fig.cap="Variable importance (permutation-based embedding shift).", eval=has_torch}
-plot(res_emb_real, which = 3)
-```
-
-The permutation-based variable importance reveals which quasi-identifiers
-contribute most to the latent representation. Unlike the deterministic
-method's weight-proportional importance, the embedding method can
-discover nonlinear interactions between variables.
-
-**When to use the embedding method**: The embedding approach is most
-valuable when (1) quasi-identifiers have complex nonlinear dependencies
-that Gower or Mahalanobis distances miss, (2) the dataset contains
-high-cardinality categorical variables where entity embeddings learn
-informative representations, or (3) you want a data-driven distance
-metric that adapts to the structure of the original data. The trade-off
-is computational cost (autoencoder training) and the requirement for
-the **torch** package.
-
-
 # Comparing Methods and Weighting Schemes
 
 ## Side-by-Side Comparison
 
-We run the deterministic, probabilistic, and (when torch is available)
-embedding methods on the same 500-record census dataset and compare results.
+We run the deterministic and probabilistic methods on the same 500-record
+census dataset and compare results.
 
 ```{r compare-methods}
 # Deterministic (already computed)
@@ -956,22 +800,6 @@ compare_df <- data.frame(
     100 * res_det_cat$overall$pct_true_in_set
   )
 )
-
-# Add embedding row if the torch backend is available
-if (has_torch) {
-  set.seed(42)
-  res_emb_census <- recordLinkage(census, census_anon,
-                                   key = c("age", "sex", "region", "educ"),
-                                   method = "embedding",
-                                   emb_epochs = 50)
-  compare_df <- rbind(compare_df, data.frame(
-    Method = "Embedding (4 QIs)",
-    Mean_risk = res_emb_census$overall$mean_risk,
-    Max_risk = res_emb_census$overall$max_risk,
-    Pct_high = 100 * res_emb_census$overall$pct_high_risk,
-    Pct_true_in_set = 100 * res_emb_census$overall$pct_true_in_set
-  ))
-}
 
 knitr::kable(compare_df, digits = 3,
              caption = "Method comparison on the census dataset")
@@ -1056,7 +884,6 @@ lower risk to well-protected ones.
 |:-------|:------------|:----------|:-----------|
 | Deterministic | Minimal (distance metric) | Default / first pass | Ignores agreement rarity |
 | Probabilistic | m/u available or estimable | Audit documentation | Sensitive to m/u misspecification |
-| Embedding | torch available; sufficient data for training | Complex interactions between mixed-type QIs | Requires torch; non-deterministic; needs sufficient data |
 
 
 # Computational Details
@@ -1084,9 +911,8 @@ object of class `"recordLinkageRisk"` with the following components:
 - For the probabilistic method: `$fs_params` with estimated or
   supplied m/u probabilities.
 - `$var_importance`: per-variable importance scores (available for all
-  methods; the computation varies: distance contributions for
-  deterministic, log-LR weights for probabilistic, permutation-based
-  embedding shift for embedding, etc.).
+  methods; the computation varies: mean distance contributions for
+  deterministic, log-LR weights for probabilistic).
 
 Standard S3 methods are provided:
 
@@ -1110,7 +936,6 @@ and $p = |\mathcal{K}|$ the number of quasi-identifiers.
 |:-------|:-----------|:------|
 | Deterministic | $O(nmp)$ | Full Gower distance matrix |
 | Probabilistic | $O(nmp)$ | Log-LR computation per pair per variable |
-| Embedding | $O(E \cdot n \cdot d + nm \cdot d)$ | $E$ epochs of autoencoder training ($d$ = latent dim) + $O(nm \cdot d)$ for latent-space distances |
 
 Without blocking, all methods require $O(nm)$ pairwise comparisons.
 For large datasets, blocking (described below) restricts comparisons
@@ -1125,17 +950,14 @@ number of pairs. As a rough guideline:
 
 As a rough benchmark, the deterministic method on 500 records with
 4 QIs takes well under one second; at $n = 5{,}000$ without blocking,
-expect a few seconds; the embedding method adds autoencoder training
-overhead (typically 5--30 seconds depending on `emb_epochs`).
+expect a few seconds.
 
 ## Software Dependencies
 
 The core `recordLinkage()` function requires only base R and the
 **VIM** package (for Gower distance computation in the deterministic
-method). Optional method-specific dependencies include: **torch**
-(embedding method), **clue** (bijective matching via Hungarian
-algorithm), **robustbase** (Mahalanobis method, robust covariance),
-and **ranger** (RF proximity method).
+method). An optional dependency is **clue** (bijective matching via
+the Hungarian algorithm).
 The examples in this paper additionally use **sdcMicro**
 [@templ2015sdcmicro] for perturbation (rank swapping).
 All optional packages are listed in `Suggests` in the package `DESCRIPTION`.
@@ -1268,18 +1090,13 @@ need to specify `key` again.
 |:--------------|:-------------------|
 | Nothing about the perturbation mechanism | `"deterministic"` |
 | m/u probabilities available or formal audit needed | `"probabilistic"` |
-| Complex interactions, high-cardinality categoricals, torch available | `"embedding"` |
 | Quick initial assessment | `"deterministic"` with `strategy = "nearest"` |
 | Conservative upper bound | `"deterministic"` with `risk_weighting = "uniform"` |
 
 When in doubt, start with the deterministic method. It requires no
 assumptions beyond a sensible distance metric and gives a reasonable
-baseline. Use the other methods when additional information about the
-perturbation mechanism is available.
-
-When the perturbation mechanism is known exactly (m/u probabilities from
-a formal audit), the probabilistic method gives more accurate risk
-estimates than the distance-based default.
+baseline. Use the probabilistic method when m/u probabilities from a
+formal audit are available, as it gives more accurate risk estimates.
 
 When multiple perturbation methods have been applied to different
 variables (e.g., local suppression for some, microaggregation for

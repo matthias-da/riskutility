@@ -23,43 +23,11 @@ test_that("recordLinkage(matching = 'ot') detects near-copies", {
   expect_true(mean(res$per_record$true_in_set) > 0.5)
 })
 
-test_that("recordLinkage(matching = 'ot') works with RBRL method", {
-  set.seed(1)
-  X <- data.frame(a = 1:20, b = seq(0, 1, length.out = 20))
-  Y <- data.frame(a = X$a * 100 + 5000, b = X$b^3)
-  res <- recordLinkage(X, Y, key = c("a", "b"), method = "rbrl",
-                       matching = "ot", truth = "row")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_true(res$overall$pct_true_in_set > 0.5)
-})
-
 test_that("recordLinkage(matching = 'ot') works with probabilistic", {
   set.seed(1)
   X <- data.frame(a = rnorm(20), b = rnorm(20))
   Y <- X + rnorm(40, 0, 0.3)
   res <- recordLinkage(X, Y, key = c("a", "b"), method = "probabilistic",
-                       matching = "ot", truth = "row")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_true(all(res$per_record$risk >= 0))
-})
-
-test_that("recordLinkage(matching = 'ot') works with RF method", {
-  skip_if_not_installed("ranger")
-  set.seed(1)
-  X <- data.frame(a = rnorm(25), b = rnorm(25))
-  Y <- X + rnorm(50, 0, 0.1)
-  res <- recordLinkage(X, Y, key = c("a", "b"), method = "rf",
-                       matching = "ot", truth = "row")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_true(all(res$per_record$risk >= 0))
-  expect_true(all(res$per_record$risk <= 1))
-})
-
-test_that("recordLinkage(matching = 'ot') works with mahalanobis", {
-  set.seed(1)
-  X <- data.frame(a = rnorm(20), b = rnorm(20))
-  Y <- X + rnorm(40, 0, 0.1)
-  res <- recordLinkage(X, Y, key = c("a", "b"), method = "mahalanobis",
                        matching = "ot", truth = "row")
   expect_s3_class(res, "recordLinkageRisk")
   expect_true(all(res$per_record$risk >= 0))
