@@ -200,7 +200,7 @@ rumap(original, synthetic,
 - `R/regression_fidelity.R`: Regression coefficient comparison (~472 lines; forest plot + CI overlap bar chart)
 - `R/contingency_fidelity.R`: Bivariate contingency table fidelity (~423 lines; TV distance heatmap)
 - `vignettes/riskutility.Rmd`: Comprehensive JSS-style vignette (main package vignette)
-- `vignettes/recordLinkage.Rmd`: Deep-dive vignette on record linkage risk (~2240 lines; JSS paper candidate)
+- `vignettes/recordLinkage.Rmd`: Deep-dive vignette on record linkage risk (~2240 lines; JSS paper candidate). **Build-excluded via `.Rbuildignore`** — not shipped to CRAN (sdcMicro name collision, see below); kept in the repo.
 - `vignettes/references.bib`: Shared bibliography for all vignettes
 
 ### Record Linkage: Independent vs Bijective Matching
@@ -227,6 +227,12 @@ All 8 methods share one risk definition via the internal `.true_match_risk()`: t
 - **`compute_baseline = TRUE`**: also links X against itself (forward, `truth="row"`) for a no-perturbation reference → `$baseline` (with `risk_reduction`); shown in print/summary and `plot(which=1)`.
 - **`expected_risk = TRUE`** (PRAM, forward): perturbation-aware expected risk over the transition distribution `E[r_i] = sum_o P(x_i->o)^2/(S+P(x_i->o))` via `.pram_expected_risk()` (exact ≤ `max_support`, else Monte-Carlo) → `$pram_info$expected_risk`.
 - User-supplied `m_probs`/`u_probs` are validated and clamped to (0,1).
+
+### Record Linkage: sdcMicro Name Collision (CRAN Build)
+
+`sdcMicro` (>= 5.8.2) **also exports its own `recordLinkage()`** (a GDBRL/Hungarian implementation) — a lasting name collision with `riskutility::recordLinkage()`. sdcMicro's signature is `recordLinkage(x, y, vars, distance, ...)` with **no `...`, `key`, or `method`**, so if it masks ours on the search path, calls fail with `unused argument (key = ...)` / `(method = ...)`. This broke the CRAN vignette rebuild: CRAN installs sdcMicro 5.8.2 (local dev had 5.8.1, so it never reproduced locally), `recordLinkage.Rmd` attached sdcMicro *after* riskutility, and vignettes rebuild in a shared R session so both vignettes failed.
+
+**CRAN-build resolution (2026-06):** `vignettes/recordLinkage.Rmd` is `.Rbuildignore`d (not shipped; stays in the repo as the JSS candidate) and the live `recordLinkage()` demo in `riskutility.Rmd` is commented out. The `recordLinkage()` **function** (`R/recordLinkage.R`, man page, tests, export) is unchanged and still ships. As a backstop, the committed `recordLinkage.Rmd` loads `sdcMicro` *before* `riskutility`. Do NOT re-enable the recordLinkage vignette in the CRAN build without re-checking this collision (install sdcMicro 5.8.2 into a temp lib to reproduce).
 
 ### Embedding Method (Autoencoder)
 
@@ -296,10 +302,11 @@ The RAPID implementation in riskutility is the canonical version, ported and imp
 
 ## Package Status
 
-- **Authors**: Matthias Templ (aut, cre); Oscar Thees and Roman Müller (ctb)
+- **CRAN**: On CRAN since 2026-06-22 (v0.1.0, first release) — <https://CRAN.R-project.org/package=riskutility>. Title: "Disclosure Risk and Data Utility Metrics for Synthetic and Anonymized Data".
+- **Authors**: Matthias Templ (aut, cre); Oscar Thees (ctb)
 - **Tests**: 69 test files, ~3900 tests passing
-- **R CMD check**: 0 errors, 0 notes (2 expected vignette warnings from missing inst/doc)
-- **Vignettes**: Main vignette (`riskutility.Rmd`) + record linkage deep-dive (`recordLinkage.Rmd`)
+- **R CMD check**: `Status: OK` (0 errors / 0 warnings / 0 notes) with vignettes rebuilt
+- **Vignettes**: Main vignette (`riskutility.Rmd`) ships to CRAN; record linkage deep-dive (`recordLinkage.Rmd`) is repo-only (build-excluded — see "Record Linkage: sdcMicro Name Collision")
 - **CITATION**: Available in `inst/CITATION`
 
 
