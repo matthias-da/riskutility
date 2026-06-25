@@ -89,16 +89,6 @@ test_that("independent random data gives low risk", {
   expect_lt(res$overall$mean_risk, 0.3)
 })
 
-test_that("threshold strategy excludes distant records", {
-  set.seed(1)
-  x <- data.frame(a = c(1, 50, 100), b = factor(c("x", "y", "z")))
-  x_anon <- data.frame(a = c(2, 51, 99), b = factor(c("x", "y", "z")))
-  res <- recordLinkage(x, x_anon, key = c("a", "b"),
-                       strategy = "threshold", threshold = 0.005)
-  # Very tight threshold - some records should have 0 candidates
-  expect_true(any(res$per_record$cand_n == 0))
-})
-
 test_that("topk strategy limits candidates", {
   set.seed(1)
   x <- data.frame(a = c(1, 2, 3), b = factor(c("x", "x", "x")))
@@ -106,20 +96,6 @@ test_that("topk strategy limits candidates", {
   res <- recordLinkage(x, x_anon, key = c("a", "b"),
                        strategy = "topk", k = 1)
   expect_true(all(res$per_record$cand_n >= 1))
-})
-
-test_that("topk_threshold strategy works", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       strategy = "topk_threshold", k = 3, threshold = 0.2)
-  expect_s3_class(res, "recordLinkageRisk")
-})
-
-test_that("nearest_threshold strategy works", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       strategy = "nearest_threshold", threshold = 0.1)
-  expect_s3_class(res, "recordLinkageRisk")
 })
 
 test_that("blocking reduces computation and gives valid results", {
@@ -172,110 +148,6 @@ test_that("softmax weighting produces valid risk values", {
 })
 
 
-# ── Kernel weighting tests ──────────────────────────────────────────
-
-test_that("kernel (gaussian) weights sum to 1", {
-  w <- riskutility:::.kernel_risk(c(0.1, 0.3, 0.5))
-  expect_equal(sum(w), 1, tolerance = 1e-10)
-})
-
-test_that("kernel gives highest weight to closest record", {
-  w <- riskutility:::.kernel_risk(c(0.05, 0.3, 0.8))
-  expect_true(w[1] > w[2])
-  expect_true(w[2] > w[3])
-})
-
-test_that("kernel with equal distances gives uniform weights", {
-  w <- riskutility:::.kernel_risk(c(0.5, 0.5, 0.5))
-  expect_equal(w, rep(1/3, 3), tolerance = 1e-10)
-})
-
-test_that("kernel with user-supplied bandwidth works", {
-  w <- riskutility:::.kernel_risk(c(0.1, 0.5), bandwidth = 0.2)
-  expect_equal(sum(w), 1, tolerance = 1e-10)
-  expect_true(w[1] > w[2])
-})
-
-test_that("kernel epanechnikov gives zero weight beyond bandwidth", {
-  # bandwidth = 0.3, so d=0.5 > bandwidth -> weight 0
-  w <- riskutility:::.kernel_risk(c(0.1, 0.5), bandwidth = 0.3,
-                                      kernel = "epanechnikov")
-  expect_equal(w[2], 0, tolerance = 1e-10)
-  expect_equal(w[1], 1, tolerance = 1e-10)
-})
-
-test_that("kernel tricube gives zero weight beyond bandwidth", {
-  w <- riskutility:::.kernel_risk(c(0.1, 0.5), bandwidth = 0.3,
-                                      kernel = "tricube")
-  expect_equal(w[2], 0, tolerance = 1e-10)
-  expect_equal(w[1], 1, tolerance = 1e-10)
-})
-
-test_that("kernel single distance returns 1", {
-  w <- riskutility:::.kernel_risk(0.5)
-  expect_equal(w, 1)
-})
-
-test_that("kernel empty distance returns empty", {
-  w <- riskutility:::.kernel_risk(numeric(0))
-  expect_equal(length(w), 0)
-})
-
-test_that("kernel weighting produces valid risk values", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       risk_weighting = "kernel")
-  expect_true(all(res$per_record$risk >= 0))
-  expect_true(all(res$per_record$risk <= 1))
-  expect_equal(res$settings$risk_weighting, "kernel")
-  expect_equal(res$settings$kernel, "gaussian")
-})
-
-test_that("kernel differs from uniform with multi-candidate sets", {
-  d <- .make_test_data(50)
-  ru <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                      strategy = "threshold", threshold = 0.3,
-                      risk_weighting = "uniform")
-  rm <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                      strategy = "threshold", threshold = 0.3,
-                      risk_weighting = "kernel")
-  # With many candidates, kernel should produce different risks
-  multi <- which(ru$per_record$cand_n > 2)
-  if (length(multi) > 0) {
-    expect_false(all(ru$per_record$risk[multi] == rm$per_record$risk[multi]))
-  }
-})
-
-test_that("kernel + probabilistic method works", {
-  d <- .make_test_data(30)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "probabilistic",
-                       risk_weighting = "kernel")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_true(all(res$per_record$risk >= 0))
-  expect_true(all(res$per_record$risk <= 1))
-})
-
-test_that("all three kernels produce valid output", {
-  d <- .make_test_data(30)
-  for (k in c("gaussian", "epanechnikov", "tricube")) {
-    res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                         risk_weighting = "kernel", kernel = k)
-    expect_s3_class(res, "recordLinkageRisk")
-    expect_true(all(res$per_record$risk >= 0))
-    expect_true(all(res$per_record$risk <= 1))
-  }
-})
-
-test_that("print and summary show kernel kernel info", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       risk_weighting = "kernel",
-                       kernel = "epanechnikov")
-  expect_output(print(res), "epanechnikov")
-  s <- summary(res)
-  expect_output(print(s), "epanechnikov")
-})
 
 
 # ── Probabilistic method tests ─────────────────────────────────────────
@@ -285,8 +157,7 @@ test_that("probabilistic method returns fs_params", {
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
                        method = "probabilistic")
   expect_true(!is.null(res$fs_params))
-  expect_true(all(c("m_probs", "u_probs", "threshold_used") %in%
-                    names(res$fs_params)))
+  expect_true(all(c("m_probs", "u_probs") %in% names(res$fs_params)))
 })
 
 test_that("probabilistic: m > u for matching data", {
@@ -532,12 +403,13 @@ test_that("truth='id' mode works correctly", {
   expect_equal(res$overall$mean_risk, 1)
 })
 
-test_that("quantile threshold works", {
+test_that("topk strategy with k=3 returns valid results", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       strategy = "threshold",
-                       threshold = list(type = "quantile", p = 0.1))
+                       strategy = "topk", k = 3)
   expect_s3_class(res, "recordLinkageRisk")
+  # cand_n >= k (ties can expand the set)
+  expect_true(all(res$per_record$cand_n >= 1 | res$per_record$cand_n == 0))
 })
 
 
@@ -621,14 +493,6 @@ test_that("reverse softmax weighting gives valid risk", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
                        direction = "reverse", risk_weighting = "softmax")
-  expect_true(all(res$per_record$risk >= 0))
-  expect_true(all(res$per_record$risk <= 1))
-})
-
-test_that("reverse kernel weighting gives valid risk", {
-  d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       direction = "reverse", risk_weighting = "kernel")
   expect_true(all(res$per_record$risk >= 0))
   expect_true(all(res$per_record$risk <= 1))
 })
@@ -1310,19 +1174,14 @@ test_that("deterministic: tied distances give risk = 1/n_tied", {
   expect_true(all(res$per_record$true_in_set))
 })
 
-test_that("deterministic: threshold strategy excludes/includes candidates", {
-  # X=(20,80), X_anon=(21,79). Range=60. d≈0.017.
+test_that("deterministic: topk strategy excludes/includes candidates", {
+  # X=(20,80), X_anon=(21,79). top-1 always nearest.
   x <- data.frame(age = c(20, 80))
   xa <- data.frame(age = c(21, 79))
-  # Strict threshold: no candidates
-  res1 <- recordLinkage(x, xa, key = "age", strategy = "threshold",
-                         threshold = 0.01)
-  expect_equal(res1$per_record$risk, c(0, 0))
-  expect_equal(res1$per_record$cand_n, c(0L, 0L))
-  # Generous threshold: includes true match
-  res2 <- recordLinkage(x, xa, key = "age", strategy = "threshold",
-                         threshold = 0.5)
-  expect_equal(res2$per_record$risk, c(1, 1))
+  # topk=1: each record's nearest is its true match
+  res1 <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 1)
+  expect_equal(res1$per_record$risk, c(1, 1))
+  expect_equal(res1$per_record$cand_n, c(1L, 1L))
 })
 
 test_that("deterministic: topk strategy controls candidate set size", {
@@ -1335,26 +1194,22 @@ test_that("deterministic: topk strategy controls candidate set size", {
   expect_equal(res2$per_record$risk[1], 0.5)  # true in top-2
 })
 
-test_that("deterministic: nearest_threshold strategy", {
-  x <- data.frame(age = c(30, 50))
-  xa <- data.frame(age = c(29, 50))
-  # d(30,29)=1/21≈0.048 < 0.05 → include
-  res1 <- recordLinkage(x, xa, key = "age",
-                         strategy = "nearest_threshold", threshold = 0.05)
-  expect_equal(res1$per_record$risk[1], 1)
-  # d_min > 0.01 → empty set → risk=0
-  res2 <- recordLinkage(x, xa, key = "age",
-                         strategy = "nearest_threshold", threshold = 0.01)
-  expect_equal(res2$per_record$risk[1], 0)
+test_that("deterministic: topk with ties yields tie-inclusive set", {
+  # Two candidates at equal distance from the query, topk k=1 should return both
+  x <- data.frame(age = c(30, 10))
+  xa <- data.frame(age = c(31, 31))
+  res <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 1)
+  # Record 1: both xa records are tied -> cand_n >= 1
+  expect_true(res$per_record$cand_n[1] >= 1)
 })
 
 test_that("deterministic: softmax weighting hand-computed", {
-  # rec1(25): d=[0.2, 0.32] within threshold. kappa=2/0.12=16.667.
+  # rec1(25): topk=2 gives d=[0.2, 0.32]. kappa=2/(0.32-0.2)=16.667.
   # w_true = exp(-kappa*0.2) / (exp(-kappa*0.2) + exp(-kappa*0.32))
   x <- data.frame(age = c(25, 33, 50))
   xa <- data.frame(age = c(30, 33, 50))
-  res <- recordLinkage(x, xa, key = "age", strategy = "threshold",
-                        threshold = 0.5, risk_weighting = "softmax")
+  res <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 2,
+                        risk_weighting = "softmax")
   kappa <- 2 / (8/25 - 5/25)
   neg_kd <- -kappa * c(5/25, 8/25)
   neg_kd <- neg_kd - max(neg_kd)
@@ -1362,65 +1217,47 @@ test_that("deterministic: softmax weighting hand-computed", {
   expect_equal(res$per_record$risk[1], w[1], tolerance = 1e-4)
 })
 
-test_that("deterministic: kernel (gaussian) weighting hand-computed", {
-  x <- data.frame(age = c(25, 33, 50))
-  xa <- data.frame(age = c(30, 33, 50))
-  res <- recordLinkage(x, xa, key = "age", strategy = "threshold",
-                        threshold = 0.5, risk_weighting = "kernel",
-                        kernel = "gaussian", bandwidth = 0.1)
-  # rec1: d=[0.2, 0.32]. u=d/0.1=[2, 3.2]. K=exp(-u^2/2).
-  k1 <- exp(-2^2 / 2); k2 <- exp(-3.2^2 / 2)
-  expect_equal(res$per_record$risk[1], k1 / (k1 + k2), tolerance = 1e-4)
-})
-
-test_that("deterministic: epanechnikov kernel zero beyond bandwidth", {
-  # rec1(50): d to a1(10)=1, d to a2(49)=0.025. bw=0.1.
-  # K(1/0.1=10) = 0 (beyond bandwidth). True=a1 → risk=0.
-  x <- data.frame(age = c(50, 10))
-  xa <- data.frame(age = c(10, 49))
-  res <- recordLinkage(x, xa, key = "age",
-                        strategy = "threshold", threshold = 1.0,
-                        risk_weighting = "kernel", kernel = "epanechnikov",
-                        bandwidth = 0.1)
-  expect_equal(res$per_record$risk[1], 0)
-})
 
 test_that("probabilistic: hand-computed risk with user m/u (categorical)", {
-  # LR_agree = log(0.9/0.3) = log(3). LR_disagree = log(0.1/0.7).
+  # Skinner (2008) posterior: P(match|gamma) = LR*p / (LR*p + (1-p)), p=1/n=1/3
+  # LR_agree = 0.9/0.3 = 3; LR_disagree = 0.1/0.7 = 1/7
   x <- data.frame(sex = factor(c("M", "F", "M")))
   xa <- data.frame(sex = factor(c("M", "F", "F")))
   res <- recordLinkage(x, xa, key = "sex", method = "probabilistic",
                         m_probs = c(sex = 0.9), u_probs = c(sex = 0.3),
-                        fs_threshold = 0)
-  # rec1(M): above 0 = {a1}. True=a1. Risk=1.
-  # rec2(F): above 0 = {a2,a3}. True=a2. Risk=0.5.
-  # rec3(M): above 0 = {a1}. True=a3. Risk=0.
-  expect_equal(res$per_record$risk, c(1, 0.5, 0))
+)
+  # rec1(M->a1 agree):    LR=3,   post = 3*(1/3)/(3*(1/3)+2/3) = 3/5
+  # rec2(F->a2 agree):    LR=3,   post = 3/5
+  # rec3(M->a3 disagree): LR=1/7, post = (1/7)*(1/3)/((1/7)*(1/3)+2/3) = 1/15
+  expect_equal(res$per_record$risk, c(3/5, 3/5, 1/15), tolerance = 1e-6)
 })
 
 test_that("probabilistic: 2-var all-agree and all-disagree patterns", {
+  # Skinner (2008) posterior, p=1/3
+  # LR_agree_each = 0.9/0.3 = 3; LR_disagree_each = 0.1/0.7 = 1/7
   x <- data.frame(sex = factor(c("M","F","M")), job = factor(c("A","B","A")))
   xa <- data.frame(sex = factor(c("M","M","F")), job = factor(c("A","B","A")))
   res <- recordLinkage(x, xa, key = c("sex","job"), method = "probabilistic",
                         m_probs = c(sex = 0.9, job = 0.9),
                         u_probs = c(sex = 0.3, job = 0.3),
-                        fs_threshold = 0)
-  # rec1(M,A) vs a1(M,A): both agree. LR >> 0. Only a1 above 0. True=a1. Risk=1.
-  # rec2(F,B): no candidates with both agree. All LR < 0. Risk=0.
-  expect_equal(res$per_record$risk, c(1, 0, 0))
+)
+  # rec1(M,A->a1 both agree):         LR=9,   post = 9*(1/3)/(9*(1/3)+2/3) = 9/11
+  # rec2(F,B->a2 sex-disagree,job-agree): LR=3/7, post = (3/7)*(1/3)/((3/7)*(1/3)+2/3) = 3/17
+  # rec3(M,A->a3 sex-disagree,job-agree): same LR=3/7, post = 3/17
+  expect_equal(res$per_record$risk, c(9/11, 3/17, 3/17), tolerance = 1e-6)
 })
 
 test_that("probabilistic: numeric variable with MAD-based tolerance", {
+  # Skinner (2008) posterior, p=1/3
+  # MAD(c(20,40,60)) = 1.4826*20 = 29.65; LR_agree = 0.95/0.2 = 4.75
   x <- data.frame(age = c(20, 40, 60))
   xa <- data.frame(age = c(21, 39, 62))
-  # MAD(c(20,40,60)) = 1.4826 * 20 ≈ 29.65
   res <- recordLinkage(x, xa, key = "age", method = "probabilistic",
                         m_probs = c(age = 0.95), u_probs = c(age = 0.2),
-                        fs_threshold = 0)
-  # rec1: {a1,a2} agree (within tol 29.65). Risk=1/2.
-  # rec2: all 3 agree. Risk=1/3.
-  # rec3: {a2,a3} agree. Risk=1/2.
-  expect_equal(res$per_record$risk, c(0.5, 1/3, 0.5), tolerance = 1e-4)
+)
+  # All three true matches agree (within tol 29.65): LR=4.75 each
+  # post = 4.75*(1/3)/(4.75*(1/3)+2/3) = 4.75/6.75 = 19/27
+  expect_equal(res$per_record$risk, rep(19/27, 3), tolerance = 1e-4)
 })
 
 

@@ -14,43 +14,23 @@ recordLinkage(X, ...)
   X,
   x_anon,
   key,
-  method = c("deterministic", "probabilistic", "pram", "predictive", "rf", "rbrl",
-    "mahalanobis", "embedding"),
+  method = c("deterministic", "probabilistic"),
   direction = c("forward", "reverse"),
-  risk_weighting = c("uniform", "softmax", "kernel"),
+  risk_weighting = c("uniform", "softmax"),
   kappa = NULL,
-  bandwidth = NULL,
-  kernel = c("gaussian", "epanechnikov", "tricube"),
   truth = c("row", "id"),
   id = NULL,
   type = NULL,
   weights = NULL,
   na_anon = c("ignore", "match", "mismatch"),
-  strategy = c("nearest", "threshold", "topk", "topk_threshold", "nearest_threshold"),
+  strategy = c("nearest", "topk"),
   k = NULL,
-  threshold = NULL,
   block = NULL,
   m_probs = NULL,
   u_probs = NULL,
-  fs_threshold = NULL,
-  pram_matrix = NULL,
-  pred_model = c("logit", "rf"),
-  pred_se = TRUE,
   return_matches = FALSE,
-  matching = c("independent", "bijective", "ot"),
+  matching = c("independent", "bijective"),
   risk_threshold = 0.1,
-  n_trees = 500L,
-  rf_global = FALSE,
-  robust = TRUE,
-  ot_epsilon = NULL,
-  ot_max_iter = 100L,
-  emb_latent_dim = NULL,
-  emb_epochs = 50L,
-  emb_global = FALSE,
-  compute_baseline = FALSE,
-  expected_risk = FALSE,
-  Y = NULL,
-  key_vars = NULL,
   ...
 )
 }
@@ -63,13 +43,9 @@ recordLinkage(X, ...)
 
 \item{key}{character. Names of quasi-identifier variables used for linkage.}
 
-\item{method}{character. Linkage method: \code{"deterministic"} (default),
-\code{"probabilistic"} (Fellegi-Sunter), \code{"pram"} (transition matrix),
-\code{"predictive"} (propensity-score-based), \code{"rf"}
-(random forest proximity-based; requires \pkg{ranger}),
-\code{"rbrl"} (rank-based record linkage),
-\code{"mahalanobis"} (Mahalanobis distance with robust covariance), or
-\code{"embedding"} (autoencoder latent-space distance; requires \pkg{torch}).}
+\item{method}{character. Linkage method: \code{"deterministic"} (default,
+weighted Gower distance) or \code{"probabilistic"} (Fellegi-Sunter
+log-likelihood ratios).}
 
 \item{direction}{character. Direction of the linkage attack:
 \code{"forward"} (default) loops over original records and searches in the
@@ -78,18 +54,12 @@ anonymized data, answering "how safe is each original individual?";
 original data, answering "how disclosive is each released record?".}
 
 \item{risk_weighting}{character. How to weight candidates: \code{"uniform"}
-(default, 1/|set|), \code{"softmax"} (exponential distance-weighting),
-or \code{"kernel"} (kernel-weighted donor probabilities).}
+(default, 1/|set|) or \code{"softmax"} (exponential distance-weighting).
+Ignored for \code{method = "probabilistic"}, which always reports the
+Skinner (2008) posterior (see section \emph{Probabilistic method}).}
 
 \item{kappa}{numeric or NULL. Temperature parameter for softmax weighting.
 If NULL (default), auto-calibrated as \code{2 / range(distances)}.}
-
-\item{bandwidth}{numeric or NULL. Bandwidth for kernel weighting.
-If NULL (default), auto-selected via Silverman's rule on the candidate
-distances.}
-
-\item{kernel}{character. Kernel function for kernel weighting:
-\code{"gaussian"} (default), \code{"epanechnikov"}, or \code{"tricube"}.}
 
 \item{truth}{character. How to define the true match for scoring:
 one of \code{"row"} (default) or \code{"id"}.
@@ -108,34 +78,22 @@ values in \code{c("numeric","ordinal","nominal")}. If NULL, inferred from \code{
 If NULL, equal weights are used.}
 
 \item{na_anon}{character. How a missing quasi-identifier value is handled
-during matching, applied consistently across all methods (deterministic,
-probabilistic, pram, rbrl, mahalanobis, and the embedding deterministic
-fallback): \code{"ignore"} (default), \code{"match"}, or \code{"mismatch"}.
+during matching: \code{"ignore"} (default), \code{"match"}, or
+\code{"mismatch"}.
 \itemize{
 \item \code{"ignore"} drops the variable from that pairwise comparison
-(no contribution to the distance, likelihood ratio, or transition
-factor; for PRAM this multiplies the factor by 1 instead of collapsing
-the candidate to zero probability).
+(no contribution to the distance or likelihood ratio).
 \item \code{"match"} treats the missing value as agreement (distance
-contribution 0; for PRAM, the diagonal transition probability).
+contribution 0).
 \item \code{"mismatch"} treats the missing value as disagreement
-(distance contribution 1; for PRAM, the candidate is excluded).
-}
-For \code{method = "embedding"} the torch encoder handles NA internally
-(entity-embedding UNK / numeric pass-through); \code{na_anon} applies only
-to its deterministic fallback. The numeric part of \code{"mahalanobis"}
-uses a zero-contribution approximation for \code{"ignore"} (see Details).}
+(distance contribution 1).
+}}
 
 \item{strategy}{character. Adversary strategy variant:
-\code{"nearest"}, \code{"threshold"}, \code{"topk"}, \code{"topk_threshold"},
-or \code{"nearest_threshold"}.}
+\code{"nearest"} (default) or \code{"topk"}.}
 
-\item{k}{integer or NULL. Used when \code{strategy} is \code{"topk"} or \code{"topk_threshold"}.
+\item{k}{integer or NULL. Used when \code{strategy} is \code{"topk"}.
 Ties at the cut-off distance may yield more than \code{k} candidates.}
-
-\item{threshold}{numeric, list, or NULL. If numeric, absolute distance cutoff in \eqn{[0,1]}.
-If list, supports \code{list(type="quantile", p=...)} where \code{p} is in (0,1).
-The quantile is computed per record within its candidate set (and within-block if blocking is used).}
 
 \item{block}{character or NULL. Optional subset of \code{key} used for exact blocking.
 Distances are computed only within blocks defined by these variables.}
@@ -146,95 +104,18 @@ for the probabilistic method (probability of agreement given true match).}
 \item{u_probs}{named numeric vector or NULL. User-supplied u-probabilities
 for the probabilistic method (probability of agreement given non-match).}
 
-\item{fs_threshold}{numeric or NULL. Log-likelihood ratio threshold for the
-probabilistic method. Records with LR below this are excluded. If NULL,
-defaults to 0 (include all records with positive evidence of match).}
-
-\item{pram_matrix}{named list of matrices. Transition matrices for the PRAM method.
-Each element is a square matrix where entry (i,j) is P(output=j | input=i).
-Names must correspond to variables in \code{key}.}
-
-\item{pred_model}{character. Model for the predictive method:
-\code{"logit"} (default, logistic regression) or \code{"rf"} (random forest).}
-
-\item{pred_se}{logical. For the predictive method with \code{pred_model="logit"},
-use the Fisher-information prediction SE as kernel bandwidth (default TRUE).
-Ignored for \code{"rf"} or when \code{bandwidth} is user-supplied.}
-
 \item{return_matches}{logical. If TRUE, returns candidate indices per record (may be memory-heavy).}
 
 \item{matching}{character. Matching mode: \code{"independent"} (default) scores
 each record independently (classical DBRL), \code{"bijective"} enforces
-one-to-one assignment via the Hungarian algorithm (GDBRL), and \code{"ot"}
-uses entropy-regularized optimal transport (Sinkhorn) for soft global
-assignment producing continuous risk. Bijective matching requires the
-\pkg{clue} package. See Herranz, Nin, Rodriguez & Tassa (2016).}
+one-to-one assignment via the Hungarian algorithm (GDBRL).
+Bijective matching requires the \pkg{clue} package.
+See Herranz, Nin, Rodriguez & Tassa (2016).}
 
 \item{risk_threshold}{numeric. Threshold for classifying records as "high risk"
 and for the \code{privacy_pass} flag (default 0.1). Records with risk above
 this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
 The \code{privacy_pass} flag is TRUE when \code{mean_risk <= risk_threshold}.}
-
-\item{n_trees}{integer. Number of trees for \code{method = "rf"} (default 500).
-Must be at least 10.}
-
-\item{rf_global}{logical. For \code{method = "rf"} with blocking: if
-\code{TRUE}, train a single global forest on all data and restrict
-proximity computation within blocks. If \code{FALSE} (default), train
-a separate forest per block (with automatic global fallback for blocks
-that are too small).}
-
-\item{robust}{logical. For \code{method = "mahalanobis"}: if \code{TRUE}
-(default), use the Minimum Covariance Determinant (MCD) estimator
-via \code{robustbase::covMcd()} for robust covariance estimation,
-with automatic fallback to \code{MASS::cov.rob()} or classical
-\code{cov()} if MCD fails. If \code{FALSE}, use classical covariance.
-Ignored for other methods.}
-
-\item{ot_epsilon}{numeric or NULL. Regularization strength for OT matching.
-Smaller values produce sharper (more bijective-like) assignments;
-larger values produce smoother (more uniform) risk. If \code{NULL}
-(default), auto-calibrated as \code{median(C[C > 0]) * 0.05}.
-Ignored unless \code{matching = "ot"}.}
-
-\item{ot_max_iter}{integer. Maximum Sinkhorn iterations for OT matching
-(default 100). Ignored unless \code{matching = "ot"}.}
-
-\item{emb_latent_dim}{integer or NULL. For \code{method = "embedding"}:
-bottleneck dimension. If \code{NULL} (default), auto-computed as
-\code{max(2, floor(input_dim / 3))} where \code{input_dim} includes
-entity embedding dimensions for categoricals.}
-
-\item{emb_epochs}{integer. For \code{method = "embedding"}: maximum
-training epochs (default 50). Early stopping with patience 5 may
-terminate training earlier.}
-
-\item{emb_global}{logical. For \code{method = "embedding"} with blocking:
-if \code{TRUE}, train a single autoencoder on all query data and
-restrict distance computation within blocks. If \code{FALSE} (default),
-train a separate autoencoder per block (with deterministic fallback for
-blocks smaller than \code{max(30, 5 * latent_dim)}).}
-
-\item{compute_baseline}{logical. If \code{TRUE}, also compute the
-re-identification risk with NO perturbation by linking \code{X} against
-itself (forward, \code{truth = "row"}) under the same method and settings,
-returned in \code{$baseline} (including \code{risk_reduction}). This gives
-a reference point for interpreting the perturbed risk. Doubles the
-computation. Default \code{FALSE}.}
-
-\item{expected_risk}{logical. For \code{method = "pram"} (forward direction)
-only: if \code{TRUE}, also compute a perturbation-aware \emph{expected}
-risk that, holding all other records at their realized values, integrates
-each record's risk over its own PRAM transition distribution
-\eqn{P(x_i \to \cdot)} (assuming per-variable independence). Returned in
-\code{$pram_info$expected_risk}. Default \code{FALSE}.}
-
-\item{Y}{Alias for \code{x_anon}, for naming consistency with the rest of the
-package. If \code{x_anon} is not supplied but \code{Y} is, \code{Y} is used.}
-
-\item{key_vars}{Alias for \code{key}, matching the name used by
-\code{\link{synth_pair}} and \code{\link{rumap}}. If \code{key} is not
-supplied but \code{key_vars} is, \code{key_vars} is used.}
 }
 \value{
 An object of class \code{"recordLinkageRisk"}: a list with components
@@ -255,37 +136,12 @@ assigned by the Hungarian algorithm. In bijective mode,
 \code{risk} and \code{bijective_assigned} reflect the global
 one-to-one assignment, while \code{d_true}, \code{d_min}, and
 \code{d_rank} retain their per-record independent-scoring values
-from the main loop (useful for diagnostics).
-When \code{matching = "ot"}, \code{risk} is the continuous
-transport-weighted risk from the Sinkhorn plan and
-\code{d_rank} is the rank of the true match by transport weight.
-In OT mode, \code{cand_n}, \code{true_in_set}, \code{d_true},
-and \code{d_min} retain their per-record independent-scoring
-values from the main loop (useful for diagnostics).
-When \code{return_matches = TRUE} with OT, the returned
-\code{matches} also reflect independent scoring; use
-\code{transport_plans} for the OT assignment.
-When \code{method} is \code{"rf"} or \code{"embedding"}, an additional
-column \code{nn_similarity} gives the similarity to the nearest
-released record (the pre-recast \code{risk} definition), retained as a
-diagnostic alongside the true-match \code{risk}.}
+from the main loop (useful for diagnostics).}
 \item{overall}{list with aggregate statistics including \code{risk_gini}
 (Gini coefficient of risk concentration).}
 \item{var_importance}{named numeric vector of per-variable importance.}
 \item{direction}{character, \code{"forward"} or \code{"reverse"}.}
 \item{matches}{(optional) list of integer vectors with candidate indices.}
-\item{transport_plans}{(only when \code{matching = "ot"}) list of
-transport plan matrices per block. Each matrix has dimensions
-n_query_in_block x n_search_in_block, with rows summing to
-\code{1/n_query} and columns to \code{1/n_search}.}
-\item{baseline}{(only when \code{compute_baseline = TRUE}) list with
-\code{mean_risk}, \code{max_risk}, \code{per_record_risk},
-\code{pct_high_risk}, and \code{risk_reduction} (baseline minus
-perturbed mean risk) for the no-perturbation reference.}
-\item{pram_info}{(only when \code{method = "pram"}) list with
-\code{variables_used} and \code{mean_transition_prob}; when
-\code{expected_risk = TRUE} it also carries the per-record
-\code{expected_risk} and \code{expected_mean_risk}.}
 }
 When \code{direction = "forward"}, \code{per_record} has one row per
 original record; when \code{"reverse"}, one row per anonymized record.
@@ -297,9 +153,8 @@ post-hoc per-record analysis.
 \description{
 Measures targeted re-identification risk by linking each original record to
 the most similar record(s) in a perturbed dataset using quasi-identifiers.
-Supports deterministic (distance-based), probabilistic (Fellegi-Sunter),
-PRAM (transition-matrix), and predictive (propensity-score-based) linkage
-methods.
+Supports deterministic (Gower distance-based) and probabilistic
+(Fellegi-Sunter) linkage methods.
 }
 \section{Attacker scenario}{
 
@@ -364,155 +219,23 @@ for that pairwise comparison.
 
 The Fellegi-Sunter probabilistic method estimates match (m) and
 non-match (u) probabilities for each variable, then computes
-log-likelihood ratios to score candidate pairs. The m-probabilities
-represent the probability of agreement among true matched pairs, while
-u-probabilities represent agreement among random non-matched pairs.
+log-likelihood ratios to score candidate pairs. Per-record risk is
+the Skinner (2008) posterior identification probability:
+\deqn{P(\text{match} \mid \gamma) = \frac{\Lambda \cdot p}{\Lambda \cdot p + (1 - p)}}
+where \eqn{\Lambda = m(\gamma)/u(\gamma)} is the likelihood ratio and
+\eqn{p = 1/n} is the closed-world prior (one true match among \eqn{n}
+candidates). This is directly interpretable as the probability that the
+attacker's link is correct, given the observed agreement pattern.
 
 User-supplied \code{m_probs} and \code{u_probs} override the supervised
-estimation. The \code{fs_threshold} controls the minimum log-likelihood
-ratio for inclusion in the candidate set.
-}
-
-\section{PRAM method}{
-
-For data protected via Post-Randomization Method (PRAM), risk is computed
-directly from transition matrices. For each original record, the probability
-of producing each anonymized record is computed as the product of per-variable
-transition probabilities. This avoids distance computation entirely.
-}
-
-\section{Predictive method}{
-
-When \code{method = "predictive"}, a propensity model is fit on the stacked
-original + anonymized data to predict record origin (original = 1,
-synthetic = 0) from the quasi-identifiers. Records are then linked in the
-1D propensity-score space. The propensity score
-\eqn{e(x) = P(\text{original} \mid \text{QIs} = x)} projects the multivariate
-QI space into a single dimension that maximally separates the two datasets.
-
-When \code{pred_se = TRUE} (default) and \code{pred_model = "logit"}, the
-bandwidth for kernel weighting is derived from the Fisher information
-matrix of the logistic regression, giving each record a bandwidth equal to
-its prediction standard error. This follows the principle from
-Gaffert et al. (2015): records where the model is uncertain get wider
-kernels, while confidently classified records get narrow kernels (higher
-individual risk).
-}
-
-\section{RF method}{
-
-When \code{method = "rf"}, a random forest (ranger) is trained on the
-stacked original + anonymized records to learn a supervised similarity.
-Terminal-node co-occurrence across trees yields a proximity matrix in \eqn{[0, 1]}.
-Each original record is linked to the anonymized record with highest
-proximity.  Per-block RF is used by default; set \code{rf_global = TRUE}
-to train a single global forest and restrict proximity lookups within blocks.
-Blocks with fewer than 2 records per class fall back to a global RF
-second pass.  Bijective matching is supported via the existing
-\code{matching = "bijective"} mechanism with \code{maximize = TRUE}.
-
-Note: \code{risk} for the RF method is the re-identification probability of
-the \emph{true} match within the attacker's candidate set (consistent with
-the distance/probability methods), obtained by treating the proximity as a
-similarity and routing it through the shared candidate-set / risk-weighting
-logic. The nearest-neighbour proximity (the former \code{risk}) is retained
-in the \code{nn_similarity} column of \code{per_record}. The \code{d_min}
-and \code{d_true} fields still store proximity values (higher = more
-similar), inverted from the distance convention used by other methods.
-}
-
-\section{RBRL method}{
-
-When \code{method = "rbrl"}, rank-based record linkage is used following
-Muralidhar & Domingo-Ferrer (2016). Each numeric/ordinal variable is
-replaced by its normalized rank (within each dataset independently),
-yielding values in \eqn{[0, 1]}. Linkage distance is the weighted mean absolute
-rank difference across variables. Nominal variables use exact matching
-(0 if equal, 1 if not), consistent with Gower distance.
-
-RBRL is robust to monotone perturbations (additive noise, rounding,
-top/bottom coding) because rank order is preserved under such
-transformations. This makes it particularly useful for assessing risk
-when the anonymization method preserves variable ordering.
-All \code{strategy}, \code{risk_weighting}, \code{matching},
-and \code{block} parameters work with RBRL.
-}
-
-\section{Mahalanobis method}{
-
-When \code{method = "mahalanobis"}, distances are computed using the
-Mahalanobis metric, which accounts for correlations between variables.
-Records that appear 'close' in Gower distance may be 'far' in
-Mahalanobis distance if their difference goes against the data's
-correlation structure, and vice versa.
-
-By default (\code{robust = TRUE}), the covariance matrix is estimated
-using the Minimum Covariance Determinant (MCD) via
-\code{robustbase::covMcd()}, with fallback to \code{MASS::cov.rob()}
-then classical \code{cov()} if MCD fails. The covariance is always
-estimated from the original data regardless of \code{direction},
-modelling an attacker who knows the population covariance structure
-(Templ & Meindl, 2008).
-
-For mixed data, numeric/ordinal variables use Mahalanobis distance
-(normalized by a chi-squared threshold) while nominal variables use
-Gower-style exact matching. The two components are combined as a
-weighted average, where the weight is the proportion of each variable
-type. For purely nominal data, use \code{method = "deterministic"}
-instead.
-
-Ordinal factors are converted to integer codes (1, 2, 3, ...),
-assuming approximately equal spacing between levels.
-}
-
-\section{OT matching}{
-
-When \code{matching = "ot"}, an entropy-regularized optimal transport
-plan replaces the hard assignment of bijective matching.
-The Sinkhorn-Knopp algorithm computes a transport plan \eqn{P}
-that minimizes
-\deqn{
-\sum_{ij} P_{ij} C_{ij} + \varepsilon \sum_{ij} P_{ij} \log P_{ij}
-}
-subject to marginal constraints, where \eqn{C} is the cost matrix
-from the chosen \code{method} and \eqn{\varepsilon} is the
-regularization strength (\code{ot_epsilon}).
-
-Risk for record \eqn{i} is defined as
-\eqn{P_{i,\text{true}} \times n_{\text{query}}}, where
-\eqn{P_{i,\text{true}}} is the transport weight from query record
-\eqn{i} to its true match. Under uniform random matching this gives
-\eqn{1/n_{\text{search}}} (the same baseline as independent matching).
-
-OT matching produces \emph{continuous} risk scores in \eqn{[0, 1]},
-interpolating between bijective matching (hard one-to-one assignment)
-and uniform random matching. As \eqn{\varepsilon \to 0}, the transport
-plan converges to the Hungarian assignment; as
-\eqn{\varepsilon \to \infty}, it approaches a uniform plan where
-every record gets equal risk \eqn{1/n_{\text{search}}}.
-If \code{ot_epsilon = NULL} (default), epsilon is auto-calibrated
-from the cost matrix as \code{median(C[C > 0]) * 0.05}.
-Note that the auto-calibrated epsilon depends on the cost scale,
-which varies across methods (e.g., Gower distances in \eqn{[0,1]}
-vs.\ probabilistic log-likelihood ratios). Typical useful values
-range from 0.001 (nearly deterministic) to 1 (nearly uniform).
-
-The OT attacker model represents an adversary who performs a
-global soft assignment, hedging uncertainty across multiple
-candidate matches via a maximum-entropy prior over assignments.
-This is appropriate when the attacker is uncertain about the
-true one-to-one mapping but still optimizes globally.
-The resulting risk is a \emph{relative risk index} proportional
-to the attacker's confidence, not a re-identification probability
-in the frequentist sense.
+estimation. \code{risk_weighting} does not affect
+the posterior risk; it controls candidate set diagnostics only
+(\code{cand_n}, \code{true_in_set}).
 
 \strong{When to use which matching mode:}
 Use \code{"independent"} for classical per-record risk (DBRL).
 Use \code{"bijective"} when the attacker is known to perform
 a one-to-one assignment (GDBRL; binary risk).
-Use \code{"ot"} for a global assignment that yields continuous
-risk, or to explore the sensitivity of risk to the assignment
-model via the \code{ot_epsilon} parameter.
 }
 
 \section{Softmax risk weighting}{
@@ -522,23 +245,6 @@ attribution probability via:
 \deqn{w_j = \frac{\exp(-\kappa \cdot d_j)}{\sum_k \exp(-\kappa \cdot d_k)}}
 The temperature \code{kappa} is auto-calibrated from the distance range
 if not supplied. This replaces the uniform \eqn{1/|candidate\_set|} risk.
-}
-
-\section{Kernel risk weighting}{
-
-When \code{risk_weighting = "kernel"}, donor probabilities are computed
-via kernel-weighted distances. Each candidate \eqn{j} receives weight
-proportional to a kernel function evaluated at its scaled distance:
-\deqn{w_j = K(d_j / h) \Big/ \sum_k K(d_k / h)}
-where \eqn{h} is a bandwidth and \eqn{K} is one of:
-\itemize{
-\item \strong{gaussian} (default): \eqn{K(u) = \exp(-u^2/2)}
-\item \strong{epanechnikov}: \eqn{K(u) = \max(0, 1 - u^2) \cdot 3/4}
-\item \strong{tricube}: \eqn{K(u) = \max(0, (1 - |u|^3)^3) \cdot 70/81}
-}
-With compact kernels (Epanechnikov, tricube), candidates beyond the
-bandwidth receive exactly zero weight and are effectively excluded.
-The bandwidth is auto-selected via Silverman's rule if not supplied.
 }
 
 \section{Direction}{
@@ -551,38 +257,9 @@ With \code{direction = "reverse"} the loop runs over anonymized records,
 searching for matches in the original data. This gives a risk profile of
 the data to be released: each row in \code{per_record} corresponds to a
 released record and its probability of being correctly linked back to the
-original. Deterministic, probabilistic, and predictive methods are symmetric
+original. Deterministic and probabilistic methods are symmetric
 (distance/agreement does not depend on direction), so only the evaluation
-perspective changes. The PRAM method is asymmetric: the transition matrix
-\eqn{P(\text{output} \mid \text{input})} is looked up with swapped roles.
-}
-
-\section{Embedding method}{
-
-The \code{method = "embedding"} approach trains an autoencoder with entity
-embeddings (Guo & Berkhahn, 2016) on the original (query) data, projects
-both query and search records into a latent space, and measures
-re-identification risk via Euclidean distance. This captures nonlinear
-dependencies between quasi-identifiers that Gower and Mahalanobis distances
-may miss.
-
-As with the RF method, \code{risk} is the re-identification probability of
-the \emph{true} match within the attacker's candidate set (the shared
-candidate-set / risk-weighting logic applied to the latent distance); the
-nearest-neighbour similarity (\code{1 -} the smallest latent distance, the
-former \code{risk}) is kept in the \code{nn_similarity} column of
-\code{per_record}.
-
-The autoencoder trains only on query data, modeling an attacker who knows
-the population structure but not the specific anonymization. Distances are
-normalized to \eqn{[0, 1]} using the 97.5th percentile of within-query pairwise
-distances. Variable importance is permutation-based: each variable is
-shuffled and the mean embedding shift is measured.
-
-Requires the \pkg{torch} package together with its C++ backend (libtorch),
-which is downloaded once via \code{torch::install_torch()}. Entity embeddings
-handle mixed data naturally; all-numeric and all-categorical datasets are
-supported.
+perspective changes.
 }
 
 \examples{
@@ -617,17 +294,6 @@ res2 <- recordLinkage(x, x_anon, key = c("age","sex","region"),
                       risk_weighting = "softmax")
 print(res2)
 
-# Kernel-weighted risk (Gaussian kernel, auto bandwidth)
-res2b <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-                       risk_weighting = "kernel")
-print(res2b)
-
-# Kernel weighting with Epanechnikov kernel
-res2c <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-                       risk_weighting = "kernel",
-                       kernel = "epanechnikov")
-print(res2c)
-
 # Probabilistic (Fellegi-Sunter) method
 res3 <- recordLinkage(x, x_anon, key = c("age","sex","region"),
                       method = "probabilistic")
@@ -637,17 +303,6 @@ print(res3)
 pair <- synth_pair(x, x_anon, key_vars = c("age","sex","region"))
 res4 <- recordLinkage(pair)
 print(res4)
-
-# Predictive method (propensity-score-based)
-res5 <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-                      method = "predictive")
-print(res5)
-plot(res5, which = 4)  # propensity distributions
-
-# Optimal transport matching (continuous risk via Sinkhorn)
-res_ot <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-                        matching = "ot")
-print(res_ot)
 
 # Plot risk distribution
 plot(res1)
@@ -666,22 +321,9 @@ Domingo-Ferrer, J., & Torra, V. (2002). Validating distance-based record
 linkage with probabilistic record linkage. Lecture Notes in Computer
 Science, 2504, 207-215. Springer.
 
-Gaffert, P., Meinfelder, F., & Bosch, V. (2015). Towards an MI-proper
-Predictive Mean Matching. Discussion Paper, University of Bamberg.
-
-Pagliuca, D., & Seri, G. (1999). Some results of individual ranking
-method on the system of enterprise accounts annual survey (Esprit SDC Project,
-Deliverable MI-3/D2). Unpublished technical report.
-
-Herranz, J., Nin, J., Rodriguez, P., & Tassa, T. (2016). Revisiting
+Herranz, J., Nin, J., Rodriguez, P., & Tassa, T. (2015). Revisiting
 distance-based record linkage for privacy-preserving release of statistical
 datasets. Data & Knowledge Engineering, 100, 78-93.
-
-Cuturi, M. (2013). Sinkhorn Distances: Lightspeed Computation of Optimal
-Transport. Advances in Neural Information Processing Systems, 26.
-
-Guo, C., & Berkhahn, F. (2016). Entity Embeddings of Categorical Variables.
-arXiv preprint arXiv:1604.06737.
 }
 \seealso{
 \code{\link{individual_risk}}, \code{\link{dcr}},

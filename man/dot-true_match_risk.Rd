@@ -12,10 +12,7 @@
   strategy,
   risk_weighting,
   k = NULL,
-  threshold = NULL,
-  kappa = NULL,
-  bandwidth = NULL,
-  kernel = "gaussian"
+  kappa = NULL
 )
 }
 \arguments{
@@ -33,8 +30,7 @@ match (similarity / likelihood ratio / proximity); the scores are then
 turned into a pseudo-distance \code{max(scores) - scores}. \code{FALSE} for
 distances.}
 
-\item{strategy, risk_weighting, k, threshold, kappa, bandwidth, kernel}{as in
-\code{\link{recordLinkage}}.}
+\item{strategy, risk_weighting, k, kappa}{as in \code{\link{recordLinkage}}.}
 }
 \value{
 list with \code{risk}, \code{cand_n}, \code{true_in_set}, \code{guess}.
@@ -43,8 +39,7 @@ list with \code{risk}, \code{cand_n}, \code{true_in_set}, \code{guess}.
 Shared back-end for the per-record re-identification risk: given the per-
 candidate scores for one query record, build the attacker's guess set and
 return the (weighted) probability mass on the \emph{true} match. This is the
-exact logic the deterministic / probabilistic / pram / predictive / rbrl /
-mahalanobis methods apply inline; the rf and embedding methods route their
-scores through it so that all eight methods share one risk definition.
+exact logic the deterministic and probabilistic methods apply inline so
+that both methods share one risk definition.
 }
 \keyword{internal}

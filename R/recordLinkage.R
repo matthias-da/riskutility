@@ -63,61 +63,23 @@
 #' @section Probabilistic method:
 #' The Fellegi-Sunter probabilistic method estimates match (m) and
 #' non-match (u) probabilities for each variable, then computes
-#' log-likelihood ratios to score candidate pairs. The m-probabilities
-#' represent the probability of agreement among true matched pairs, while
-#' u-probabilities represent agreement among random non-matched pairs.
+#' log-likelihood ratios to score candidate pairs. Per-record risk is
+#' the Skinner (2008) posterior identification probability:
+#' \deqn{P(\text{match} \mid \gamma) = \frac{\Lambda \cdot p}{\Lambda \cdot p + (1 - p)}}
+#' where \eqn{\Lambda = m(\gamma)/u(\gamma)} is the likelihood ratio and
+#' \eqn{p = 1/n} is the closed-world prior (one true match among \eqn{n}
+#' candidates). This is directly interpretable as the probability that the
+#' attacker's link is correct, given the observed agreement pattern.
 #'
 #' User-supplied \code{m_probs} and \code{u_probs} override the supervised
-#' estimation. The \code{fs_threshold} controls the minimum log-likelihood
-#' ratio for inclusion in the candidate set.
-#'
-#' @section OT matching:
-#' When \code{matching = "ot"}, an entropy-regularized optimal transport
-#' plan replaces the hard assignment of bijective matching.
-#' The Sinkhorn-Knopp algorithm computes a transport plan \eqn{P}
-#' that minimizes
-#' \deqn{
-#' \sum_{ij} P_{ij} C_{ij} + \varepsilon \sum_{ij} P_{ij} \log P_{ij}
-#' }
-#' subject to marginal constraints, where \eqn{C} is the cost matrix
-#' from the chosen \code{method} and \eqn{\varepsilon} is the
-#' regularization strength (\code{ot_epsilon}).
-#'
-#' Risk for record \eqn{i} is defined as
-#' \eqn{P_{i,\text{true}} \times n_{\text{query}}}, where
-#' \eqn{P_{i,\text{true}}} is the transport weight from query record
-#' \eqn{i} to its true match. Under uniform random matching this gives
-#' \eqn{1/n_{\text{search}}} (the same baseline as independent matching).
-#'
-#' OT matching produces \emph{continuous} risk scores in \eqn{[0, 1]},
-#' interpolating between bijective matching (hard one-to-one assignment)
-#' and uniform random matching. As \eqn{\varepsilon \to 0}, the transport
-#' plan converges to the Hungarian assignment; as
-#' \eqn{\varepsilon \to \infty}, it approaches a uniform plan where
-#' every record gets equal risk \eqn{1/n_{\text{search}}}.
-#' If \code{ot_epsilon = NULL} (default), epsilon is auto-calibrated
-#' from the cost matrix as \code{median(C[C > 0]) * 0.05}.
-#' Note that the auto-calibrated epsilon depends on the cost scale,
-#' which varies across methods (e.g., Gower distances in \eqn{[0,1]}
-#' vs.\ probabilistic log-likelihood ratios). Typical useful values
-#' range from 0.001 (nearly deterministic) to 1 (nearly uniform).
-#'
-#' The OT attacker model represents an adversary who performs a
-#' global soft assignment, hedging uncertainty across multiple
-#' candidate matches via a maximum-entropy prior over assignments.
-#' This is appropriate when the attacker is uncertain about the
-#' true one-to-one mapping but still optimizes globally.
-#' The resulting risk is a \emph{relative risk index} proportional
-#' to the attacker's confidence, not a re-identification probability
-#' in the frequentist sense.
+#' estimation. \code{risk_weighting} does not affect
+#' the posterior risk; it controls candidate set diagnostics only
+#' (\code{cand_n}, \code{true_in_set}).
 #'
 #' \strong{When to use which matching mode:}
 #' Use \code{"independent"} for classical per-record risk (DBRL).
 #' Use \code{"bijective"} when the attacker is known to perform
 #' a one-to-one assignment (GDBRL; binary risk).
-#' Use \code{"ot"} for a global assignment that yields continuous
-#' risk, or to explore the sensitivity of risk to the assignment
-#' model via the \code{ot_epsilon} parameter.
 #'
 #' @section Softmax risk weighting:
 #' When \code{risk_weighting = "softmax"}, closer candidates receive higher
@@ -125,21 +87,6 @@
 #' \deqn{w_j = \frac{\exp(-\kappa \cdot d_j)}{\sum_k \exp(-\kappa \cdot d_k)}}
 #' The temperature \code{kappa} is auto-calibrated from the distance range
 #' if not supplied. This replaces the uniform \eqn{1/|candidate\_set|} risk.
-#'
-#' @section Kernel risk weighting:
-#' When \code{risk_weighting = "kernel"}, donor probabilities are computed
-#' via kernel-weighted distances. Each candidate \eqn{j} receives weight
-#' proportional to a kernel function evaluated at its scaled distance:
-#' \deqn{w_j = K(d_j / h) \Big/ \sum_k K(d_k / h)}
-#' where \eqn{h} is a bandwidth and \eqn{K} is one of:
-#' \itemize{
-#'   \item \strong{gaussian} (default): \eqn{K(u) = \exp(-u^2/2)}
-#'   \item \strong{epanechnikov}: \eqn{K(u) = \max(0, 1 - u^2) \cdot 3/4}
-#'   \item \strong{tricube}: \eqn{K(u) = \max(0, (1 - |u|^3)^3) \cdot 70/81}
-#' }
-#' With compact kernels (Epanechnikov, tricube), candidates beyond the
-#' bandwidth receive exactly zero weight and are effectively excluded.
-#' The bandwidth is auto-selected via Silverman's rule if not supplied.
 #'
 #' @section Direction:
 #' By default (\code{direction = "forward"}) the function loops over original
@@ -157,11 +104,6 @@
 #' @param X data.frame or \code{\link{synth_pair}} object. Original microdata.
 #' @param x_anon data.frame. Perturbed/anonymized microdata.
 #' @param key character. Names of quasi-identifier variables used for linkage.
-#' @param Y Alias for \code{x_anon}, for naming consistency with the rest of the
-#'   package. If \code{x_anon} is not supplied but \code{Y} is, \code{Y} is used.
-#' @param key_vars Alias for \code{key}, matching the name used by
-#'   \code{\link{synth_pair}} and \code{\link{rumap}}. If \code{key} is not
-#'   supplied but \code{key_vars} is, \code{key_vars} is used.
 #' @param method character. Linkage method: \code{"deterministic"} (default,
 #'   weighted Gower distance) or \code{"probabilistic"} (Fellegi-Sunter
 #'   log-likelihood ratios).
@@ -171,15 +113,11 @@
 #'   \code{"reverse"} loops over anonymized records and searches in the
 #'   original data, answering "how disclosive is each released record?".
 #' @param risk_weighting character. How to weight candidates: \code{"uniform"}
-#'   (default, 1/|set|), \code{"softmax"} (exponential distance-weighting),
-#'   or \code{"kernel"} (kernel-weighted donor probabilities).
+#'   (default, 1/|set|) or \code{"softmax"} (exponential distance-weighting).
+#'   Ignored for \code{method = "probabilistic"}, which always reports the
+#'   Skinner (2008) posterior (see section \emph{Probabilistic method}).
 #' @param kappa numeric or NULL. Temperature parameter for softmax weighting.
 #'   If NULL (default), auto-calibrated as \code{2 / range(distances)}.
-#' @param bandwidth numeric or NULL. Bandwidth for kernel weighting.
-#'   If NULL (default), auto-selected via Silverman's rule on the candidate
-#'   distances.
-#' @param kernel character. Kernel function for kernel weighting:
-#'   \code{"gaussian"} (default), \code{"epanechnikov"}, or \code{"tricube"}.
 #' @param truth character. How to define the true match for scoring:
 #'   one of \code{"row"} (default) or \code{"id"}.
 #'   \code{"row"} requires equal row counts and assumes row \eqn{i}
@@ -204,46 +142,25 @@
 #'       (distance contribution 1).
 #'   }
 #' @param strategy character. Adversary strategy variant:
-#'   \code{"nearest"}, \code{"threshold"}, \code{"topk"}, \code{"topk_threshold"},
-#'   or \code{"nearest_threshold"}.
-#' @param k integer or NULL. Used when \code{strategy} is \code{"topk"} or \code{"topk_threshold"}.
+#'   \code{"nearest"} (default) or \code{"topk"}.
+#' @param k integer or NULL. Used when \code{strategy} is \code{"topk"}.
 #'   Ties at the cut-off distance may yield more than \code{k} candidates.
-#' @param threshold numeric, list, or NULL. If numeric, absolute distance cutoff in \eqn{[0,1]}.
-#'   If list, supports \code{list(type="quantile", p=...)} where \code{p} is in (0,1).
-#'   The quantile is computed per record within its candidate set (and within-block if blocking is used).
 #' @param block character or NULL. Optional subset of \code{key} used for exact blocking.
 #'   Distances are computed only within blocks defined by these variables.
 #' @param m_probs named numeric vector or NULL. User-supplied m-probabilities
 #'   for the probabilistic method (probability of agreement given true match).
 #' @param u_probs named numeric vector or NULL. User-supplied u-probabilities
 #'   for the probabilistic method (probability of agreement given non-match).
-#' @param fs_threshold numeric or NULL. Log-likelihood ratio threshold for the
-#'   probabilistic method. Records with LR below this are excluded. If NULL,
-#'   defaults to 0 (include all records with positive evidence of match).
 #' @param return_matches logical. If TRUE, returns candidate indices per record (may be memory-heavy).
 #' @param matching character. Matching mode: \code{"independent"} (default) scores
 #'   each record independently (classical DBRL), \code{"bijective"} enforces
-#'   one-to-one assignment via the Hungarian algorithm (GDBRL), and \code{"ot"}
-#'   uses entropy-regularized optimal transport (Sinkhorn) for soft global
-#'   assignment producing continuous risk. Bijective matching requires the
-#'   \pkg{clue} package. See Herranz, Nin, Rodriguez & Tassa (2016).
+#'   one-to-one assignment via the Hungarian algorithm (GDBRL).
+#'   Bijective matching requires the \pkg{clue} package.
+#'   See Herranz, Nin, Rodriguez & Tassa (2016).
 #' @param risk_threshold numeric. Threshold for classifying records as "high risk"
 #'   and for the \code{privacy_pass} flag (default 0.1). Records with risk above
 #'   this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
 #'   The \code{privacy_pass} flag is TRUE when \code{mean_risk <= risk_threshold}.
-#' @param ot_epsilon numeric or NULL. Regularization strength for OT matching.
-#'   Smaller values produce sharper (more bijective-like) assignments;
-#'   larger values produce smoother (more uniform) risk. If \code{NULL}
-#'   (default), auto-calibrated as \code{median(C[C > 0]) * 0.05}.
-#'   Ignored unless \code{matching = "ot"}.
-#' @param ot_max_iter integer. Maximum Sinkhorn iterations for OT matching
-#'   (default 100). Ignored unless \code{matching = "ot"}.
-#' @param compute_baseline logical. If \code{TRUE}, also compute the
-#'   re-identification risk with NO perturbation by linking \code{X} against
-#'   itself (forward, \code{truth = "row"}) under the same method and settings,
-#'   returned in \code{$baseline} (including \code{risk_reduction}). This gives
-#'   a reference point for interpreting the perturbed risk. Doubles the
-#'   computation. Default \code{FALSE}.
 #' @param ... additional arguments passed to methods.
 #' @author Matthias Templ and Roman Müller
 #'
@@ -265,29 +182,12 @@
 #'       \code{risk} and \code{bijective_assigned} reflect the global
 #'       one-to-one assignment, while \code{d_true}, \code{d_min}, and
 #'       \code{d_rank} retain their per-record independent-scoring values
-#'       from the main loop (useful for diagnostics).
-#'       When \code{matching = "ot"}, \code{risk} is the continuous
-#'       transport-weighted risk from the Sinkhorn plan and
-#'       \code{d_rank} is the rank of the true match by transport weight.
-#'       In OT mode, \code{cand_n}, \code{true_in_set}, \code{d_true},
-#'       and \code{d_min} retain their per-record independent-scoring
-#'       values from the main loop (useful for diagnostics).
-#'       When \code{return_matches = TRUE} with OT, the returned
-#'       \code{matches} also reflect independent scoring; use
-#'       \code{transport_plans} for the OT assignment.}
+#'       from the main loop (useful for diagnostics).}
 #'     \item{overall}{list with aggregate statistics including \code{risk_gini}
 #'       (Gini coefficient of risk concentration).}
 #'     \item{var_importance}{named numeric vector of per-variable importance.}
 #'     \item{direction}{character, \code{"forward"} or \code{"reverse"}.}
 #'     \item{matches}{(optional) list of integer vectors with candidate indices.}
-#'     \item{transport_plans}{(only when \code{matching = "ot"}) list of
-#'       transport plan matrices per block. Each matrix has dimensions
-#'       n_query_in_block x n_search_in_block, with rows summing to
-#'       \code{1/n_query} and columns to \code{1/n_search}.}
-#'     \item{baseline}{(only when \code{compute_baseline = TRUE}) list with
-#'       \code{mean_risk}, \code{max_risk}, \code{per_record_risk},
-#'       \code{pct_high_risk}, and \code{risk_reduction} (baseline minus
-#'       perturbed mean risk) for the no-perturbation reference.}
 #'   }
 #'   When \code{direction = "forward"}, \code{per_record} has one row per
 #'   original record; when \code{"reverse"}, one row per anonymized record.
@@ -328,17 +228,6 @@
 #'                       risk_weighting = "softmax")
 #' print(res2)
 #'
-#' # Kernel-weighted risk (Gaussian kernel, auto bandwidth)
-#' res2b <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-#'                        risk_weighting = "kernel")
-#' print(res2b)
-#'
-#' # Kernel weighting with Epanechnikov kernel
-#' res2c <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-#'                        risk_weighting = "kernel",
-#'                        kernel = "epanechnikov")
-#' print(res2c)
-#'
 #' # Probabilistic (Fellegi-Sunter) method
 #' res3 <- recordLinkage(x, x_anon, key = c("age","sex","region"),
 #'                       method = "probabilistic")
@@ -348,11 +237,6 @@
 #' pair <- synth_pair(x, x_anon, key_vars = c("age","sex","region"))
 #' res4 <- recordLinkage(pair)
 #' print(res4)
-#'
-#' # Optimal transport matching (continuous risk via Sinkhorn)
-#' res_ot <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-#'                         matching = "ot")
-#' print(res_ot)
 #'
 #' # Plot risk distribution
 #' plot(res1)
@@ -373,9 +257,6 @@
 #' Herranz, J., Nin, J., Rodriguez, P., & Tassa, T. (2015). Revisiting
 #' distance-based record linkage for privacy-preserving release of statistical
 #' datasets. Data & Knowledge Engineering, 100, 78-93.
-#'
-#' Cuturi, M. (2013). Sinkhorn Distances: Lightspeed Computation of Optimal
-#' Transport. Advances in Neural Information Processing Systems, 26.
 #'
 #' @seealso \code{\link{individual_risk}}, \code{\link{dcr}},
 #'   \code{\link{nndr}}
@@ -405,51 +286,29 @@ recordLinkage.default <- function(X,
                                   key,
                                   method = c("deterministic", "probabilistic"),
                                   direction = c("forward", "reverse"),
-                                  risk_weighting = c("uniform", "softmax",
-                                                     "kernel"),
+                                  risk_weighting = c("uniform", "softmax"),
                                   kappa = NULL,
-                                  bandwidth = NULL,
-                                  kernel = c("gaussian", "epanechnikov",
-                                             "tricube"),
                                   truth = c("row", "id"),
                                   id = NULL,
                                   type = NULL,
                                   weights = NULL,
                                   na_anon = c("ignore", "match", "mismatch"),
-                                  strategy = c("nearest", "threshold", "topk",
-                                               "topk_threshold",
-                                               "nearest_threshold"),
+                                  strategy = c("nearest", "topk"),
                                   k = NULL,
-                                  threshold = NULL,
                                   block = NULL,
                                   m_probs = NULL,
                                   u_probs = NULL,
-                                  fs_threshold = NULL,
                                   return_matches = FALSE,
-                                  matching = c("independent", "bijective", "ot"),
+                                  matching = c("independent", "bijective"),
                                   risk_threshold = 0.1,
-                                  ot_epsilon = NULL,
-                                  ot_max_iter = 100L,
-                                  compute_baseline = FALSE,
-                                  Y = NULL,
-                                  key_vars = NULL,
                                   ...) {
 
-    # Accept the package-wide names 'Y' (comparison/anonymized data) and
-    # 'key_vars' as aliases for the local 'x_anon' / 'key'. The original
-    # names remain valid (including positionally).
-    if (missing(x_anon) && !is.null(Y))        x_anon <- Y
-    if (missing(key)    && !is.null(key_vars)) key    <- key_vars
-    if (missing(x_anon))
-        stop("Provide the comparison data via 'Y' or 'x_anon'.", call. = FALSE)
-    if (missing(key))
-        stop("Provide the linkage key variables via 'key_vars' or 'key'.",
-             call. = FALSE)
+    stopifnot(!missing(x_anon))
+    stopifnot(!missing(key))
 
     method <- match.arg(method)
     direction <- match.arg(direction)
     risk_weighting <- match.arg(risk_weighting)
-    kernel <- match.arg(kernel)
     truth <- match.arg(truth)
     na_anon <- match.arg(na_anon)
     strategy <- match.arg(strategy)
@@ -464,16 +323,7 @@ recordLinkage.default <- function(X,
                     "'strategy' applies only to independent-scoring diagnostics.")
         if (risk_weighting != "uniform")
             message("Note: bijective matching produces binary risk (0/1); ",
-                    "'risk_weighting' applies only to independent-scoring diagnostics.")
-    }
-
-    if (matching == "ot") {
-        if (strategy != "nearest")
-            message("Note: OT matching uses the full candidate set; ",
-                    "'strategy' applies only to independent-scoring diagnostics.")
-        if (risk_weighting != "uniform")
-            message("Note: matching = 'ot' computes risk from the transport plan; ",
-                    "'risk_weighting' applies only to independent-scoring diagnostics.")
+                    "'risk_weighting' has no effect.")
     }
 
     stopifnot(is.data.frame(X), is.data.frame(x_anon))
@@ -591,9 +441,7 @@ recordLinkage.default <- function(X,
         }
         m_probs <- .chk_prob(m_probs, "m_probs")
         u_probs <- .chk_prob(u_probs, "u_probs")
-        if (is.null(fs_threshold)) fs_threshold <- 0
-        fs_params <- list(m_probs = m_probs, u_probs = u_probs,
-                          threshold_used = fs_threshold)
+        fs_params <- list(m_probs = m_probs, u_probs = u_probs)
     }
 
     # precompute per-variable tolerance for probabilistic method ----
@@ -635,7 +483,7 @@ recordLinkage.default <- function(X,
     d_rank <- rep(NA_integer_, n_query)
     matches <- if (isTRUE(return_matches)) vector("list", n_query) else NULL
     # Bijective matching: cache full score vectors per record
-    score_cache <- if (matching %in% c("bijective", "ot")) vector("list", n_query) else NULL
+    score_cache <- if (matching == "bijective") vector("list", n_query) else NULL
     # Per-variable distance accumulator (deterministic only)
     var_dist_acc <- if (method == "deterministic") {
         setNames(numeric(length(key)), key)
@@ -670,45 +518,20 @@ recordLinkage.default <- function(X,
                 d_true[i] <- lr[j_in]
                 # Rank by descending LR (rank 1 = best match)
                 d_rank[i] <- as.integer(rank(-lr, ties.method = "min")[j_in])
+                # Skinner (2008) posterior: P(true match | gamma) = LR*p / (LR*p + (1-p))
+                # Prior p = 1/|cand|: one true match among candidates (closed-world).
+                p_prior  <- 1 / length(cand)
+                lr_ratio <- exp(lr[j_in])
+                risk[i]  <- lr_ratio * p_prior / (lr_ratio * p_prior + (1 - p_prior))
             }
+            # else: risk[i] stays 0 (true match not in search block)
 
-            # Candidate set: records above threshold
-            above <- which(lr >= fs_threshold)
-            if (length(above) == 0L) {
-                risk[i] <- 0
-                cand_n[i] <- 0L
-                true_in_set[i] <- FALSE
-                if (isTRUE(return_matches)) matches[[i]] <- integer(0)
-                next
-            }
+            # Candidate set diagnostics (records with positive LR)
+            above <- which(lr >= 0)
+            cand_n[i] <- length(above)
+            true_in_set[i] <- (!is.na(j_in)) && (tpos %in% cand[above])
 
-            guess <- cand[above]
-            cand_n[i] <- length(guess)
-            true_in_set[i] <- (tpos %in% guess)
-
-            if (!true_in_set[i]) {
-                risk[i] <- 0
-            } else if (risk_weighting == "softmax") {
-                # Softmax over LRs (higher LR = higher risk)
-                lr_above <- lr[above]
-                lr_shifted <- lr_above - max(lr_above)
-                w <- exp(lr_shifted)
-                w <- w / sum(w)
-                true_local <- match(tpos, guess)
-                risk[i] <- w[true_local]
-            } else if (risk_weighting == "kernel") {
-                # Kernel weighting over LRs
-                # Transform LRs to distances: negate so higher LR = smaller d
-                lr_above <- lr[above]
-                pseudo_d <- max(lr_above) - lr_above
-                w <- .kernel_risk(pseudo_d, bandwidth, kernel)
-                true_local <- match(tpos, guess)
-                risk[i] <- w[true_local]
-            } else {
-                risk[i] <- 1 / cand_n[i]
-            }
-
-            if (isTRUE(return_matches)) matches[[i]] <- guess
+            if (isTRUE(return_matches)) matches[[i]] <- cand[above]
             if (!is.null(score_cache))
                 score_cache[[i]] <- list(cand = cand, scores = lr,
                                           maximize = TRUE)
@@ -746,7 +569,7 @@ recordLinkage.default <- function(X,
         # attacker guess set
         guess <- .choose_guess_set(
             d = di, cand = cand, strategy = strategy,
-            k = k, threshold = threshold
+            k = k
         )
 
         cand_n[i] <- length(guess)
@@ -765,12 +588,6 @@ recordLinkage.default <- function(X,
             # Softmax distance-weighted risk
             guess_local_idx <- match(guess, cand)
             w <- .softmax_risk(di[guess_local_idx], kappa)
-            true_local <- match(true_idx[i], guess)
-            risk[i] <- w[true_local]
-        } else if (risk_weighting == "kernel") {
-            # Kernel-weighted donor risk
-            guess_local_idx <- match(guess, cand)
-            w <- .kernel_risk(di[guess_local_idx], bandwidth, kernel)
             true_local <- match(true_idx[i], guess)
             risk[i] <- w[true_local]
         } else {
@@ -797,15 +614,6 @@ recordLinkage.default <- function(X,
                 if (a > 0L) a else integer(0)
             })
         }
-    }
-
-    if (matching == "ot") {
-        ot_res <- .solve_ot(score_cache, true_idx, n_query,
-                             split_search, blk_query,
-                             epsilon = ot_epsilon, max_iter = ot_max_iter)
-        risk <- ot_res$risk
-        d_rank <- ot_res$d_rank
-        transport_plans <- ot_res$transport_plans
     }
 
     # risk_band ----
@@ -876,60 +684,17 @@ recordLinkage.default <- function(X,
             na_anon = na_anon,
             strategy = strategy,
             k = k,
-            threshold = threshold,
             block = block,
             direction = direction,
             risk_weighting = risk_weighting,
             kappa = kappa,
-            bandwidth = bandwidth,
-            kernel = kernel,
             matching = matching,
-            risk_threshold = risk_threshold,
-            ot_epsilon = if (matching == "ot") ot_epsilon else NULL,
-            ot_max_iter = if (matching == "ot") ot_max_iter else NULL,
-            compute_baseline = compute_baseline
+            risk_threshold = risk_threshold
         )
     )
     if (isTRUE(return_matches)) out$matches <- matches
-    if (matching == "ot")
-        out$transport_plans <- transport_plans
     if (!is.null(fs_params)) out$fs_params <- fs_params
     out$var_importance <- var_importance
-
-    # Baseline: re-identification risk with NO perturbation, obtained by linking
-    # X against itself (forward, truth = "row") under the same method/settings.
-    # Provides a reference point ("how identifiable were these records before
-    # anonymization?"). Doubles compute; guarded against infinite recursion.
-    if (isTRUE(compute_baseline)) {
-        base <- if (identical(X, x_anon)) out else tryCatch(
-            recordLinkage.default(
-                X = X, x_anon = X, key = key, method = method,
-                direction = "forward", risk_weighting = risk_weighting,
-                kappa = kappa, bandwidth = bandwidth, kernel = kernel,
-                truth = "row", id = NULL, type = type, weights = weights,
-                na_anon = na_anon, strategy = strategy, k = k,
-                threshold = threshold, block = block,
-                m_probs = m_probs, u_probs = u_probs,
-                fs_threshold = fs_threshold,
-                return_matches = FALSE, matching = matching,
-                risk_threshold = risk_threshold,
-                ot_epsilon = ot_epsilon, ot_max_iter = ot_max_iter,
-                compute_baseline = FALSE),
-            error = function(e) {
-                warning("compute_baseline failed (", conditionMessage(e),
-                        "); baseline not computed.", call. = FALSE)
-                NULL
-            })
-        if (!is.null(base)) {
-            out$baseline <- list(
-                mean_risk = base$overall$mean_risk,
-                max_risk = base$overall$max_risk,
-                per_record_risk = base$per_record$risk,
-                pct_high_risk = base$overall$pct_high_risk,
-                risk_reduction = base$overall$mean_risk - out$overall$mean_risk
-            )
-        }
-    }
 
     class(out) <- "recordLinkageRisk"
     out
@@ -1319,77 +1084,18 @@ print.inspect_record <- function(x, ...) {
 }
 
 #' @keywords internal
-.choose_guess_set <- function(d, cand, strategy, k = NULL,
-                              threshold = NULL) {
-    # Resolve tau if supplied
-    tau <- NULL
-    if (!is.null(threshold)) {
-        if (is.numeric(threshold) && length(threshold) == 1L) {
-            tau <- threshold
-        } else if (is.list(threshold) && is.character(threshold$type)) {
-            if (threshold$type == "quantile") {
-                p <- threshold$p
-                if (!is.numeric(p) || length(p) != 1L || p <= 0 || p >= 1)
-                    stop("Invalid quantile p.")
-                tau <- as.numeric(stats::quantile(d, probs = p,
-                                                  names = FALSE, type = 7))
-            } else {
-                stop("Only threshold$type = 'quantile' is supported.")
-            }
-        } else {
-            stop("Invalid 'threshold' format.")
-        }
-    }
-
-    if (strategy %in% c("threshold", "topk_threshold",
-                         "nearest_threshold") && is.null(tau))
-        stop("This strategy requires 'threshold' (numeric or list(type='quantile', ...)).")
-    if (strategy %in% c("topk", "topk_threshold")) {
-        if (is.null(k)) stop("This strategy requires 'k'.")
-        k <- as.integer(k)
-        if (!is.finite(k) || k < 1L) stop("'k' must be >= 1.")
-    }
-
-    .topk_with_ties <- function(dv, idx, k) {
-        ord <- order(dv[idx])
-        if (length(ord) <= k) return(idx)
-        kth <- dv[idx][ord[k]]
-        idx[dv[idx] <= kth]
-    }
-
-    if (strategy == "nearest") {
-        dmin <- min(d)
-        idx <- which(d == dmin)
-        return(cand[idx])
-    }
-
-    if (strategy == "nearest_threshold") {
-        dmin <- min(d)
-        if (dmin > tau) return(integer(0))
-        idx <- which(d == dmin)
-        return(cand[idx])
-    }
-
-    if (strategy == "threshold") {
-        idx <- which(d <= tau)
-        if (length(idx) == 0L) return(integer(0))
-        return(cand[idx])
-    }
-
+.choose_guess_set <- function(d, cand, strategy, k = NULL) {
     if (strategy == "topk") {
-        idx <- seq_along(d)
-        idx <- .topk_with_ties(d, idx, k)
-        return(cand[idx])
+        if (is.null(k)) stop("strategy 'topk' requires 'k'.", call. = FALSE)
+        k <- as.integer(k)
+        if (!is.finite(k) || k < 1L) stop("'k' must be >= 1.", call. = FALSE)
+        ord <- order(d)
+        if (length(ord) <= k) return(cand)
+        kth <- d[ord[k]]
+        return(cand[d <= kth])
     }
-
-    if (strategy == "topk_threshold") {
-        idx <- which(d <= tau)
-        if (length(idx) == 0L) return(integer(0))
-        idx <- .topk_with_ties(d, idx, k)
-        return(cand[idx])
-    }
-
-    stop("Unknown strategy.")
+    dmin <- min(d)
+    cand[d == dmin]
 }
 
 #' @keywords internal
@@ -1405,40 +1111,6 @@ print.inspect_record <- function(x, ...) {
     neg_kd <- neg_kd - max(neg_kd)  # numerical stability
     w <- exp(neg_kd)
     w / sum(w)
-}
-
-#' @keywords internal
-.kernel_risk <- function(d, bandwidth = NULL,
-                             kernel = "gaussian") {
-    n <- length(d)
-    if (n == 0L) return(numeric(0))
-    if (n == 1L) return(1)
-
-    # Auto-bandwidth via Silverman's rule
-    if (is.null(bandwidth)) {
-        s <- stats::sd(d)
-        iqr <- stats::IQR(d)
-        if (!is.finite(s) || s <= 0) s <- 1
-        if (!is.finite(iqr) || iqr <= 0) iqr <- s * 1.34
-        bandwidth <- 0.9 * min(s, iqr / 1.34) * n^(-1/5)
-        if (bandwidth < .Machine$double.eps)
-            bandwidth <- max(d) / 2
-        if (bandwidth < .Machine$double.eps)
-            return(rep(1 / n, n))
-    }
-
-    u <- d / bandwidth
-
-    w <- switch(kernel,
-        gaussian = exp(-0.5 * u^2),
-        epanechnikov = pmax(0, 1 - u^2) * 0.75,
-        tricube = pmax(0, (1 - abs(u)^3)^3) * (70 / 81),
-        stop("Unknown kernel: ", kernel)
-    )
-
-    wsum <- sum(w)
-    if (wsum < .Machine$double.eps) return(rep(1 / n, n))
-    w / wsum
 }
 
 #' Risk of correctly identifying the true match within a candidate set
@@ -1459,14 +1131,12 @@ print.inspect_record <- function(x, ...) {
 #'   match (similarity / likelihood ratio / proximity); the scores are then
 #'   turned into a pseudo-distance \code{max(scores) - scores}. \code{FALSE} for
 #'   distances.
-#' @param strategy,risk_weighting,k,threshold,kappa,bandwidth,kernel as in
-#'   \code{\link{recordLinkage}}.
+#' @param strategy,risk_weighting,k,kappa as in \code{\link{recordLinkage}}.
 #' @return list with \code{risk}, \code{cand_n}, \code{true_in_set}, \code{guess}.
 #' @keywords internal
 .true_match_risk <- function(scores, cand, true_pos, maximize,
                              strategy, risk_weighting,
-                             k = NULL, threshold = NULL, kappa = NULL,
-                             bandwidth = NULL, kernel = "gaussian") {
+                             k = NULL, kappa = NULL) {
     if (length(cand) == 0L)
         return(list(risk = 0, cand_n = 0L, true_in_set = FALSE,
                     guess = integer(0)))
@@ -1476,7 +1146,7 @@ print.inspect_record <- function(x, ...) {
     d <- if (isTRUE(maximize)) max(scores) - scores else scores
 
     guess <- .choose_guess_set(d = d, cand = cand, strategy = strategy,
-                               k = k, threshold = threshold)
+                               k = k)
     cand_n <- length(guess)
     if (cand_n == 0L)
         return(list(risk = 0, cand_n = 0L, true_in_set = FALSE,
@@ -1487,9 +1157,6 @@ print.inspect_record <- function(x, ...) {
         risk <- 0
     } else if (risk_weighting == "softmax") {
         w <- .softmax_risk(d[match(guess, cand)], kappa)
-        risk <- w[match(true_pos, guess)]
-    } else if (risk_weighting == "kernel") {
-        w <- .kernel_risk(d[match(guess, cand)], bandwidth, kernel)
         risk <- w[match(true_pos, guess)]
     } else {
         risk <- 1 / cand_n
@@ -1659,12 +1326,7 @@ print.recordLinkageRisk <- function(x, ...) {
     mtch <- if (!is.null(s$matching)) s$matching else "independent"
     if (mtch == "bijective")
         cat("Matching:    bijective (Hungarian algorithm)\n")
-    else if (mtch == "ot")
-        cat("Matching:    ot (Sinkhorn optimal transport)\n")
-    wt_label <- s$risk_weighting
-    if (s$risk_weighting == "kernel")
-        wt_label <- paste0(wt_label, " (", s$kernel, " kernel)")
-    cat("Weighting:   ", wt_label, "\n", sep = "")
+    cat("Weighting:   ", s$risk_weighting, "\n", sep = "")
     cat("Keys:        ", paste(s$key, collapse = ", "), "\n", sep = "")
     rec_label <- if (dir == "reverse") " (risk per synthetic record)" else ""
     cat("Records:     ", x$n_original, " original, ",
@@ -1687,11 +1349,6 @@ print.recordLinkageRisk <- function(x, ...) {
     thresh <- if (!is.null(x$settings$risk_threshold)) x$settings$risk_threshold else 0.1
     cat(sprintf("  High risk (>%.2g): %d (%.1f%%)\n",
                 thresh, o$n_high_risk, 100 * o$pct_high_risk))
-    if (!is.null(x$baseline)) {
-        cat(sprintf(
-            "  Baseline (no perturbation): %6.4f  -> risk reduction %6.4f\n",
-            x$baseline$mean_risk, x$baseline$risk_reduction))
-    }
 
     cat("\nPrivacy Assessment: ")
     if (x$privacy_pass) {
@@ -1760,8 +1417,6 @@ summary.recordLinkageRisk <- function(object, ...) {
         matching = if (!is.null(object$settings$matching)) object$settings$matching
                    else "independent",
         risk_weighting = object$settings$risk_weighting,
-        kernel = object$settings$kernel,
-        bandwidth = object$settings$bandwidth,
         key_vars = object$key_vars,
         n_original = object$n_original,
         n_synthetic = object$n_synthetic,
@@ -1775,8 +1430,7 @@ summary.recordLinkageRisk <- function(object, ...) {
         risk_gini = object$overall$risk_gini,
         var_importance = object$var_importance,
         privacy_pass = object$privacy_pass,
-        fs_params = object$fs_params,
-        baseline = object$baseline
+        fs_params = object$fs_params
     )
 
     class(summ) <- "summary.recordLinkageRisk"
@@ -1796,16 +1450,11 @@ print.summary.recordLinkageRisk <- function(x, ...) {
     cat("Summary: Record Linkage Risk\n")
     cat("============================\n\n")
 
-    wt_label <- x$risk_weighting
-    if (x$risk_weighting == "kernel")
-        wt_label <- paste0(wt_label, " (", x$kernel, " kernel)")
     mtch <- if (!is.null(x$matching)) x$matching else "independent"
     cat("Method:", x$method, "| Direction:", dir,
-        "| Weighting:", wt_label, "\n")
+        "| Weighting:", x$risk_weighting, "\n")
     if (mtch == "bijective")
         cat("Matching: bijective (Hungarian algorithm)\n")
-    else if (mtch == "ot")
-        cat("Matching: ot (Sinkhorn optimal transport)\n")
     cat("Key variables:", paste(x$key_vars, collapse = ", "), "\n")
     cat("Records:", x$n_original, "original,", x$n_synthetic, "synthetic\n\n")
 
@@ -1825,12 +1474,6 @@ print.summary.recordLinkageRisk <- function(x, ...) {
         pct <- 100 * x$risk_bands[i] / n_denom
         cat(sprintf("  %-22s %5d (%5.1f%%)\n",
                     bn[i], x$risk_bands[i], pct))
-    }
-
-    if (!is.null(x$baseline)) {
-        cat("\nBaseline (no perturbation):\n")
-        cat(sprintf("  Mean risk:      %7.4f\n", x$baseline$mean_risk))
-        cat(sprintf("  Risk reduction: %7.4f\n", x$baseline$risk_reduction))
     }
 
     if (!is.null(x$d_true_stats)) {
@@ -1923,23 +1566,11 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1,
              col = "steelblue", border = "white", ...)
         abline(v = thresh, col = "red", lty = 2, lwd = 2)
         abline(v = mean(risk), col = "darkblue", lty = 3, lwd = 1.5)
-        if (!is.null(x$baseline)) {
-            abline(v = x$baseline$mean_risk, col = "darkgreen",
-                   lty = 4, lwd = 1.5)
-            legend("topright",
-                   legend = c(paste0("threshold = ", thresh),
-                              paste0("mean = ", round(mean(risk), 3)),
-                              paste0("baseline = ",
-                                     round(x$baseline$mean_risk, 3))),
-                   col = c("red", "darkblue", "darkgreen"),
-                   lty = c(2, 3, 4), lwd = c(2, 1.5, 1.5), cex = 0.8)
-        } else {
-            legend("topright",
-                   legend = c(paste0("threshold = ", thresh),
-                               paste0("mean = ", round(mean(risk), 3))),
-                   col = c("red", "darkblue"),
-                   lty = c(2, 3), lwd = c(2, 1.5), cex = 0.8)
-        }
+        legend("topright",
+               legend = c(paste0("threshold = ", thresh),
+                           paste0("mean = ", round(mean(risk), 3))),
+               col = c("red", "darkblue"),
+               lty = c(2, 3), lwd = c(2, 1.5), cex = 0.8)
     }
 
     if (show[2]) {
