@@ -31,8 +31,13 @@ test_that("na-free data is unaffected by the na_anon default change", {
                   sex = factor(sample(c("f", "m"), n, TRUE)))
   x_anon <- x
   x_anon$age <- x_anon$age + sample(c(-1, 0, 1), n, TRUE)
+  # Re-seed before each call: .fs_estimate() samples random non-match pairs
+  # for u-prob estimation, so both calls must start from the same RNG state
+  # to produce identical LRs (and hence identical posteriors).
+  set.seed(42)
   r1 <- recordLinkage(x, x_anon, key = c("age", "sex"),
                       method = "probabilistic", truth = "row")
+  set.seed(42)
   r2 <- recordLinkage(x, x_anon, key = c("age", "sex"),
                       method = "probabilistic", truth = "row",
                       na_anon = "ignore")

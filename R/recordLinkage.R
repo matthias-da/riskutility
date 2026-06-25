@@ -88,6 +88,15 @@
 #' The temperature \code{kappa} is auto-calibrated from the distance range
 #' if not supplied. This replaces the uniform \eqn{1/|candidate\_set|} risk.
 #'
+#' @section Harmonic rank weighting:
+#' When \code{risk_weighting = "harmonic"}, candidates are weighted by the
+#' reciprocal of their distance rank:
+#' \deqn{w_j = \frac{1/r_j}{\sum_k 1/r_k}}
+#' where \eqn{r_j} is the rank of candidate \eqn{j} by ascending distance
+#' (rank 1 = closest). Ties receive the minimum rank. Unlike softmax, harmonic
+#' weighting requires no tuning parameter and depends only on the ordering of
+#' candidates, not their absolute distances.
+#'
 #' @section Direction:
 #' By default (\code{direction = "forward"}) the function loops over original
 #' records and finds matches in the anonymized data. This quantifies how easily
@@ -113,7 +122,8 @@
 #'   \code{"reverse"} loops over anonymized records and searches in the
 #'   original data, answering "how disclosive is each released record?".
 #' @param risk_weighting character. How to weight candidates: \code{"uniform"}
-#'   (default, 1/|set|) or \code{"softmax"} (exponential distance-weighting).
+#'   (default, 1/|set|), \code{"softmax"} (exponential distance-weighting), or
+#'   \code{"harmonic"} (rank-based reciprocal weighting, no tuning parameter).
 #'   Ignored for \code{method = "probabilistic"}, which always reports the
 #'   Skinner (2008) posterior (see section \emph{Probabilistic method}).
 #' @param kappa numeric or NULL. Temperature parameter for softmax weighting.
@@ -286,7 +296,8 @@ recordLinkage.default <- function(X,
                                   key,
                                   method = c("deterministic", "probabilistic"),
                                   direction = c("forward", "reverse"),
-                                  risk_weighting = c("uniform", "softmax"),
+                                  risk_weighting = c("uniform", "softmax",
+                                                     "harmonic"),
                                   kappa = NULL,
                                   truth = c("row", "id"),
                                   id = NULL,
@@ -588,6 +599,12 @@ recordLinkage.default <- function(X,
             # Softmax distance-weighted risk
             guess_local_idx <- match(guess, cand)
             w <- .softmax_risk(di[guess_local_idx], kappa)
+            true_local <- match(true_idx[i], guess)
+            risk[i] <- w[true_local]
+        } else if (risk_weighting == "harmonic") {
+            # Harmonic rank weighting: w_j = (1/r_j) / sum_k(1/r_k)
+            guess_local_idx <- match(guess, cand)
+            w <- .harmonic_risk(di[guess_local_idx])
             true_local <- match(true_idx[i], guess)
             risk[i] <- w[true_local]
         } else {
@@ -1096,6 +1113,16 @@ print.inspect_record <- function(x, ...) {
     }
     dmin <- min(d)
     cand[d == dmin]
+}
+
+#' @keywords internal
+.harmonic_risk <- function(d) {
+    n <- length(d)
+    if (n == 0L) return(numeric(0))
+    if (n == 1L) return(1)
+    r <- rank(d, ties.method = "min")
+    w <- 1 / r
+    w / sum(w)
 }
 
 #' @keywords internal

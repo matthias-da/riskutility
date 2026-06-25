@@ -72,3 +72,6 @@ paper/*.blg
 # Local working notes / scratch (not part of the package)
 TODO.md
 recordLinkage_discussion.*
+
+# Local literature / PDFs (not part of the package)
+literature/

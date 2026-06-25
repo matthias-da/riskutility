@@ -17,7 +17,7 @@
 1 = Risk distribution histogram,
 2 = Distance/score vs risk scatterplot,
 3 = Per-variable importance (all methods),
-4 = Propensity score distributions (predictive method only),
+4 = (unused),
 5 = Risk band barplot,
 6 = True-match rank distribution,
 7 = Risk by group barplot (requires \code{group}),
