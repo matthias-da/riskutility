@@ -290,7 +290,7 @@ knitr::kable(dist,
 
 
 ## ----recordlinkage-demo-------------------------------------------------------
-rl_res <- recordLinkage(pair, method = "deterministic")
+rl_res <- recordLinkage(pair, method = "distance-based")
 print(rl_res)
 
 

@@ -11,7 +11,7 @@ author:
 abstract: >
   The **riskutility** package for R provides a unified framework for
   measuring re-identification risk in perturbed microdata. The
-  `recordLinkage()` function implements deterministic (Gower distance) and
+  `recordLinkage()` function implements distance-based (Gower distance) and
   probabilistic (Fellegi-Sunter) linkage under a single S3 interface with
   consistent risk weighting, blocking, and forward/reverse direction support.
   While several R packages provide record linkage functionality
@@ -133,7 +133,7 @@ Several R packages address record linkage or disclosure risk:
   comprehensive SDC methods. These functions compute risk based on the
   proportion of records closer to their match than to any other record
   (using Euclidean or robust Mahalanobis distances for numeric data),
-  but support only the deterministic (distance-based) approach and do
+  but support only the distance-based approach and do
   not offer flexible risk weighting or candidate-set strategies.
 - **RecordLinkage** [@sariyar2010recordlinkage] implements
   Fellegi-Sunter probabilistic linkage with EM-based weight estimation,
@@ -240,7 +240,7 @@ record, search the anonymized data for matches. The *reverse*
 perspective iterates over anonymized records and searches the original
 data, answering "how easily can each released record be traced back
 to an individual?" For symmetric
-distance methods (deterministic), the two perspectives yield similar but
+distance methods (distance-based), the two perspectives yield similar but
 not identical results because the evaluation criterion changes (different
 records serve as query vs. search).
 
@@ -305,7 +305,7 @@ metric -- making it the natural starting point for risk assessment.
 
 ## Weighted Gower Distance
 
-The deterministic method computes a weighted Gower-type distance over the
+The distance-based method computes a weighted Gower-type distance over the
 quasi-identifiers [@gower1971general]. For original record $x_i$ and
 anonymized record $x^a_j$:
 
@@ -420,7 +420,7 @@ Now verify with `recordLinkage()`:
 ```{r det-toy-verify}
 res_det <- recordLinkage(orig, anon, key = c("age", "sex", "city"))
 knitr::kable(res_det$per_record[, c("risk", "cand_n", "true_in_set", "d_true")],
-             digits = 4, caption = "Per-record risk (deterministic, nearest)")
+             digits = 4, caption = "Per-record risk (distance-based, nearest)")
 ```
 
 Note that `salary` was *not* used as a quasi-identifier -- it
@@ -513,7 +513,7 @@ alongside the pass/fail label. A custom threshold can be set via
 the `risk_threshold` parameter. For a full discussion, see
 the Interpreting Risk Bands subsection in Practical Guidance.
 
-```{r det-realdata-plot, fig.height=4, fig.cap="Distribution of per-record re-identification risk (deterministic method). The red dashed line indicates the risk threshold (0.1)."}
+```{r det-realdata-plot, fig.height=4, fig.cap="Distribution of per-record re-identification risk (distance-based method). The red dashed line indicates the risk threshold (0.1)."}
 plot(res_real, which = 1)
 ```
 
@@ -534,7 +534,7 @@ increases, risk decreases because more competing candidates exist.
 
 # Probabilistic Method (Fellegi-Sunter)
 
-The deterministic method treats all variable agreements equally.
+The distance-based method treats all variable agreements equally.
 In practice, however, agreement on a rare variable value (e.g., an
 uncommon occupation) provides much stronger evidence of a true match
 than agreement on a common value (e.g., sex). The probabilistic method
@@ -588,7 +588,7 @@ and are recommended when the perturbation mechanism is well understood.
 ## Toy Example: 5 Records (All Categorical)
 
 We use a new all-categorical toy example here to avoid the complication
-of numeric tolerance thresholds (which the deterministic section's
+of numeric tolerance thresholds (which the distance-based section's
 6-record dataset with numeric `age` would require). The Fellegi-Sunter
 model defines agreement/disagreement per variable, and for numeric
 variables this requires a tolerance parameter that would obscure the
@@ -723,7 +723,7 @@ knitr::kable(res_prob$per_record[, c("risk", "cand_n", "true_in_set", "d_true")]
 The probabilistic method correctly identifies record 1 (all variables
 agree, yielding the highest $\Lambda$, unique match, $r_1 = 1.0$)
 and fully protects record 4 (region "W" absent in the anonymized
-data, all scores negative, $r_4 = 0.0$). Compared to the deterministic
+data, all scores negative, $r_4 = 0.0$). Compared to the distance-based
 method, the probabilistic approach automatically gives more weight to
 agreements on rare values: job agreement (with 4+ categories)
 contributes more than three times as much evidence as sex agreement (with only 2
@@ -765,14 +765,14 @@ for identifying matches.
 
 ## Side-by-Side Comparison
 
-We run the deterministic and probabilistic methods on the same 500-record
+We run the distance-based and probabilistic methods on the same 500-record
 census dataset and compare results.
 
 ```{r compare-methods}
 # Deterministic (already computed)
 # Probabilistic (already computed)
 
-# For fair comparison, also run deterministic on categorical-only keys
+# For fair comparison, also run distance-based on categorical-only keys
 res_det_cat <- recordLinkage(census, census_anon,
                              key = c("sex", "region", "educ"))
 
@@ -812,7 +812,7 @@ quasi-identifiers (4 QIs including numeric `age` vs. 3 categorical QIs).
 A fair comparison of methods would require applying all methods to the
 same anonymized data with the same QIs.
 
-The deterministic and probabilistic methods with 4 QIs (including numeric
+The distance-based and probabilistic methods with 4 QIs (including numeric
 `age`) tend to give finer discrimination because continuous variables
 provide more information for distinguishing records.
 
@@ -870,7 +870,7 @@ wt_df <- data.frame(
                100 * res_kern_tri$overall$pct_high_risk)
 )
 knitr::kable(wt_df, digits = 4,
-             caption = "Risk weighting schemes (deterministic method, top-5 strategy)")
+             caption = "Risk weighting schemes (distance-based method, top-5 strategy)")
 ```
 
 Uniform weighting is most conservative -- it distributes risk equally
@@ -912,7 +912,7 @@ object of class `"recordLinkageRisk"` with the following components:
   supplied m/u probabilities.
 - `$var_importance`: per-variable importance scores (available for all
   methods; the computation varies: mean distance contributions for
-  deterministic, log-LR weights for probabilistic).
+  distance-based, log-LR weights for probabilistic).
 
 Standard S3 methods are provided:
 
@@ -948,14 +948,14 @@ number of pairs. As a rough guideline:
 | $5{,}000 < n < 50{,}000$ | Use blocking |
 | $n > 50{,}000$ | Blocking required |
 
-As a rough benchmark, the deterministic method on 500 records with
+As a rough benchmark, the distance-based method on 500 records with
 4 QIs takes well under one second; at $n = 5{,}000$ without blocking,
 expect a few seconds.
 
 ## Software Dependencies
 
 The core `recordLinkage()` function requires only base R and the
-**VIM** package (for Gower distance computation in the deterministic
+**VIM** package (for Gower distance computation in the distance-based
 method). An optional dependency is **clue** (bijective matching via
 the Hungarian algorithm).
 The examples in this paper additionally use **sdcMicro**
@@ -1030,10 +1030,10 @@ dir_comp <- data.frame(
                100 * res_rev2$overall$pct_high_risk)
 )
 knitr::kable(dir_comp, digits = 4,
-             caption = "Forward vs. reverse direction (deterministic)")
+             caption = "Forward vs. reverse direction (distance-based)")
 ```
 
-For the deterministic method, distances are symmetric, so only the
+For the distance-based method, distances are symmetric, so only the
 evaluation perspective changes when switching direction. For the
 probabilistic method, the log-likelihood ratios are also symmetric,
 though auto-estimated m/u parameters are always fitted in the forward
@@ -1088,19 +1088,19 @@ need to specify `key` again.
 
 | What you know | Recommended method |
 |:--------------|:-------------------|
-| Nothing about the perturbation mechanism | `"deterministic"` |
+| Nothing about the perturbation mechanism | `"distance-based"` |
 | m/u probabilities available or formal audit needed | `"probabilistic"` |
-| Quick initial assessment | `"deterministic"` with `strategy = "nearest"` |
-| Conservative upper bound | `"deterministic"` with `risk_weighting = "uniform"` |
+| Quick initial assessment | `"distance-based"` with `strategy = "nearest"` |
+| Conservative upper bound | `"distance-based"` with `risk_weighting = "uniform"` |
 
-When in doubt, start with the deterministic method. It requires no
+When in doubt, start with the distance-based method. It requires no
 assumptions beyond a sensible distance metric and gives a reasonable
 baseline. Use the probabilistic method when m/u probabilities from a
 formal audit are available, as it gives more accurate risk estimates.
 
 When multiple perturbation methods have been applied to different
 variables (e.g., local suppression for some, microaggregation for
-income, rank swapping for age), use the deterministic method as a
+income, rank swapping for age), use the distance-based method as a
 default -- it makes no assumptions about the perturbation mechanism.
 
 ## Interpreting Risk Bands
@@ -1463,14 +1463,14 @@ cat("Bijective + blocking: mean risk =",
 
 The `recordLinkage()` function provides a unified framework for
 assessing re-identification risk in perturbed microdata. The three
-methods covered in this paper span a range of scenarios: deterministic
+methods covered in this paper span a range of scenarios: distance-based
 linkage for general-purpose assessment, probabilistic linkage for formal
 audits, and embedding-based linkage for capturing complex non-linear
 interactions via learned latent representations.
 
 ## Key Takeaways
 
-The deterministic method provides a robust starting point for any
+The distance-based method provides a robust starting point for any
 risk assessment -- it requires no knowledge of the perturbation
 mechanism and gives a reasonable baseline. When additional information
 is available (m/u probabilities for formal audits, or complex
@@ -1513,7 +1513,7 @@ Several limitations should be noted:
    gauge sensitivity.
 5. **Embedding method**: The autoencoder-based embedding method requires
    **torch** and sufficient training data (blocks with fewer than
-   $\max(30, 5d)$ rows fall back to deterministic matching). Training
+   $\max(30, 5d)$ rows fall back to distance-based matching). Training
    is non-deterministic across platforms even with fixed seeds, and the
    method adds computational overhead compared to distance-based methods.
 6. **Sample vs. census**: The current implementation computes

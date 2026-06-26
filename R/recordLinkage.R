@@ -1,8 +1,8 @@
-#' Record Linkage Risk After Perturbation
+#' Record Linkage Risk
 #'
 #' Measures targeted re-identification risk by linking each original record to
 #' the most similar record(s) in a perturbed dataset using quasi-identifiers.
-#' Supports deterministic (Gower distance-based) and probabilistic
+#' Supports distance-based (Gower distance) and probabilistic
 #' (Fellegi-Sunter) linkage methods.
 #'
 #' @section Attacker scenario:
@@ -21,7 +21,7 @@
 #' \emph{evaluation} of success; it is not an attacker capability.
 #'
 #' @section Distance measure:
-#' For the deterministic method, record linkage is based on a weighted Gower-type
+#' For the distance-based method, record linkage is based on a weighted Gower-type
 #' distance over the quasi-identifiers. For an original record \eqn{i} and a candidate
 #' record \eqn{j} in the perturbed data, the distance is
 #' \deqn{
@@ -62,35 +62,36 @@
 #'
 #' @section Probabilistic method:
 #' The Fellegi-Sunter probabilistic method estimates match (m) and
-#' non-match (u) probabilities for each variable, then computes
-#' log-likelihood ratios to score candidate pairs. Per-record risk is
-#' the Skinner (2008) posterior identification probability:
+#' non-match (u) probabilities for each variable using exact agreement,
+#' then computes log-likelihood ratios to score candidate pairs.
+#' Per-record risk is the Skinner (2008) posterior identification probability:
 #' \deqn{P(\text{match} \mid \gamma) = \frac{\Lambda \cdot p}{\Lambda \cdot p + (1 - p)}}
 #' where \eqn{\Lambda = m(\gamma)/u(\gamma)} is the likelihood ratio and
-#' \eqn{p = 1/n} is the closed-world prior (one true match among \eqn{n}
-#' candidates). This is directly interpretable as the probability that the
-#' attacker's link is correct, given the observed agreement pattern.
+#' \eqn{p = 1/|B|} is the closed-world prior (one true match among the
+#' \eqn{|B|} candidates in blocking group \eqn{B}; without blocking
+#' \eqn{|B| = n}). This is directly interpretable as the probability that
+#' the attacker's link is correct, given the observed agreement pattern.
 #'
-#' User-supplied \code{m_probs} and \code{u_probs} override the supervised
-#' estimation. \code{risk_weighting} does not affect
-#' the posterior risk; it controls candidate set diagnostics only
-#' (\code{cand_n}, \code{true_in_set}).
+#' User-supplied \code{m_probs} and \code{u_probs} (via \code{rl_control()})
+#' override the supervised estimation. NA pairs always contribute 0 to the
+#' log-likelihood ratio (variable dropped). Direction, \code{na_anon}, and
+#' \code{risk_weighting} do not apply to this method.
 #'
-#' \strong{When to use which matching mode:}
-#' Use \code{"independent"} for classical per-record risk (DBRL).
-#' Use \code{"bijective"} when the attacker is known to perform
-#' a one-to-one assignment (GDBRL; binary risk).
+#' \strong{Matching mode:}
+#' Use \code{matching = "independent"} (default) for classical per-record risk
+#' (DBRL). Bijective matching is not available for the probabilistic method;
+#' use \code{method = "distance-based"} if one-to-one assignment is required.
 #'
 #' @section Softmax risk weighting:
-#' When \code{risk_weighting = "softmax"}, closer candidates receive higher
-#' attribution probability via:
+#' When \code{risk_weighting = "softmax"} (set via \code{rl_control()}), closer
+#' candidates receive higher attribution probability via:
 #' \deqn{w_j = \frac{\exp(-\kappa \cdot d_j)}{\sum_k \exp(-\kappa \cdot d_k)}}
 #' The temperature \code{kappa} is auto-calibrated from the distance range
 #' if not supplied. This replaces the uniform \eqn{1/|candidate\_set|} risk.
 #'
 #' @section Harmonic rank weighting:
-#' When \code{risk_weighting = "harmonic"}, candidates are weighted by the
-#' reciprocal of their distance rank:
+#' When \code{risk_weighting = "harmonic"} (set via \code{rl_control()}),
+#' candidates are weighted by the reciprocal of their distance rank:
 #' \deqn{w_j = \frac{1/r_j}{\sum_k 1/r_k}}
 #' where \eqn{r_j} is the rank of candidate \eqn{j} by ascending distance
 #' (rank 1 = closest). Ties receive the minimum rank. Unlike softmax, harmonic
@@ -98,36 +99,34 @@
 #' candidates, not their absolute distances.
 #'
 #' @section Direction:
-#' By default (\code{direction = "forward"}) the function loops over original
-#' records and finds matches in the anonymized data. This quantifies how easily
-#' each individual in the population can be re-identified.
+#' Only applies to \code{method = "distance-based"}.
+#' With \code{direction = "forward"} (default) the function loops over original
+#' records and finds nearest matches in the anonymized data. This corresponds
+#' to a prosecutor or nosy-neighbour attacker who holds external knowledge about
+#' a target individual and searches the released file for that individual.
 #'
-#' With \code{direction = "reverse"} the loop runs over anonymized records,
-#' searching for matches in the original data. This gives a risk profile of
-#' the data to be released: each row in \code{per_record} corresponds to a
-#' released record and its probability of being correctly linked back to the
-#' original. Deterministic and probabilistic methods are symmetric
-#' (distance/agreement does not depend on direction), so only the evaluation
-#' perspective changes.
+#' With \code{direction = "reverse"} the loop runs over anonymized records and
+#' finds nearest matches in the original data. This is the direction used by the
+#' classical DBRL literature (Domingo-Ferrer and Torra, 2003; Herranz et al.,
+#' 2016) and by \pkg{sdcMicro}'s \code{dRiskRMD}, and corresponds to a
+#' journalist-type attacker who holds the released file and a reference database
+#' and tries to identify each released record in that reference.
+#' The two directions can produce different risk estimates because the
+#' nearest-neighbour relation is not symmetric.
 #'
 #' @param X data.frame or \code{\link{synth_pair}} object. Original microdata.
 #' @param x_anon data.frame. Perturbed/anonymized microdata.
 #' @param key character. Names of quasi-identifier variables used for linkage.
-#' @param method character. Linkage method: \code{"deterministic"} (default,
+#' @param method character. Linkage method: \code{"distance-based"} (default,
 #'   weighted Gower distance) or \code{"probabilistic"} (Fellegi-Sunter
 #'   log-likelihood ratios).
 #' @param direction character. Direction of the linkage attack:
 #'   \code{"forward"} (default) loops over original records and searches in the
-#'   anonymized data, answering "how safe is each original individual?";
+#'   anonymized data (prosecutor / nosy-neighbour scenario);
 #'   \code{"reverse"} loops over anonymized records and searches in the
-#'   original data, answering "how disclosive is each released record?".
-#' @param risk_weighting character. How to weight candidates: \code{"uniform"}
-#'   (default, 1/|set|), \code{"softmax"} (exponential distance-weighting), or
-#'   \code{"harmonic"} (rank-based reciprocal weighting, no tuning parameter).
-#'   Ignored for \code{method = "probabilistic"}, which always reports the
-#'   Skinner (2008) posterior (see section \emph{Probabilistic method}).
-#' @param kappa numeric or NULL. Temperature parameter for softmax weighting.
-#'   If NULL (default), auto-calibrated as \code{2 / range(distances)}.
+#'   original data (journalist scenario).
+#'   Only applies to \code{method = "distance-based"}; probabilistic linkage
+#'   always runs forward.
 #' @param truth character. How to define the true match for scoring:
 #'   one of \code{"row"} (default) or \code{"id"}.
 #'   \code{"row"} requires equal row counts and assumes row \eqn{i}
@@ -136,71 +135,59 @@
 #'   a shared identifier column.
 #' @param id character or NULL. If \code{truth="id"}, name of an identifier column
 #'   present in both \code{X} and \code{x_anon} that uniquely defines the true match.
-#' @param type named character vector or NULL. Optional per-key type override:
-#'   values in \code{c("numeric","ordinal","nominal")}. If NULL, inferred from \code{X}.
-#' @param weights named numeric vector or NULL. Optional nonnegative weights for keys.
-#'   If NULL, equal weights are used.
-#' @param na_anon character. How a missing quasi-identifier value is handled
-#'   during matching: \code{"ignore"} (default), \code{"match"}, or
-#'   \code{"mismatch"}.
-#'   \itemize{
-#'     \item \code{"ignore"} drops the variable from that pairwise comparison
-#'       (no contribution to the distance or likelihood ratio).
-#'     \item \code{"match"} treats the missing value as agreement (distance
-#'       contribution 0).
-#'     \item \code{"mismatch"} treats the missing value as disagreement
-#'       (distance contribution 1).
-#'   }
-#' @param strategy character. Adversary strategy variant:
-#'   \code{"nearest"} (default) or \code{"topk"}.
-#' @param k integer or NULL. Used when \code{strategy} is \code{"topk"}.
-#'   Ties at the cut-off distance may yield more than \code{k} candidates.
 #' @param block character or NULL. Optional subset of \code{key} used for exact blocking.
 #'   Distances are computed only within blocks defined by these variables.
-#' @param m_probs named numeric vector or NULL. User-supplied m-probabilities
-#'   for the probabilistic method (probability of agreement given true match).
-#' @param u_probs named numeric vector or NULL. User-supplied u-probabilities
-#'   for the probabilistic method (probability of agreement given non-match).
 #' @param return_matches logical. If TRUE, returns candidate indices per record (may be memory-heavy).
 #' @param matching character. Matching mode: \code{"independent"} (default) scores
 #'   each record independently (classical DBRL), \code{"bijective"} enforces
 #'   one-to-one assignment via the Hungarian algorithm (GDBRL).
-#'   Bijective matching requires the \pkg{clue} package.
+#'   Bijective matching requires the \pkg{clue} package and is only supported
+#'   for \code{method = "distance-based"}.
 #'   See Herranz, Nin, Rodriguez & Tassa (2016).
 #' @param risk_threshold numeric. Threshold for classifying records as "high risk"
 #'   and for the \code{privacy_pass} flag (default 0.1). Records with risk above
 #'   this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
 #'   The \code{privacy_pass} flag is TRUE when \code{mean_risk <= risk_threshold}.
+#' @param control an \code{rl_control} object from \code{\link{rl_control}()},
+#'   carrying method-specific tuning parameters. Use
+#'   \code{rl_control(weights, type, risk_weighting, kappa, strategy, k)} for
+#'   distance-based tuning and \code{rl_control(m_probs, u_probs)} for
+#'   probabilistic tuning. Irrelevant parameters for the chosen method produce
+#'   a warning and are ignored.
 #' @param ... additional arguments passed to methods.
 #' @author Matthias Templ and Roman Müller
 #'
 #' @return An object of class \code{"recordLinkageRisk"}: a list with components
 #'   \describe{
-#'     \item{per_record}{data.frame with \code{n_query} rows and columns:
-#'       \code{risk} (numeric, re-identification risk),
-#'       \code{cand_n} (integer, candidate set size),
+#'     \item{per_record}{data.frame with \code{n_query} rows. Columns common
+#'       to both methods: \code{risk} (numeric, re-identification risk),
+#'       \code{cand_n} (integer; for distance-based, size of the attacker's
+#'         guess set; for probabilistic, size of the blocking group used in
+#'         the Skinner prior),
 #'       \code{true_in_set} (logical),
-#'       \code{d_true} (numeric, distance/score to true match),
-#'       \code{d_min} (numeric, minimum distance),
-#'       \code{d_rank} (integer, rank of true match among candidates),
-#'       \code{risk_band} (factor with levels \code{"very_low"}, \code{"low"},
-#'         \code{"moderate"}, \code{"high"}, \code{"very_high"},
+#'       \code{risk_band} (ordered factor with levels \code{"very_low"},
+#'         \code{"low"}, \code{"moderate"}, \code{"high"}, \code{"very_high"},
 #'         \code{"unique_match"}).
-#'       When \code{matching = "bijective"}, an additional column
-#'       \code{bijective_assigned} gives the search-side row index
-#'       assigned by the Hungarian algorithm. In bijective mode,
-#'       \code{risk} and \code{bijective_assigned} reflect the global
-#'       one-to-one assignment, while \code{d_true}, \code{d_min}, and
-#'       \code{d_rank} retain their per-record independent-scoring values
-#'       from the main loop (useful for diagnostics).}
+#'       Distance-based only: \code{d_true} (Gower distance to true match),
+#'       \code{d_min} (minimum distance to any candidate),
+#'       \code{d_rank} (rank of true match by ascending distance).
+#'       With \code{matching = "bijective"}, an additional
+#'       \code{bijective_assigned} column gives the Hungarian-algorithm
+#'       assignment; \code{d_true}, \code{d_min}, \code{d_rank} retain
+#'       independent-scoring diagnostics.
+#'       Probabilistic only: \code{lr_true} (log-likelihood ratio of the true
+#'       match), \code{lr_rank} (rank of true match by descending log-LR).}
 #'     \item{overall}{list with aggregate statistics including \code{risk_gini}
 #'       (Gini coefficient of risk concentration).}
-#'     \item{var_importance}{named numeric vector of per-variable importance.}
-#'     \item{direction}{character, \code{"forward"} or \code{"reverse"}.}
+#'     \item{var_importance}{named numeric vector of per-variable mean weighted
+#'       distance (distance-based only; absent for probabilistic).}
+#'     \item{direction}{character, \code{"forward"} or \code{"reverse"}
+#'       (distance-based only; always \code{"forward"} for probabilistic).}
 #'     \item{matches}{(optional) list of integer vectors with candidate indices.}
 #'   }
-#'   When \code{direction = "forward"}, \code{per_record} has one row per
-#'   original record; when \code{"reverse"}, one row per anonymized record.
+#'   For distance-based: when \code{direction = "forward"}, \code{per_record}
+#'   has one row per original record; when \code{"reverse"}, one row per
+#'   anonymized record. Probabilistic always runs forward.
 #'
 #'   Use \code{\link{top_at_risk}}, \code{\link{risk_by_group}},
 #'   \code{\link{merge_per_record}}, and \code{\link{inspect_record}} for
@@ -222,7 +209,7 @@
 #'   x_anon$age[idx] <- sample(x$age[idx])
 #' }
 #'
-#' # Deterministic nearest-neighbor (default)
+#' # Distance-based nearest-neighbor (default)
 #' res1 <- recordLinkage(x, x_anon, key = c("age","sex","region"))
 #' print(res1)
 #' summary(res1)
@@ -233,9 +220,9 @@
 #' print(res1r)
 #'
 #' \donttest{
-#' # Softmax distance-weighted risk
+#' # Softmax distance-weighted risk (via rl_control)
 #' res2 <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-#'                       risk_weighting = "softmax")
+#'                       control = rl_control(risk_weighting = "softmax"))
 #' print(res2)
 #'
 #' # Probabilistic (Fellegi-Sunter) method
@@ -271,7 +258,7 @@
 #' @seealso \code{\link{individual_risk}}, \code{\link{dcr}},
 #'   \code{\link{nndr}}
 #' @family privacy-models
-#' @importFrom stats quantile mad
+#' @importFrom stats quantile
 #' @importFrom graphics hist abline legend par plot points
 #' @export
 recordLinkage <- function(X, ...) UseMethod("recordLinkage")
@@ -289,41 +276,184 @@ recordLinkage.synth_pair <- function(X, ...) {
     )
 }
 
+#' Control Parameters for Record Linkage
+#'
+#' Creates a control object that carries method-specific tuning parameters for
+#' \code{\link{recordLinkage}()}. Distance-based and probabilistic parameters
+#' are grouped together so that \code{recordLinkage()} can warn when parameters
+#' irrelevant to the chosen method are supplied.
+#'
+#' @section Distance-based parameters:
+#' \describe{
+#'   \item{\code{weights}}{Named nonnegative numeric vector of variable weights.
+#'     If \code{NULL}, equal weights are used.}
+#'   \item{\code{type}}{Named character vector overriding per-variable types:
+#'     values in \code{c("numeric","ordinal","nominal")}. If \code{NULL},
+#'     types are inferred from the data.}
+#'   \item{\code{risk_weighting}}{How to weight candidates within the guess set:
+#'     \code{"uniform"} (default), \code{"softmax"} (exponential
+#'     distance-weighting), or \code{"harmonic"} (rank-based reciprocal
+#'     weighting, no tuning parameter).}
+#'   \item{\code{kappa}}{Temperature for softmax weighting. If \code{NULL}
+#'     (default), auto-calibrated as \code{2 / range(distances)}.}
+#'   \item{\code{strategy}}{Adversary candidate-set strategy: \code{"nearest"}
+#'     (default) or \code{"topk"}.}
+#'   \item{\code{k}}{Candidate set size for \code{strategy = "topk"}.}
+#' }
+#'
+#' @section Probabilistic parameters:
+#' \describe{
+#'   \item{\code{m_probs}}{Named numeric vector of m-probabilities (probability
+#'     of agreement given true match). If \code{NULL}, estimated from data.}
+#'   \item{\code{u_probs}}{Named numeric vector of u-probabilities (probability
+#'     of agreement given non-match). If \code{NULL}, estimated from data by
+#'     enumerating all distinct non-matching pairs when \eqn{n(n-1) \le 500},
+#'     or sampling 500 pairs without replacement otherwise.}
+#'   \item{\code{breaks}}{Named list of break points for discretizing numeric
+#'     variables before probabilistic scoring. Each element is a sorted numeric
+#'     vector of cut points (excluding \code{-Inf}/\code{Inf}); the variable is
+#'     replaced by the integer bin index before computing agreement. Only used
+#'     when \code{method = "probabilistic"}. Example:
+#'     \code{breaks = list(age = c(30, 60), income = c(2000, 5000))}.}
+#' }
+#'
+#' @section Distance-based-only parameters:
+#' \describe{
+#'   \item{\code{na_anon}}{How a missing quasi-identifier value in the anonymized
+#'     data is handled during distance computation: \code{"ignore"} (default,
+#'     variable dropped from that pairwise comparison), \code{"match"} (NA
+#'     counts as agreement, distance contribution 0), or \code{"mismatch"} (NA
+#'     counts as full disagreement, distance contribution 1). Ignored for
+#'     \code{method = "probabilistic"}, which always drops NA pairs.}
+#' }
+#'
+#' @param weights named numeric vector or NULL.
+#' @param type named character vector or NULL.
+#' @param risk_weighting character, one of \code{"uniform"} (default),
+#'   \code{"softmax"}, \code{"harmonic"}.
+#' @param kappa numeric or NULL.
+#' @param strategy character, one of \code{"nearest"} (default), \code{"topk"}.
+#' @param k integer or NULL.
+#' @param m_probs named numeric vector or NULL.
+#' @param u_probs named numeric vector or NULL.
+#' @param breaks named list of numeric break vectors or NULL.
+#' @param na_anon character, one of \code{"ignore"} (default), \code{"match"},
+#'   \code{"mismatch"}.
+#'
+#' @return An object of class \code{"rl_control"}.
+#' @seealso \code{\link{recordLinkage}}
+#' @export
+rl_control <- function(weights = NULL,
+                       type = NULL,
+                       risk_weighting = c("uniform", "softmax", "harmonic"),
+                       kappa = NULL,
+                       strategy = c("nearest", "topk"),
+                       k = NULL,
+                       m_probs = NULL,
+                       u_probs = NULL,
+                       breaks = NULL,
+                       na_anon = c("ignore", "match", "mismatch")) {
+    risk_weighting <- match.arg(risk_weighting)
+    strategy       <- match.arg(strategy)
+    na_anon        <- match.arg(na_anon)
+    structure(
+        list(weights = weights, type = type,
+             risk_weighting = risk_weighting, kappa = kappa,
+             strategy = strategy, k = k,
+             m_probs = m_probs, u_probs = u_probs,
+             breaks = breaks, na_anon = na_anon),
+        class = "rl_control"
+    )
+}
+
+
 #' @rdname recordLinkage
 #' @export
 recordLinkage.default <- function(X,
                                   x_anon,
                                   key,
-                                  method = c("deterministic", "probabilistic"),
+                                  method = c("distance-based", "probabilistic"),
                                   direction = c("forward", "reverse"),
-                                  risk_weighting = c("uniform", "softmax",
-                                                     "harmonic"),
-                                  kappa = NULL,
                                   truth = c("row", "id"),
                                   id = NULL,
-                                  type = NULL,
-                                  weights = NULL,
-                                  na_anon = c("ignore", "match", "mismatch"),
-                                  strategy = c("nearest", "topk"),
-                                  k = NULL,
                                   block = NULL,
-                                  m_probs = NULL,
-                                  u_probs = NULL,
                                   return_matches = FALSE,
                                   matching = c("independent", "bijective"),
                                   risk_threshold = 0.1,
+                                  control = rl_control(),
                                   ...) {
 
     stopifnot(!missing(x_anon))
     stopifnot(!missing(key))
 
-    method <- match.arg(method)
+    method    <- match.arg(method)
     direction <- match.arg(direction)
-    risk_weighting <- match.arg(risk_weighting)
-    truth <- match.arg(truth)
-    na_anon <- match.arg(na_anon)
-    strategy <- match.arg(strategy)
-    matching <- match.arg(matching)
+    truth     <- match.arg(truth)
+    matching  <- match.arg(matching)
+
+    if (!inherits(control, "rl_control"))
+        stop("'control' must be an object created by rl_control().", call. = FALSE)
+
+    # Extract method-specific parameters from control ----
+    weights        <- control$weights
+    type           <- control$type
+    risk_weighting <- control$risk_weighting
+    kappa          <- control$kappa
+    strategy       <- control$strategy
+    k              <- control$k
+    m_probs        <- control$m_probs
+    u_probs        <- control$u_probs
+    breaks         <- control$breaks
+    na_anon        <- control$na_anon
+
+    # Validate method/matching combinations ----
+    if (method == "probabilistic") {
+        if (matching == "bijective")
+            stop("'matching = \"bijective\"' is not supported for ",
+                 "method = \"probabilistic\": it would discard the Skinner ",
+                 "posterior. Use matching = \"independent\".", call. = FALSE)
+        if (direction != "forward") {
+            warning("'direction' is only relevant for method = \"distance-based\". ",
+                    "Probabilistic linkage always runs forward (original as query).",
+                    call. = FALSE)
+            direction <- "forward"
+        }
+        if (na_anon != "ignore")
+            warning("'na_anon' in rl_control() is only used for ",
+                    "method = \"distance-based\". ",
+                    "The probabilistic method always ignores NA pairs.",
+                    call. = FALSE)
+        if (risk_weighting != "uniform")
+            warning("'risk_weighting' is ignored for method = \"probabilistic\", ",
+                    "which always reports the Skinner (2008) posterior.",
+                    call. = FALSE)
+        if (!is.null(weights) || !is.null(type) || !is.null(kappa) ||
+            strategy != "nearest" || !is.null(k))
+            warning("Distance-based control parameters (weights, type, kappa, ",
+                    "strategy, k) are ignored for method = \"probabilistic\".",
+                    call. = FALSE)
+        if (!is.null(breaks)) {
+            if (!is.list(breaks) || is.null(names(breaks)))
+                stop("'breaks' must be a named list.", call. = FALSE)
+            bad <- names(breaks)[!names(breaks) %in% key]
+            if (length(bad))
+                stop("'breaks' contains names not in 'key': ",
+                     paste(bad, collapse = ", "), call. = FALSE)
+            for (nm in names(breaks)) {
+                b <- breaks[[nm]]
+                if (!is.numeric(b) || length(b) < 1L || anyNA(b))
+                    stop("breaks[['", nm, "']] must be a non-empty numeric vector ",
+                         "without NAs.", call. = FALSE)
+                breaks[[nm]] <- sort(b)
+            }
+        }
+    }
+    if (method == "distance-based" && (!is.null(m_probs) || !is.null(u_probs)))
+        warning("'m_probs' and 'u_probs' are ignored for ",
+                "method = \"distance-based\".", call. = FALSE)
+    if (method == "distance-based" && !is.null(breaks))
+        warning("'breaks' is only used for method = \"probabilistic\" and is ",
+                "ignored for method = \"distance-based\".", call. = FALSE)
 
     if (matching == "bijective") {
         if (!requireNamespace("clue", quietly = TRUE))
@@ -378,56 +508,56 @@ recordLinkage.default <- function(X,
         }
     }
 
-    # infer / validate types ----
-    if (is.null(type)) {
-        type <- vapply(key, function(v) {
-            xv <- X[[v]]
-            if (is.numeric(xv)) "numeric"
-            else if (is.ordered(xv)) "ordinal"
-            else "nominal"
-        }, character(1))
-        names(type) <- key
-    } else {
-        if (is.null(names(type)) || !all(key %in% names(type)))
-            stop("'type' must be a named character vector containing all keys.")
-        type <- type[key]
-        if (!all(type %in% c("numeric", "ordinal", "nominal")))
-            stop("Invalid 'type' values.")
-    }
+    # distance-based setup: types, weights, numeric scaling ranges ----
+    type <- weights <- wsum <- rng <- NULL
+    if (method == "distance-based") {
+        if (is.null(type)) {
+            type <- vapply(key, function(v) {
+                xv <- X[[v]]
+                if (is.numeric(xv)) "numeric"
+                else if (is.ordered(xv)) "ordinal"
+                else "nominal"
+            }, character(1))
+            names(type) <- key
+        } else {
+            if (is.null(names(type)) || !all(key %in% names(type)))
+                stop("'type' must be a named character vector containing all keys.")
+            type <- type[key]
+            if (!all(type %in% c("numeric", "ordinal", "nominal")))
+                stop("Invalid 'type' values.")
+        }
 
-    # weights ----
-    if (is.null(weights)) {
-        weights <- rep(1, length(key))
-        names(weights) <- key
-    } else {
-        if (is.null(names(weights)) || !all(key %in% names(weights)))
-            stop("'weights' must be named and contain all keys.")
-        weights <- weights[key]
-        if (any(!is.finite(weights)) || any(weights < 0))
-            stop("'weights' must be nonnegative and finite.")
-    }
-    wsum <- sum(weights)
-    if (wsum <= 0) stop("At least one weight must be > 0.")
+        if (is.null(weights)) {
+            weights <- rep(1, length(key))
+            names(weights) <- key
+        } else {
+            if (is.null(names(weights)) || !all(key %in% names(weights)))
+                stop("'weights' must be named and contain all keys.")
+            weights <- weights[key]
+            if (any(!is.finite(weights)) || any(weights < 0))
+                stop("'weights' must be nonnegative and finite.")
+        }
+        wsum <- sum(weights)
+        if (wsum <= 0) stop("At least one weight must be > 0.")
 
-    # numeric scaling ranges (for deterministic/probabilistic) ----
-    rng <- lapply(key, function(v) {
-        if (type[[v]] %in% c("numeric", "ordinal")) {
-            allv <- c(X[[v]], x_anon[[v]])
-            # ordinal factors: use integer codes for range
-            if (is.factor(allv)) allv <- as.integer(allv)
-            r <- range(allv, na.rm = TRUE)
-            if (!is.finite(r[1]) || !is.finite(r[2]) || r[1] == r[2])
-                r <- c(0, 1)
-            r
-        } else NULL
-    })
-    names(rng) <- key
+        rng <- lapply(key, function(v) {
+            if (type[[v]] %in% c("numeric", "ordinal")) {
+                allv <- c(X[[v]], x_anon[[v]])
+                if (is.factor(allv)) allv <- as.integer(allv)
+                r <- range(allv, na.rm = TRUE)
+                if (!is.finite(r[1]) || !is.finite(r[2]) || r[1] == r[2])
+                    r <- c(0, 1)
+                r
+            } else NULL
+        })
+        names(rng) <- key
+    }
 
     # Fellegi-Sunter: estimate m/u if probabilistic ----
     fs_params <- NULL
     if (method == "probabilistic") {
         if (is.null(m_probs) || is.null(u_probs)) {
-            fs_est <- .fs_estimate(X, x_anon, key, type, fs_true_idx, rng)
+            fs_est <- .fs_estimate(X, x_anon, key, fs_true_idx, breaks = breaks)
             if (is.null(m_probs)) m_probs <- fs_est$m
             if (is.null(u_probs)) u_probs <- fs_est$u
         }
@@ -455,22 +585,6 @@ recordLinkage.default <- function(X,
         fs_params <- list(m_probs = m_probs, u_probs = u_probs)
     }
 
-    # precompute per-variable tolerance for probabilistic method ----
-    fs_tol <- NULL
-    if (method == "probabilistic") {
-        fs_tol <- vapply(key, function(v) {
-            if (type[[v]] %in% c("numeric", "ordinal")) {
-                r <- rng[[v]]
-                span <- r[2] - r[1]
-                if (span <= 0) span <- 1
-                tol_v <- stats::mad(X[[v]], na.rm = TRUE)
-                if (!is.finite(tol_v) || tol_v <= 0)
-                    tol_v <- 0.1 * span
-                tol_v
-            } else NA_real_
-        }, numeric(1))
-    }
-
     # blocking ----
     if (!is.null(block)) {
         if (!is.character(block) || length(block) < 1L)
@@ -489,17 +603,16 @@ recordLinkage.default <- function(X,
     risk <- numeric(n_query)
     cand_n <- integer(n_query)
     true_in_set <- logical(n_query)
-    d_true <- rep(NA_real_, n_query)
-    d_min <- rep(NA_real_, n_query)
-    d_rank <- rep(NA_integer_, n_query)
     matches <- if (isTRUE(return_matches)) vector("list", n_query) else NULL
-    # Bijective matching: cache full score vectors per record
-    score_cache <- if (matching == "bijective") vector("list", n_query) else NULL
-    # Per-variable distance accumulator (deterministic only)
-    var_dist_acc <- if (method == "deterministic") {
-        setNames(numeric(length(key)), key)
+    if (method == "distance-based") {
+        d_true <- rep(NA_real_, n_query)
+        d_min  <- rep(NA_real_, n_query)
+        d_rank <- rep(NA_integer_, n_query)
+        score_cache <- if (matching == "bijective") vector("list", n_query) else NULL
+        var_dist_acc <- setNames(numeric(length(key)), key)
     } else {
-        NULL
+        lr_true <- rep(NA_real_, n_query)
+        lr_rank <- rep(NA_integer_, n_query)
     }
 
     # main loop ----
@@ -513,39 +626,40 @@ recordLinkage.default <- function(X,
         }
 
         if (method == "probabilistic") {
-            # Fellegi-Sunter: compute log-likelihood ratios
+            # Fellegi-Sunter: compute log-likelihood ratios (exact agreement, NAs ignored)
             lr <- .fs_log_lr(
                 x_row = query_data[i, key, drop = FALSE],
                 anon_block = search_data[cand, key, drop = FALSE],
-                key = key, type = type, rng = rng,
-                m_probs = m_probs, u_probs = u_probs,
-                tol = fs_tol, na_anon = na_anon
+                key = key, m_probs = m_probs, u_probs = u_probs,
+                breaks = breaks
             )
 
-            d_min[i] <- NA_real_
             tpos <- true_idx[i]
             j_in <- match(tpos, cand)
             if (!is.na(j_in)) {
-                d_true[i] <- lr[j_in]
+                lr_true[i] <- lr[j_in]
                 # Rank by descending LR (rank 1 = best match)
-                d_rank[i] <- as.integer(rank(-lr, ties.method = "min")[j_in])
-                # Skinner (2008) posterior: P(true match | gamma) = LR*p / (LR*p + (1-p))
-                # Prior p = 1/|cand|: one true match among candidates (closed-world).
+                lr_rank[i] <- as.integer(rank(-lr, ties.method = "min")[j_in])
+                # FIXME: replace Skinner (2008) pairwise posterior with the
+                # normalized multinomial posterior LR_true / sum(LR_all).
+                # Skinner computes P(match | gamma_true) using only the true
+                # match's LR and a flat prior 1/|cand|; it ignores how well the
+                # true match's LR dominates competitors, so it systematically
+                # underestimates risk when the LR discriminates (e.g. two male
+                # candidates with similar age give ~25% instead of ~50%).
+                # The normalized posterior risk = exp(lr[j_in]) / sum(exp(lr))
+                # correctly concentrates mass on the top-ranked candidates and
+                # reduces to 1/N when all LRs are equal.
                 p_prior  <- 1 / length(cand)
                 lr_ratio <- exp(lr[j_in])
                 risk[i]  <- lr_ratio * p_prior / (lr_ratio * p_prior + (1 - p_prior))
             }
             # else: risk[i] stays 0 (true match not in search block)
 
-            # Candidate set diagnostics (records with positive LR)
-            above <- which(lr >= 0)
-            cand_n[i] <- length(above)
-            true_in_set[i] <- (!is.na(j_in)) && (tpos %in% cand[above])
+            cand_n[i] <- length(cand)
+            true_in_set[i] <- !is.na(j_in)
 
-            if (isTRUE(return_matches)) matches[[i]] <- cand[above]
-            if (!is.null(score_cache))
-                score_cache[[i]] <- list(cand = cand, scores = lr,
-                                          maximize = TRUE)
+            if (isTRUE(return_matches)) matches[[i]] <- cand
             next
         }
 
@@ -640,15 +754,8 @@ recordLinkage.default <- function(X,
                     "unique_match"),
         right = TRUE)
 
-    # var_importance ----
-    if (method == "deterministic") {
-        var_importance <- var_dist_acc / n_query
-    } else if (method == "probabilistic" && !is.null(fs_params)) {
-        var_importance <- log(fs_params$m_probs / fs_params$u_probs)
-        names(var_importance) <- key
-    } else {
-        var_importance <- setNames(rep(NA_real_, length(key)), key)
-    }
+    # var_importance: distance-based only ----
+    var_importance <- if (method == "distance-based") var_dist_acc / n_query else NULL
 
     overall <- list(
         mean_risk = mean(risk),
@@ -670,17 +777,21 @@ recordLinkage.default <- function(X,
     names(overall$candidate_size_quantiles) <- c("min", "q25", "median",
                                                   "q75", "max")
 
-    per_rec <- data.frame(
-        risk = risk,
-        cand_n = cand_n,
-        true_in_set = true_in_set,
-        d_true = d_true,
-        d_min = d_min,
-        d_rank = d_rank,
-        risk_band = risk_band
-    )
-    if (!is.null(bijective_assigned))
-        per_rec$bijective_assigned <- bijective_assigned
+    if (method == "distance-based") {
+        per_rec <- data.frame(
+            risk = risk, cand_n = cand_n, true_in_set = true_in_set,
+            d_true = d_true, d_min = d_min, d_rank = d_rank,
+            risk_band = risk_band
+        )
+        if (!is.null(bijective_assigned))
+            per_rec$bijective_assigned <- bijective_assigned
+    } else {
+        per_rec <- data.frame(
+            risk = risk, cand_n = cand_n, true_in_set = true_in_set,
+            lr_true = lr_true, lr_rank = lr_rank,
+            risk_band = risk_band
+        )
+    }
 
     out <- list(
         per_record = per_rec,
@@ -696,22 +807,16 @@ recordLinkage.default <- function(X,
             key = key,
             truth = truth,
             id = id,
-            type = type,
-            weights = weights,
-            na_anon = na_anon,
-            strategy = strategy,
-            k = k,
             block = block,
             direction = direction,
-            risk_weighting = risk_weighting,
-            kappa = kappa,
             matching = matching,
-            risk_threshold = risk_threshold
+            risk_threshold = risk_threshold,
+            control = control
         )
     )
     if (isTRUE(return_matches)) out$matches <- matches
-    if (!is.null(fs_params)) out$fs_params <- fs_params
-    out$var_importance <- var_importance
+    if (!is.null(fs_params))      out$fs_params <- fs_params
+    if (!is.null(var_importance)) out$var_importance <- var_importance
 
     class(out) <- "recordLinkageRisk"
     out
@@ -858,16 +963,21 @@ inspect_record.recordLinkageRisk <- function(x, i, data_orig = NULL,
     out <- list(
         record_id = i,
         risk = pr$risk,
-        d_rank = pr$d_rank,
         risk_band = as.character(pr$risk_band),
-        d_true = pr$d_true,
-        d_min = pr$d_min,
         n_candidates = pr$cand_n,
         true_in_set = pr$true_in_set,
         candidate_ids = candidates
     )
-    if (!is.null(pr$bijective_assigned))
-        out$bijective_assigned <- pr$bijective_assigned
+    if (x$method == "distance-based") {
+        out$d_true <- pr$d_true
+        out$d_min  <- pr$d_min
+        out$d_rank <- pr$d_rank
+        if (!is.null(pr$bijective_assigned))
+            out$bijective_assigned <- pr$bijective_assigned
+    } else {
+        out$lr_true <- pr$lr_true
+        out$lr_rank <- pr$lr_rank
+    }
     if (!is.null(data_orig))
         out$query_record <- data_orig[i, , drop = FALSE]
     if (!is.null(data_anon) && length(candidates) > 0)
@@ -883,12 +993,21 @@ print.inspect_record <- function(x, ...) {
     cat("Record Linkage Inspection: Record", x$record_id, "\n")
     cat(strrep("=", 45), "\n\n")
     cat(sprintf("  Risk:        %.4f (%s)\n", x$risk, x$risk_band))
-    cat(sprintf("  True rank:   %s\n",
-                if (is.na(x$d_rank)) "N/A" else as.character(x$d_rank)))
-    cat(sprintf("  d_true:      %s\n",
-                if (is.na(x$d_true)) "N/A" else sprintf("%.4f", x$d_true)))
-    cat(sprintf("  d_min:       %s\n",
-                if (is.na(x$d_min)) "N/A" else sprintf("%.4f", x$d_min)))
+    if (!is.null(x$d_rank)) {
+        cat(sprintf("  True rank:   %s\n",
+                    if (is.na(x$d_rank)) "N/A" else as.character(x$d_rank)))
+        cat(sprintf("  d_true:      %s\n",
+                    if (is.na(x$d_true)) "N/A" else sprintf("%.4f", x$d_true)))
+        cat(sprintf("  d_min:       %s\n",
+                    if (is.na(x$d_min)) "N/A" else sprintf("%.4f", x$d_min)))
+    } else {
+        cat(sprintf("  True rank:   %s\n",
+                    if (is.null(x$lr_rank) || is.na(x$lr_rank)) "N/A"
+                    else as.character(x$lr_rank)))
+        cat(sprintf("  lr_true:     %s\n",
+                    if (is.null(x$lr_true) || is.na(x$lr_true)) "N/A"
+                    else sprintf("%.4f", x$lr_true)))
+    }
     cat(sprintf("  Candidates:  %d\n", x$n_candidates))
     cat(sprintf("  True in set: %s\n", x$true_in_set))
     if (!is.null(x$query_record)) {
@@ -992,24 +1111,6 @@ print.inspect_record <- function(x, ...) {
     n <- length(x)
     if (n == 0L || sum(x) == 0) return(0)
     2 * sum(x * seq_len(n)) / (n * sum(x)) - (n + 1) / n
-}
-
-#' @keywords internal
-# Map model coefficient names to key variables (handles prefix collisions)
-.map_coefs_to_vars <- function(coef_names, key, values) {
-    out <- setNames(numeric(length(key)), key)
-    # Sort key vars longest-first to avoid prefix collisions
-    # (e.g. "age_group" before "age")
-    key_sorted <- key[order(nchar(key), decreasing = TRUE)]
-    claimed <- logical(length(coef_names))
-    for (v in key_sorted) {
-        idx <- which(!claimed & startsWith(coef_names, v))
-        if (length(idx) > 0L) {
-            out[v] <- mean(values[idx])
-            claimed[idx] <- TRUE
-        }
-    }
-    out
 }
 
 #' @keywords internal
@@ -1140,66 +1241,18 @@ print.inspect_record <- function(x, ...) {
     w / sum(w)
 }
 
-#' Risk of correctly identifying the true match within a candidate set
-#'
-#' Shared back-end for the per-record re-identification risk: given the per-
-#' candidate scores for one query record, build the attacker's guess set and
-#' return the (weighted) probability mass on the \emph{true} match. This is the
-#' exact logic the deterministic and probabilistic methods apply inline so
-#' that both methods share one risk definition.
-#'
-#' @param scores numeric vector of per-candidate scores (one per element of
-#'   \code{cand}). Either a distance (lower = closer) or a similarity
-#'   (higher = closer); see \code{maximize}.
-#' @param cand integer vector of candidate record indices.
-#' @param true_pos integer index of the true match (in the same space as
-#'   \code{cand}), or \code{NA}.
-#' @param maximize logical. \code{TRUE} if higher \code{scores} mean a closer
-#'   match (similarity / likelihood ratio / proximity); the scores are then
-#'   turned into a pseudo-distance \code{max(scores) - scores}. \code{FALSE} for
-#'   distances.
-#' @param strategy,risk_weighting,k,kappa as in \code{\link{recordLinkage}}.
-#' @return list with \code{risk}, \code{cand_n}, \code{true_in_set}, \code{guess}.
 #' @keywords internal
-.true_match_risk <- function(scores, cand, true_pos, maximize,
-                             strategy, risk_weighting,
-                             k = NULL, kappa = NULL) {
-    if (length(cand) == 0L)
-        return(list(risk = 0, cand_n = 0L, true_in_set = FALSE,
-                    guess = integer(0)))
-
-    # Convert similarity scores to a pseudo-distance so that lower = closer,
-    # matching the distance convention of .choose_guess_set()/.softmax_risk().
-    d <- if (isTRUE(maximize)) max(scores) - scores else scores
-
-    guess <- .choose_guess_set(d = d, cand = cand, strategy = strategy,
-                               k = k)
-    cand_n <- length(guess)
-    if (cand_n == 0L)
-        return(list(risk = 0, cand_n = 0L, true_in_set = FALSE,
-                    guess = integer(0)))
-
-    true_in_set <- (!is.na(true_pos)) && (true_pos %in% guess)
-    if (!true_in_set) {
-        risk <- 0
-    } else if (risk_weighting == "softmax") {
-        w <- .softmax_risk(d[match(guess, cand)], kappa)
-        risk <- w[match(true_pos, guess)]
-    } else {
-        risk <- 1 / cand_n
-    }
-
-    list(risk = risk, cand_n = cand_n, true_in_set = true_in_set,
-         guess = guess)
+.discretize <- function(x, brks) {
+    as.integer(cut(x, breaks = c(-Inf, brks, Inf), right = TRUE,
+                   include.lowest = TRUE))
 }
 
 #' @keywords internal
-.fs_estimate <- function(X, x_anon, key, type, true_idx, rng,
-                   n_sample = 500L) {
+.fs_estimate <- function(X, x_anon, key, true_idx, n_sample = 500L,
+                         breaks = NULL) {
     n <- nrow(X)
     nv <- length(key)
 
-    # degenerate case: cannot estimate from a single record
     if (n <= 1L) {
         return(list(
             m = setNames(rep(0.99, nv), key),
@@ -1207,75 +1260,64 @@ print.inspect_record <- function(x, ...) {
         ))
     }
 
-    # m-probabilities: agreement rates among true matched pairs
+    # Pre-discretize numeric variables that have user-supplied breaks
+    X_est     <- X
+    x_anon_est <- x_anon
+    for (v in intersect(names(breaks), key)) {
+        X_est[[v]]      <- .discretize(X[[v]],      breaks[[v]])
+        x_anon_est[[v]] <- .discretize(x_anon[[v]], breaks[[v]])
+    }
+
+    # m-probabilities: exact agreement rates among true matched pairs
     m <- numeric(nv)
     names(m) <- key
     for (vi in seq_along(key)) {
         v <- key[vi]
-        if (type[[v]] %in% c("numeric", "ordinal")) {
-            r <- rng[[v]]
-            span <- r[2] - r[1]
-            if (span <= 0) span <- 1
-            tol_v <- stats::mad(X[[v]], na.rm = TRUE)
-            if (!is.finite(tol_v) || tol_v <= 0)
-                tol_v <- 0.1 * span
-            agree <- vapply(seq_len(n), function(i) {
-                xv <- X[[v]][i]
-                av <- x_anon[[v]][true_idx[i]]
-                if (is.na(xv) || is.na(av)) return(NA)
-                abs(xv - av) <= tol_v
-            }, logical(1))
-            m[vi] <- mean(agree, na.rm = TRUE)
-        } else {
-            agree <- vapply(seq_len(n), function(i) {
-                xv <- X[[v]][i]
-                av <- x_anon[[v]][true_idx[i]]
-                if (is.na(xv) || is.na(av)) return(NA)
-                as.character(xv) == as.character(av)
-            }, logical(1))
-            m[vi] <- mean(agree, na.rm = TRUE)
-        }
+        agree <- vapply(seq_len(n), function(i) {
+            xv <- X_est[[v]][i]
+            av <- x_anon_est[[v]][true_idx[i]]
+            if (is.na(xv) || is.na(av)) return(NA)
+            as.character(xv) == as.character(av)
+        }, logical(1))
+        m[vi] <- mean(agree, na.rm = TRUE)
         if (is.na(m[vi]) || m[vi] <= 0) m[vi] <- 0.01
         if (m[vi] >= 1) m[vi] <- 0.99
     }
 
-    # u-probabilities: agreement rates among random non-matched pairs
+    # u-probabilities: exact agreement rates among non-matched pairs.
+    # Full enumeration when all distinct pairs fit within n_sample; otherwise
+    # sample without replacement (no duplicate pairs).
     u <- numeric(nv)
     names(u) <- key
-    n_pairs <- min(n_sample, n * (n - 1L))
-    sample_i <- sample.int(n, n_pairs, replace = TRUE)
-    sample_j <- sample.int(nrow(x_anon), n_pairs, replace = TRUE)
-    # Avoid true matches
-    is_true <- sample_j == true_idx[sample_i]
-    if (any(is_true)) {
-        sample_j[is_true] <- ((sample_j[is_true]) %% nrow(x_anon)) + 1L
+    n_anon   <- nrow(x_anon)
+    n_total  <- n * (n_anon - 1L)   # distinct non-matching ordered pairs
+    if (n_total <= n_sample) {
+        # Enumerate all (i, j) pairs where j != true_idx[i]
+        all_j  <- seq_len(n_anon)
+        pairs  <- do.call(rbind, lapply(seq_len(n), function(i) {
+            js <- all_j[all_j != true_idx[i]]
+            cbind(i = i, j = js)
+        }))
+        sample_i <- pairs[, "i"]
+        sample_j <- pairs[, "j"]
+    } else {
+        idx      <- sample.int(n_total, n_sample, replace = FALSE)
+        sample_i <- ((idx - 1L) %/% (n_anon - 1L)) + 1L
+        offset   <- ((idx - 1L) %% (n_anon - 1L)) + 1L
+        sample_j <- ifelse(offset < true_idx[sample_i], offset,
+                           offset + 1L)
     }
+    n_pairs <- length(sample_i)
 
     for (vi in seq_along(key)) {
         v <- key[vi]
-        if (type[[v]] %in% c("numeric", "ordinal")) {
-            r <- rng[[v]]
-            span <- r[2] - r[1]
-            if (span <= 0) span <- 1
-            tol_v <- stats::mad(X[[v]], na.rm = TRUE)
-            if (!is.finite(tol_v) || tol_v <= 0)
-                tol_v <- 0.1 * span
-            agree <- vapply(seq_len(n_pairs), function(idx) {
-                xv <- X[[v]][sample_i[idx]]
-                av <- x_anon[[v]][sample_j[idx]]
-                if (is.na(xv) || is.na(av)) return(NA)
-                abs(xv - av) <= tol_v
-            }, logical(1))
-            u[vi] <- mean(agree, na.rm = TRUE)
-        } else {
-            agree <- vapply(seq_len(n_pairs), function(idx) {
-                xv <- X[[v]][sample_i[idx]]
-                av <- x_anon[[v]][sample_j[idx]]
-                if (is.na(xv) || is.na(av)) return(NA)
-                as.character(xv) == as.character(av)
-            }, logical(1))
-            u[vi] <- mean(agree, na.rm = TRUE)
-        }
+        agree <- vapply(seq_len(n_pairs), function(idx) {
+            xv <- X_est[[v]][sample_i[idx]]
+            av <- x_anon_est[[v]][sample_j[idx]]
+            if (is.na(xv) || is.na(av)) return(NA)
+            as.character(xv) == as.character(av)
+        }, logical(1))
+        u[vi] <- mean(agree, na.rm = TRUE)
         if (is.na(u[vi]) || u[vi] <= 0) u[vi] <- 0.01
         if (u[vi] >= 1) u[vi] <- 0.99
     }
@@ -1284,8 +1326,8 @@ print.inspect_record <- function(x, ...) {
 }
 
 #' @keywords internal
-.fs_log_lr <- function(x_row, anon_block, key, type, rng,
-                       m_probs, u_probs, tol = NULL, na_anon = "ignore") {
+.fs_log_lr <- function(x_row, anon_block, key, m_probs, u_probs,
+                       breaks = NULL) {
     m <- nrow(anon_block)
     lr <- numeric(m)
 
@@ -1293,31 +1335,20 @@ print.inspect_record <- function(x, ...) {
         v <- key[vi]
         xv <- x_row[[v]]
         av <- anon_block[[v]]
+
+        if (!is.null(breaks[[v]])) {
+            xv <- .discretize(xv, breaks[[v]])
+            av <- .discretize(av, breaks[[v]])
+        }
+
         mv <- m_probs[v]
         uv <- u_probs[v]
         na <- is.na(av) | is.na(xv)
 
-        if (type[[v]] %in% c("numeric", "ordinal")) {
-            if (!is.null(tol) && !is.na(tol[v])) {
-                tol_v <- tol[v]
-            } else {
-                r <- rng[[v]]
-                span <- r[2] - r[1]
-                if (span <= 0) span <- 1
-                tol_v <- stats::mad(c(xv, av), na.rm = TRUE)
-                if (!is.finite(tol_v) || tol_v <= 0)
-                    tol_v <- 0.1 * span
-            }
-            gamma <- ifelse(!na, abs(av - xv) <= tol_v, FALSE)
-        } else {
-            gamma <- ifelse(!na, as.character(av) == as.character(xv), FALSE)
-        }
-
-        # na_anon: how a missing value is scored as agreement evidence
-        if (na_anon == "match") gamma[na] <- TRUE   # NA treated as agreement
+        # Exact agreement for all variable types; NA pairs drop out (contribute 0)
+        gamma <- ifelse(!na, as.character(av) == as.character(xv), FALSE)
         contrib <- ifelse(gamma, log(mv / uv), log((1 - mv) / (1 - uv)))
-        if (na_anon == "ignore") contrib[na] <- 0   # variable drops out
-        # "mismatch": NA keeps gamma = FALSE -> disagreement evidence
+        contrib[na] <- 0
         lr <- lr + contrib
     }
 
@@ -1353,7 +1384,7 @@ print.recordLinkageRisk <- function(x, ...) {
     mtch <- if (!is.null(s$matching)) s$matching else "independent"
     if (mtch == "bijective")
         cat("Matching:    bijective (Hungarian algorithm)\n")
-    cat("Weighting:   ", s$risk_weighting, "\n", sep = "")
+    cat("Weighting:   ", s$control$risk_weighting, "\n", sep = "")
     cat("Keys:        ", paste(s$key, collapse = ", "), "\n", sep = "")
     rec_label <- if (dir == "reverse") " (risk per synthetic record)" else ""
     cat("Records:     ", x$n_original, " original, ",
@@ -1361,11 +1392,11 @@ print.recordLinkageRisk <- function(x, ...) {
     cat("Truth:       ", s$truth,
         if (!is.null(s$id)) paste0(" (id: ", s$id, ")") else "", "\n", sep = "")
 
-    if (meth == "deterministic") {
-        cat("Strategy:    ", s$strategy, "\n", sep = "")
+    if (meth == "distance-based") {
+        cat("Strategy:    ", s$control$strategy, "\n", sep = "")
         if (!is.null(s$block))
             cat("Blocking:    ", paste(s$block, collapse = ", "), "\n", sep = "")
-        cat("NA handling: ", s$na_anon, "\n", sep = "")
+        cat("NA handling: ", s$control$na_anon, "\n", sep = "")
     } else if (!is.null(s$block)) {
         cat("Blocking:    ", paste(s$block, collapse = ", "), "\n", sep = "")
     }
@@ -1425,15 +1456,16 @@ summary.recordLinkageRisk <- function(object, ...) {
         )
     }
 
-    # Distance-to-true-match statistics
-    d_true <- object$per_record$d_true
-    d_true_valid <- d_true[!is.na(d_true)]
-    d_true_stats <- if (length(d_true_valid) > 0) {
-        c(mean = mean(d_true_valid),
-          median = stats::median(d_true_valid),
-          sd = stats::sd(d_true_valid),
-          min = min(d_true_valid),
-          max = max(d_true_valid))
+    # True-match score statistics (d_true for distance-based, lr_true for probabilistic)
+    score_col <- if (object$method == "distance-based") "d_true" else "lr_true"
+    score_vals <- object$per_record[[score_col]]
+    score_valid <- score_vals[!is.na(score_vals)]
+    score_stats <- if (length(score_valid) > 0) {
+        c(mean = mean(score_valid),
+          median = stats::median(score_valid),
+          sd = stats::sd(score_valid),
+          min = min(score_valid),
+          max = max(score_valid))
     } else {
         NULL
     }
@@ -1443,7 +1475,6 @@ summary.recordLinkageRisk <- function(object, ...) {
         direction = if (is.null(object$direction)) "forward" else object$direction,
         matching = if (!is.null(object$settings$matching)) object$settings$matching
                    else "independent",
-        risk_weighting = object$settings$risk_weighting,
         key_vars = object$key_vars,
         n_original = object$n_original,
         n_synthetic = object$n_synthetic,
@@ -1451,7 +1482,7 @@ summary.recordLinkageRisk <- function(object, ...) {
         max_risk = object$overall$max_risk,
         risk_quantiles = risk_quantiles,
         risk_bands = risk_bands,
-        d_true_stats = d_true_stats,
+        score_stats = score_stats,
         pct_true_in_set = object$overall$pct_true_in_set,
         mean_candidate_size = object$overall$mean_candidate_size,
         risk_gini = object$overall$risk_gini,
@@ -1478,10 +1509,13 @@ print.summary.recordLinkageRisk <- function(x, ...) {
     cat("============================\n\n")
 
     mtch <- if (!is.null(x$matching)) x$matching else "independent"
-    cat("Method:", x$method, "| Direction:", dir,
-        "| Weighting:", x$risk_weighting, "\n")
-    if (mtch == "bijective")
-        cat("Matching: bijective (Hungarian algorithm)\n")
+    if (x$method == "distance-based") {
+        cat("Method:", x$method, "| Direction:", dir, "\n")
+        if (mtch == "bijective")
+            cat("Matching: bijective (Hungarian algorithm)\n")
+    } else {
+        cat("Method:", x$method, "\n")
+    }
     cat("Key variables:", paste(x$key_vars, collapse = ", "), "\n")
     cat("Records:", x$n_original, "original,", x$n_synthetic, "synthetic\n\n")
 
@@ -1503,13 +1537,13 @@ print.summary.recordLinkageRisk <- function(x, ...) {
                     bn[i], x$risk_bands[i], pct))
     }
 
-    if (!is.null(x$d_true_stats)) {
-        d_label <- if (x$method == "probabilistic") "Log-LR for True Match:"
+    if (!is.null(x$score_stats)) {
+        s_label <- if (x$method == "probabilistic") "Log-LR for True Match:"
                    else "Distance to True Match:"
-        cat("\n", d_label, "\n", sep = "")
-        cat(sprintf("  Mean:    %7.4f\n", x$d_true_stats["mean"]))
-        cat(sprintf("  Median:  %7.4f\n", x$d_true_stats["median"]))
-        cat(sprintf("  SD:      %7.4f\n", x$d_true_stats["sd"]))
+        cat("\n", s_label, "\n", sep = "")
+        cat(sprintf("  Mean:    %7.4f\n", x$score_stats["mean"]))
+        cat(sprintf("  Median:  %7.4f\n", x$score_stats["median"]))
+        cat(sprintf("  SD:      %7.4f\n", x$score_stats["sd"]))
     }
 
     if (!is.null(x$fs_params)) {
@@ -1521,12 +1555,8 @@ print.summary.recordLinkageRisk <- function(x, ...) {
         }
     }
 
-    if (!is.null(x$var_importance) && !all(is.na(x$var_importance))) {
-        vi_label <- switch(x$method,
-            deterministic = "Variable Importance (mean weighted distance):",
-            probabilistic = "Variable Importance (log-LR on agreement):",
-            "Variable Importance:")
-        cat("\n", vi_label, "\n", sep = "")
+    if (!is.null(x$var_importance)) {
+        cat("\nVariable Importance (mean weighted distance):\n")
         for (v in names(x$var_importance)) {
             cat(sprintf("  %-12s %7.4f\n", v, x$var_importance[v]))
         }
@@ -1601,14 +1631,17 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1,
     }
 
     if (show[2]) {
-        # Distance vs risk scatter
-        d <- x$per_record$d_true
+        if (x$method == "distance-based") {
+            sc <- x$per_record$d_true
+            xlab2 <- "Distance to True Match"
+        } else {
+            sc <- x$per_record$lr_true
+            xlab2 <- "Log-LR (True Match)"
+        }
         risk <- x$per_record$risk
-        valid <- !is.na(d)
+        valid <- !is.na(sc)
         if (sum(valid) > 0) {
-            xlab2 <- if (x$method == "probabilistic") "Log-LR (True Match)"
-                     else "Distance to True Match"
-            plot(d[valid], risk[valid],
+            plot(sc[valid], risk[valid],
                  main = paste0(xlab2, " vs Risk", dir_suffix),
                  xlab = xlab2,
                  ylab = "Re-identification Risk",
@@ -1617,51 +1650,33 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1,
             abline(h = thresh, col = "red", lty = 2, lwd = 2)
         } else {
             plot.new()
-            text(0.5, 0.5, "No distance data available",
-                 cex = 1.2)
+            text(0.5, 0.5, "No score data available", cex = 1.2)
         }
     }
 
     if (show[3]) {
-        # Per-variable importance / discriminative power
-        if (!is.null(x$fs_params)) {
-            # Probabilistic: grouped agree/disagree barplot
+        if (x$method == "probabilistic" && !is.null(x$fs_params)) {
             m <- x$fs_params$m_probs
             u <- x$fs_params$u_probs
-            log_lr_agree <- log(m / u)
-            log_lr_disagree <- log((1 - m) / (1 - u))
-
-            vars <- names(m)
-            mat <- rbind(agree = log_lr_agree, disagree = log_lr_disagree)
-            colnames(mat) <- vars
-
+            mat <- rbind(agree    = log(m / u),
+                         disagree = log((1 - m) / (1 - u)))
+            colnames(mat) <- names(m)
             barplot(mat, beside = TRUE,
-                    main = paste0("Per-Variable Log-Likelihood Ratios",
-                                  dir_suffix),
+                    main = "Per-Variable Log-Likelihood Ratios",
                     ylab = "log(LR)",
-                    col = c("steelblue", "coral"),
-                    las = 2, ...)
+                    col = c("steelblue", "coral"), las = 2, ...)
             abline(h = 0, col = "gray40", lty = 1)
-            legend("topright",
-                   legend = c("Agree", "Disagree"),
-                   fill = c("steelblue", "coral"),
-                   cex = 0.8)
-        } else if (!is.null(x$var_importance) &&
-                   !all(is.na(x$var_importance))) {
+            legend("topright", legend = c("Agree", "Disagree"),
+                   fill = c("steelblue", "coral"), cex = 0.8)
+        } else if (!is.null(x$var_importance)) {
             vi <- x$var_importance
-            vi_label <- switch(x$method,
-                deterministic = "Mean Weighted Distance",
-                probabilistic = "Log-LR on Agreement",
-                "Importance")
             barplot(vi[order(vi, decreasing = TRUE)],
                     main = paste0("Variable Importance", dir_suffix),
-                    ylab = vi_label,
+                    ylab = "Mean Weighted Distance",
                     col = "steelblue", las = 2, ...)
         } else {
             plot.new()
-            text(0.5, 0.5,
-                 "No variable importance available",
-                 cex = 1.2)
+            text(0.5, 0.5, "No variable importance available", cex = 1.2)
         }
     }
 
@@ -1699,7 +1714,8 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1,
 
     if (show[6]) {
         # True-match rank distribution
-        dr <- x$per_record$d_rank
+        rank_col <- if (x$method == "distance-based") "d_rank" else "lr_rank"
+        dr <- x$per_record[[rank_col]]
         valid <- !is.na(dr)
         if (sum(valid) > 0) {
             dr_valid <- dr[valid]

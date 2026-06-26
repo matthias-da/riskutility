@@ -244,7 +244,7 @@ However, @yao2025dcr demonstrate that passing distance-based tests does
 not guarantee privacy (the "DCR Delusion"). See Section \@ref(sec-distance).
 
 **Record linkage.** Directly simulates a re-identification attack using
-deterministic (Gower distance) or probabilistic (Fellegi-Sunter) linkage
+distance-based (Gower distance) or probabilistic (Fellegi-Sunter) linkage
 [@fellegi1969theory; @domingoferrer2003disclosure]. See
 Section \@ref(sec-recordlinkage).
 
@@ -756,7 +756,7 @@ capturing non-linear proximity that fixed distance metrics may miss. Use
 
 The `recordLinkage()` function directly simulates a re-identification attack by
 linking each original record to the most similar record(s) in the anonymized
-dataset. Two methods are implemented: deterministic (Gower distance) and
+dataset. Two methods are implemented: distance-based (Gower distance) and
 probabilistic (Fellegi-Sunter, @fellegi1969theory). Three matching modes are
 available: independent (many-to-one), bijective (one-to-one via Hungarian
 algorithm, @herranz2016gdbrl), and optimal transport (Sinkhorn).
@@ -765,7 +765,7 @@ algorithm, @herranz2016gdbrl), and optimal transport (Sinkhorn).
 recordLinkage() is demonstrated in depth in the dedicated recordLinkage vignette,
 which is kept in the package's GitHub repository but excluded from the CRAN build.
 Example usage (not evaluated here):
-    rl_res <- riskutility::recordLinkage(pair, method = "deterministic")
+    rl_res <- riskutility::recordLinkage(pair, method = "distance-based")
     print(rl_res)
 -->
 

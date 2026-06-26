@@ -4,7 +4,7 @@
 \alias{recordLinkage}
 \alias{recordLinkage.synth_pair}
 \alias{recordLinkage.default}
-\title{Record Linkage Risk After Perturbation}
+\title{Record Linkage Risk}
 \usage{
 recordLinkage(X, ...)
 
@@ -14,23 +14,15 @@ recordLinkage(X, ...)
   X,
   x_anon,
   key,
-  method = c("deterministic", "probabilistic"),
+  method = c("distance-based", "probabilistic"),
   direction = c("forward", "reverse"),
-  risk_weighting = c("uniform", "softmax"),
-  kappa = NULL,
   truth = c("row", "id"),
   id = NULL,
-  type = NULL,
-  weights = NULL,
-  na_anon = c("ignore", "match", "mismatch"),
-  strategy = c("nearest", "topk"),
-  k = NULL,
   block = NULL,
-  m_probs = NULL,
-  u_probs = NULL,
   return_matches = FALSE,
   matching = c("independent", "bijective"),
   risk_threshold = 0.1,
+  control = rl_control(),
   ...
 )
 }
@@ -43,23 +35,17 @@ recordLinkage(X, ...)
 
 \item{key}{character. Names of quasi-identifier variables used for linkage.}
 
-\item{method}{character. Linkage method: \code{"deterministic"} (default,
+\item{method}{character. Linkage method: \code{"distance-based"} (default,
 weighted Gower distance) or \code{"probabilistic"} (Fellegi-Sunter
 log-likelihood ratios).}
 
 \item{direction}{character. Direction of the linkage attack:
 \code{"forward"} (default) loops over original records and searches in the
-anonymized data, answering "how safe is each original individual?";
+anonymized data (prosecutor / nosy-neighbour scenario);
 \code{"reverse"} loops over anonymized records and searches in the
-original data, answering "how disclosive is each released record?".}
-
-\item{risk_weighting}{character. How to weight candidates: \code{"uniform"}
-(default, 1/|set|) or \code{"softmax"} (exponential distance-weighting).
-Ignored for \code{method = "probabilistic"}, which always reports the
-Skinner (2008) posterior (see section \emph{Probabilistic method}).}
-
-\item{kappa}{numeric or NULL. Temperature parameter for softmax weighting.
-If NULL (default), auto-calibrated as \code{2 / range(distances)}.}
+original data (journalist scenario).
+Only applies to \code{method = "distance-based"}; probabilistic linkage
+always runs forward.}
 
 \item{truth}{character. How to define the true match for scoring:
 one of \code{"row"} (default) or \code{"id"}.
@@ -71,80 +57,62 @@ a shared identifier column.}
 \item{id}{character or NULL. If \code{truth="id"}, name of an identifier column
 present in both \code{X} and \code{x_anon} that uniquely defines the true match.}
 
-\item{type}{named character vector or NULL. Optional per-key type override:
-values in \code{c("numeric","ordinal","nominal")}. If NULL, inferred from \code{X}.}
-
-\item{weights}{named numeric vector or NULL. Optional nonnegative weights for keys.
-If NULL, equal weights are used.}
-
-\item{na_anon}{character. How a missing quasi-identifier value is handled
-during matching: \code{"ignore"} (default), \code{"match"}, or
-\code{"mismatch"}.
-\itemize{
-\item \code{"ignore"} drops the variable from that pairwise comparison
-(no contribution to the distance or likelihood ratio).
-\item \code{"match"} treats the missing value as agreement (distance
-contribution 0).
-\item \code{"mismatch"} treats the missing value as disagreement
-(distance contribution 1).
-}}
-
-\item{strategy}{character. Adversary strategy variant:
-\code{"nearest"} (default) or \code{"topk"}.}
-
-\item{k}{integer or NULL. Used when \code{strategy} is \code{"topk"}.
-Ties at the cut-off distance may yield more than \code{k} candidates.}
-
 \item{block}{character or NULL. Optional subset of \code{key} used for exact blocking.
 Distances are computed only within blocks defined by these variables.}
-
-\item{m_probs}{named numeric vector or NULL. User-supplied m-probabilities
-for the probabilistic method (probability of agreement given true match).}
-
-\item{u_probs}{named numeric vector or NULL. User-supplied u-probabilities
-for the probabilistic method (probability of agreement given non-match).}
 
 \item{return_matches}{logical. If TRUE, returns candidate indices per record (may be memory-heavy).}
 
 \item{matching}{character. Matching mode: \code{"independent"} (default) scores
 each record independently (classical DBRL), \code{"bijective"} enforces
 one-to-one assignment via the Hungarian algorithm (GDBRL).
-Bijective matching requires the \pkg{clue} package.
+Bijective matching requires the \pkg{clue} package and is only supported
+for \code{method = "distance-based"}.
 See Herranz, Nin, Rodriguez & Tassa (2016).}
 
 \item{risk_threshold}{numeric. Threshold for classifying records as "high risk"
 and for the \code{privacy_pass} flag (default 0.1). Records with risk above
 this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
 The \code{privacy_pass} flag is TRUE when \code{mean_risk <= risk_threshold}.}
+
+\item{control}{an \code{rl_control} object from \code{\link{rl_control}()},
+carrying method-specific tuning parameters. Use
+\code{rl_control(weights, type, risk_weighting, kappa, strategy, k)} for
+distance-based tuning and \code{rl_control(m_probs, u_probs)} for
+probabilistic tuning. Irrelevant parameters for the chosen method produce
+a warning and are ignored.}
 }
 \value{
 An object of class \code{"recordLinkageRisk"}: a list with components
 \describe{
-\item{per_record}{data.frame with \code{n_query} rows and columns:
-\code{risk} (numeric, re-identification risk),
-\code{cand_n} (integer, candidate set size),
+\item{per_record}{data.frame with \code{n_query} rows. Columns common
+to both methods: \code{risk} (numeric, re-identification risk),
+\code{cand_n} (integer; for distance-based, size of the attacker's
+guess set; for probabilistic, size of the blocking group used in
+the Skinner prior),
 \code{true_in_set} (logical),
-\code{d_true} (numeric, distance/score to true match),
-\code{d_min} (numeric, minimum distance),
-\code{d_rank} (integer, rank of true match among candidates),
-\code{risk_band} (factor with levels \code{"very_low"}, \code{"low"},
-\code{"moderate"}, \code{"high"}, \code{"very_high"},
+\code{risk_band} (ordered factor with levels \code{"very_low"},
+\code{"low"}, \code{"moderate"}, \code{"high"}, \code{"very_high"},
 \code{"unique_match"}).
-When \code{matching = "bijective"}, an additional column
-\code{bijective_assigned} gives the search-side row index
-assigned by the Hungarian algorithm. In bijective mode,
-\code{risk} and \code{bijective_assigned} reflect the global
-one-to-one assignment, while \code{d_true}, \code{d_min}, and
-\code{d_rank} retain their per-record independent-scoring values
-from the main loop (useful for diagnostics).}
+Distance-based only: \code{d_true} (Gower distance to true match),
+\code{d_min} (minimum distance to any candidate),
+\code{d_rank} (rank of true match by ascending distance).
+With \code{matching = "bijective"}, an additional
+\code{bijective_assigned} column gives the Hungarian-algorithm
+assignment; \code{d_true}, \code{d_min}, \code{d_rank} retain
+independent-scoring diagnostics.
+Probabilistic only: \code{lr_true} (log-likelihood ratio of the true
+match), \code{lr_rank} (rank of true match by descending log-LR).}
 \item{overall}{list with aggregate statistics including \code{risk_gini}
 (Gini coefficient of risk concentration).}
-\item{var_importance}{named numeric vector of per-variable importance.}
-\item{direction}{character, \code{"forward"} or \code{"reverse"}.}
+\item{var_importance}{named numeric vector of per-variable mean weighted
+distance (distance-based only; absent for probabilistic).}
+\item{direction}{character, \code{"forward"} or \code{"reverse"}
+(distance-based only; always \code{"forward"} for probabilistic).}
 \item{matches}{(optional) list of integer vectors with candidate indices.}
 }
-When \code{direction = "forward"}, \code{per_record} has one row per
-original record; when \code{"reverse"}, one row per anonymized record.
+For distance-based: when \code{direction = "forward"}, \code{per_record}
+has one row per original record; when \code{"reverse"}, one row per
+anonymized record. Probabilistic always runs forward.
 
 Use \code{\link{top_at_risk}}, \code{\link{risk_by_group}},
 \code{\link{merge_per_record}}, and \code{\link{inspect_record}} for
@@ -153,7 +121,7 @@ post-hoc per-record analysis.
 \description{
 Measures targeted re-identification risk by linking each original record to
 the most similar record(s) in a perturbed dataset using quasi-identifiers.
-Supports deterministic (Gower distance-based) and probabilistic
+Supports distance-based (Gower distance) and probabilistic
 (Fellegi-Sunter) linkage methods.
 }
 \section{Attacker scenario}{
@@ -175,7 +143,7 @@ or a shared identifier column (\code{truth="id"}). Note that \code{truth} affect
 
 \section{Distance measure}{
 
-For the deterministic method, record linkage is based on a weighted Gower-type
+For the distance-based method, record linkage is based on a weighted Gower-type
 distance over the quasi-identifiers. For an original record \eqn{i} and a candidate
 record \eqn{j} in the perturbed data, the distance is
 \deqn{
@@ -218,48 +186,63 @@ for that pairwise comparison.
 \section{Probabilistic method}{
 
 The Fellegi-Sunter probabilistic method estimates match (m) and
-non-match (u) probabilities for each variable, then computes
-log-likelihood ratios to score candidate pairs. Per-record risk is
-the Skinner (2008) posterior identification probability:
+non-match (u) probabilities for each variable using exact agreement,
+then computes log-likelihood ratios to score candidate pairs.
+Per-record risk is the Skinner (2008) posterior identification probability:
 \deqn{P(\text{match} \mid \gamma) = \frac{\Lambda \cdot p}{\Lambda \cdot p + (1 - p)}}
 where \eqn{\Lambda = m(\gamma)/u(\gamma)} is the likelihood ratio and
-\eqn{p = 1/n} is the closed-world prior (one true match among \eqn{n}
-candidates). This is directly interpretable as the probability that the
-attacker's link is correct, given the observed agreement pattern.
+\eqn{p = 1/|B|} is the closed-world prior (one true match among the
+\eqn{|B|} candidates in blocking group \eqn{B}; without blocking
+\eqn{|B| = n}). This is directly interpretable as the probability that
+the attacker's link is correct, given the observed agreement pattern.
 
-User-supplied \code{m_probs} and \code{u_probs} override the supervised
-estimation. \code{risk_weighting} does not affect
-the posterior risk; it controls candidate set diagnostics only
-(\code{cand_n}, \code{true_in_set}).
+User-supplied \code{m_probs} and \code{u_probs} (via \code{rl_control()})
+override the supervised estimation. NA pairs always contribute 0 to the
+log-likelihood ratio (variable dropped). Direction, \code{na_anon}, and
+\code{risk_weighting} do not apply to this method.
 
-\strong{When to use which matching mode:}
-Use \code{"independent"} for classical per-record risk (DBRL).
-Use \code{"bijective"} when the attacker is known to perform
-a one-to-one assignment (GDBRL; binary risk).
+\strong{Matching mode:}
+Use \code{matching = "independent"} (default) for classical per-record risk
+(DBRL). Bijective matching is not available for the probabilistic method;
+use \code{method = "distance-based"} if one-to-one assignment is required.
 }
 
 \section{Softmax risk weighting}{
 
-When \code{risk_weighting = "softmax"}, closer candidates receive higher
-attribution probability via:
+When \code{risk_weighting = "softmax"} (set via \code{rl_control()}), closer
+candidates receive higher attribution probability via:
 \deqn{w_j = \frac{\exp(-\kappa \cdot d_j)}{\sum_k \exp(-\kappa \cdot d_k)}}
 The temperature \code{kappa} is auto-calibrated from the distance range
 if not supplied. This replaces the uniform \eqn{1/|candidate\_set|} risk.
 }
 
+\section{Harmonic rank weighting}{
+
+When \code{risk_weighting = "harmonic"} (set via \code{rl_control()}),
+candidates are weighted by the reciprocal of their distance rank:
+\deqn{w_j = \frac{1/r_j}{\sum_k 1/r_k}}
+where \eqn{r_j} is the rank of candidate \eqn{j} by ascending distance
+(rank 1 = closest). Ties receive the minimum rank. Unlike softmax, harmonic
+weighting requires no tuning parameter and depends only on the ordering of
+candidates, not their absolute distances.
+}
+
 \section{Direction}{
 
-By default (\code{direction = "forward"}) the function loops over original
-records and finds matches in the anonymized data. This quantifies how easily
-each individual in the population can be re-identified.
+Only applies to \code{method = "distance-based"}.
+With \code{direction = "forward"} (default) the function loops over original
+records and finds nearest matches in the anonymized data. This corresponds
+to a prosecutor or nosy-neighbour attacker who holds external knowledge about
+a target individual and searches the released file for that individual.
 
-With \code{direction = "reverse"} the loop runs over anonymized records,
-searching for matches in the original data. This gives a risk profile of
-the data to be released: each row in \code{per_record} corresponds to a
-released record and its probability of being correctly linked back to the
-original. Deterministic and probabilistic methods are symmetric
-(distance/agreement does not depend on direction), so only the evaluation
-perspective changes.
+With \code{direction = "reverse"} the loop runs over anonymized records and
+finds nearest matches in the original data. This is the direction used by the
+classical DBRL literature (Domingo-Ferrer and Torra, 2003; Herranz et al.,
+2016) and by \pkg{sdcMicro}'s \code{dRiskRMD}, and corresponds to a
+journalist-type attacker who holds the released file and a reference database
+and tries to identify each released record in that reference.
+The two directions can produce different risk estimates because the
+nearest-neighbour relation is not symmetric.
 }
 
 \examples{
@@ -278,7 +261,7 @@ for (r in levels(x$region)) {
   x_anon$age[idx] <- sample(x$age[idx])
 }
 
-# Deterministic nearest-neighbor (default)
+# Distance-based nearest-neighbor (default)
 res1 <- recordLinkage(x, x_anon, key = c("age","sex","region"))
 print(res1)
 summary(res1)
@@ -289,9 +272,9 @@ res1r <- recordLinkage(x, x_anon, key = c("age","sex","region"),
 print(res1r)
 
 \donttest{
-# Softmax distance-weighted risk
+# Softmax distance-weighted risk (via rl_control)
 res2 <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-                      risk_weighting = "softmax")
+                      control = rl_control(risk_weighting = "softmax"))
 print(res2)
 
 # Probabilistic (Fellegi-Sunter) method

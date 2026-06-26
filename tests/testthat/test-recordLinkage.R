@@ -42,7 +42,7 @@ test_that("recordLinkage stores n_original, n_synthetic, key_vars, method", {
   expect_equal(res$n_original, 50)
   expect_equal(res$n_synthetic, 50)
   expect_equal(res$key_vars, c("age", "sex"))
-  expect_equal(res$method, "deterministic")
+  expect_equal(res$method, "distance-based")
 })
 
 test_that("per_record has correct number of rows", {
@@ -94,7 +94,7 @@ test_that("topk strategy limits candidates", {
   x <- data.frame(a = c(1, 2, 3), b = factor(c("x", "x", "x")))
   x_anon <- data.frame(a = c(1, 2, 3), b = factor(c("x", "x", "x")))
   res <- recordLinkage(x, x_anon, key = c("a", "b"),
-                       strategy = "topk", k = 1)
+                       control = rl_control(strategy = "topk", k = 1))
   expect_true(all(res$per_record$cand_n >= 1))
 })
 
@@ -142,7 +142,7 @@ test_that("softmax with user-supplied kappa works", {
 test_that("softmax weighting produces valid risk values", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       risk_weighting = "softmax")
+                       control = rl_control(risk_weighting = "softmax"))
   expect_true(all(res$per_record$risk >= 0))
   expect_true(all(res$per_record$risk <= 1))
 })
@@ -196,16 +196,19 @@ test_that("probabilistic: user-supplied m/u works", {
   u <- c(age = 0.1, sex = 0.5, region = 0.2)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
                        method = "probabilistic",
-                       m_probs = m, u_probs = u)
+                       control = rl_control(m_probs = m, u_probs = u))
   expect_equal(res$fs_params$m_probs, m)
   expect_equal(res$fs_params$u_probs, u)
 })
 
-test_that("probabilistic with softmax weighting works", {
+test_that("probabilistic with softmax weighting warns and returns valid risk", {
   d <- .make_test_data(30)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "probabilistic",
-                       risk_weighting = "softmax")
+  expect_warning(
+    res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                         method = "probabilistic",
+                         control = rl_control(risk_weighting = "softmax")),
+    "risk_weighting.*ignored"
+  )
   expect_s3_class(res, "recordLinkageRisk")
   expect_true(all(res$per_record$risk >= 0))
   expect_true(all(res$per_record$risk <= 1))
@@ -232,8 +235,8 @@ test_that("synth_pair errors without key_vars", {
 test_that("synth_pair passes additional arguments", {
   d <- .make_test_data(50)
   pair <- synth_pair(d$x, d$x_anon, key_vars = c("age", "sex", "region"))
-  res <- recordLinkage(pair, risk_weighting = "softmax")
-  expect_equal(res$settings$risk_weighting, "softmax")
+  res <- recordLinkage(pair, control = rl_control(risk_weighting = "softmax"))
+  expect_equal(res$settings$control$risk_weighting, "softmax")
 })
 
 
@@ -312,7 +315,8 @@ test_that("all NAs in anonymized data handled with na_anon='ignore'", {
                         stringsAsFactors = FALSE)
   # With ignore, all distances collapse when no valid vars remain
   expect_no_error(
-    recordLinkage(x, x_anon, key = c("a", "b"), na_anon = "ignore")
+    recordLinkage(x, x_anon, key = c("a", "b"),
+                  control = rl_control(na_anon = "ignore"))
   )
 })
 
@@ -375,7 +379,7 @@ test_that("identical data gives maximum risk", {
   expect_equal(res$overall$mean_risk, 1)
 })
 
-test_that("deterministic method is deterministic (no randomness)", {
+test_that("distance-based method is reproducible (no randomness)", {
   d <- .make_test_data(50)
   r1 <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
   r2 <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
@@ -385,11 +389,11 @@ test_that("deterministic method is deterministic (no randomness)", {
 
 # ── Backward compatibility ──────────────────────────────────────────────
 
-test_that("default method=deterministic, risk_weighting=uniform is backward compatible", {
+test_that("default method=distance-based, risk_weighting=uniform is backward compatible", {
   d <- .make_test_data(30)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
-  expect_equal(res$method, "deterministic")
-  expect_equal(res$settings$risk_weighting, "uniform")
+  expect_equal(res$method, "distance-based")
+  expect_equal(res$settings$control$risk_weighting, "uniform")
 })
 
 test_that("truth='id' mode works correctly", {
@@ -406,7 +410,7 @@ test_that("truth='id' mode works correctly", {
 test_that("topk strategy with k=3 returns valid results", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       strategy = "topk", k = 3)
+                       control = rl_control(strategy = "topk", k = 3))
   expect_s3_class(res, "recordLinkageRisk")
   # cand_n >= k (ties can expand the set)
   expect_true(all(res$per_record$cand_n >= 1 | res$per_record$cand_n == 0))
@@ -459,7 +463,7 @@ test_that("reverse exact copy gives risk = 1", {
   expect_equal(res$overall$mean_risk, 1)
 })
 
-test_that("reverse deterministic differs from forward", {
+test_that("reverse distance-based differs from forward", {
   d <- .make_test_data(50)
   fwd <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
   rev <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
@@ -471,12 +475,16 @@ test_that("reverse deterministic differs from forward", {
   expect_equal(rev$direction, "reverse")
 })
 
-test_that("reverse probabilistic works", {
+test_that("direction is ignored for probabilistic with a warning", {
   d <- .make_test_data(50)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "probabilistic", direction = "reverse")
+  expect_warning(
+    res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                         method = "probabilistic", direction = "reverse"),
+    "direction"
+  )
   expect_s3_class(res, "recordLinkageRisk")
-  expect_true(!is.null(res$fs_params))
+  # direction is forced to forward despite the user request
+  expect_equal(res$direction, "forward")
   expect_true(all(res$per_record$risk >= 0))
   expect_true(all(res$per_record$risk <= 1))
 })
@@ -492,7 +500,8 @@ test_that("reverse blocking works", {
 test_that("reverse softmax weighting gives valid risk", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       direction = "reverse", risk_weighting = "softmax")
+                       direction = "reverse",
+                       control = rl_control(risk_weighting = "softmax"))
   expect_true(all(res$per_record$risk >= 0))
   expect_true(all(res$per_record$risk <= 1))
 })
@@ -604,18 +613,19 @@ test_that("d_rank handles ties with ties.method='min'", {
   expect_equal(res$per_record$d_rank, 1L)
 })
 
-test_that("d_rank computed for probabilistic method", {
+test_that("lr_rank computed for probabilistic method (not d_rank)", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
                        method = "probabilistic")
-  expect_true("d_rank" %in% names(res$per_record))
-  expect_true(any(!is.na(res$per_record$d_rank)))
+  expect_false("d_rank" %in% names(res$per_record))
+  expect_true("lr_rank" %in% names(res$per_record))
+  expect_true(any(!is.na(res$per_record$lr_rank)))
 })
 
 
 # ── var_importance tests ─────────────────────────────────────────────────
 
-test_that("var_importance is named numeric for deterministic method", {
+test_that("var_importance is named numeric for distance-based method", {
   d <- .make_test_data()
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
   expect_true(!is.null(res$var_importance))
@@ -624,12 +634,11 @@ test_that("var_importance is named numeric for deterministic method", {
   expect_equal(names(res$var_importance), c("age", "sex", "region"))
 })
 
-test_that("var_importance is named numeric for probabilistic method", {
+test_that("var_importance is NULL for probabilistic method", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
                        method = "probabilistic")
-  expect_type(res$var_importance, "double")
-  expect_equal(names(res$var_importance), c("age", "sex", "region"))
+  expect_null(res$var_importance)
 })
 
 
@@ -765,7 +774,7 @@ test_that("inspect_record prints without error", {
 
 # ── plot which=3 for non-probabilistic methods ───────────────────────────
 
-test_that("plot which=3 works for deterministic method", {
+test_that("plot which=3 works for distance-based method", {
   d <- .make_test_data()
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
   expect_no_error(plot(res, which = 3))
@@ -904,13 +913,13 @@ test_that("bijective: cand_n is 0 or 1", {
   expect_true(all(res$per_record$cand_n %in% c(0L, 1L)))
 })
 
-test_that("bijective: works with probabilistic method", {
-  skip_if_not_installed("clue")
+test_that("bijective + probabilistic is rejected with informative error", {
   d <- .make_test_data(30)
-  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       method = "probabilistic", matching = "bijective")
-  expect_s3_class(res, "recordLinkageRisk")
-  expect_true(all(res$per_record$risk %in% c(0, 1)))
+  expect_error(
+    recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                  method = "probabilistic", matching = "bijective"),
+    "not supported"
+  )
 })
 
 test_that("bijective: works with blocking", {
@@ -1140,7 +1149,7 @@ test_that("independent matching is default and unchanged", {
 
 ## -- Hand-computed correctness tests ------------------------------------------
 
-test_that("deterministic: permuted anon gives correct risk and distances", {
+test_that("distance-based:permuted anon gives correct risk and distances", {
   # X=(20,40,60), X_anon=(41,19,61). Range=42.
   # rec1: nearest=a2(1/42), true=a1(21/42). Risk=0.
   # rec2: nearest=a1(1/42), true=a2(21/42). Risk=0.
@@ -1154,7 +1163,7 @@ test_that("deterministic: permuted anon gives correct risk and distances", {
   expect_equal(res$per_record$d_min[3], 1/42, tolerance = 1e-10)
 })
 
-test_that("deterministic: mixed types give correct Gower distance", {
+test_that("distance-based:mixed types give correct Gower distance", {
   # d(r1,a1) = (|20-22|/10 + 0)/2 = 0.1
   # d(r1,a2) = (|20-28|/10 + 1)/2 = 0.9
   x <- data.frame(age = c(20, 30), sex = factor(c("M", "F")))
@@ -1164,7 +1173,7 @@ test_that("deterministic: mixed types give correct Gower distance", {
   expect_equal(res$per_record$d_true, c(0.1, 0.1), tolerance = 1e-10)
 })
 
-test_that("deterministic: tied distances give risk = 1/n_tied", {
+test_that("distance-based:tied distances give risk = 1/n_tied", {
   # X=(20,40), X_anon=(30,30). All d=0.5. Both tied at min.
   x <- data.frame(age = c(20, 40))
   xa <- data.frame(age = c(30, 30))
@@ -1174,42 +1183,43 @@ test_that("deterministic: tied distances give risk = 1/n_tied", {
   expect_true(all(res$per_record$true_in_set))
 })
 
-test_that("deterministic: topk strategy excludes/includes candidates", {
+test_that("distance-based:topk strategy excludes/includes candidates", {
   # X=(20,80), X_anon=(21,79). top-1 always nearest.
   x <- data.frame(age = c(20, 80))
   xa <- data.frame(age = c(21, 79))
   # topk=1: each record's nearest is its true match
-  res1 <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 1)
+  res1 <- recordLinkage(x, xa, key = "age", control = rl_control(strategy = "topk", k = 1))
   expect_equal(res1$per_record$risk, c(1, 1))
   expect_equal(res1$per_record$cand_n, c(1L, 1L))
 })
 
-test_that("deterministic: topk strategy controls candidate set size", {
+test_that("distance-based:topk strategy controls candidate set size", {
   # rec1(30): d=[0.2, 0.12, 0.8]. True=a1. Nearest=a2(0.12).
   x <- data.frame(age = c(30, 30, 50))
   xa <- data.frame(age = c(25, 33, 50))
-  res1 <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 1)
+  res1 <- recordLinkage(x, xa, key = "age", control = rl_control(strategy = "topk", k = 1))
   expect_equal(res1$per_record$risk[1], 0)  # true not in top-1
-  res2 <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 2)
+  res2 <- recordLinkage(x, xa, key = "age", control = rl_control(strategy = "topk", k = 2))
   expect_equal(res2$per_record$risk[1], 0.5)  # true in top-2
 })
 
-test_that("deterministic: topk with ties yields tie-inclusive set", {
+test_that("distance-based:topk with ties yields tie-inclusive set", {
   # Two candidates at equal distance from the query, topk k=1 should return both
   x <- data.frame(age = c(30, 10))
   xa <- data.frame(age = c(31, 31))
-  res <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 1)
+  res <- recordLinkage(x, xa, key = "age", control = rl_control(strategy = "topk", k = 1))
   # Record 1: both xa records are tied -> cand_n >= 1
   expect_true(res$per_record$cand_n[1] >= 1)
 })
 
-test_that("deterministic: softmax weighting hand-computed", {
+test_that("distance-based:softmax weighting hand-computed", {
   # rec1(25): topk=2 gives d=[0.2, 0.32]. kappa=2/(0.32-0.2)=16.667.
   # w_true = exp(-kappa*0.2) / (exp(-kappa*0.2) + exp(-kappa*0.32))
   x <- data.frame(age = c(25, 33, 50))
   xa <- data.frame(age = c(30, 33, 50))
-  res <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 2,
-                        risk_weighting = "softmax")
+  res <- recordLinkage(x, xa, key = "age",
+                        control = rl_control(strategy = "topk", k = 2,
+                                             risk_weighting = "softmax"))
   kappa <- 2 / (8/25 - 5/25)
   neg_kd <- -kappa * c(5/25, 8/25)
   neg_kd <- neg_kd - max(neg_kd)
@@ -1224,8 +1234,8 @@ test_that("probabilistic: hand-computed risk with user m/u (categorical)", {
   x <- data.frame(sex = factor(c("M", "F", "M")))
   xa <- data.frame(sex = factor(c("M", "F", "F")))
   res <- recordLinkage(x, xa, key = "sex", method = "probabilistic",
-                        m_probs = c(sex = 0.9), u_probs = c(sex = 0.3),
-)
+                        control = rl_control(m_probs = c(sex = 0.9),
+                                             u_probs = c(sex = 0.3)))
   # rec1(M->a1 agree):    LR=3,   post = 3*(1/3)/(3*(1/3)+2/3) = 3/5
   # rec2(F->a2 agree):    LR=3,   post = 3/5
   # rec3(M->a3 disagree): LR=1/7, post = (1/7)*(1/3)/((1/7)*(1/3)+2/3) = 1/15
@@ -1238,26 +1248,32 @@ test_that("probabilistic: 2-var all-agree and all-disagree patterns", {
   x <- data.frame(sex = factor(c("M","F","M")), job = factor(c("A","B","A")))
   xa <- data.frame(sex = factor(c("M","M","F")), job = factor(c("A","B","A")))
   res <- recordLinkage(x, xa, key = c("sex","job"), method = "probabilistic",
-                        m_probs = c(sex = 0.9, job = 0.9),
-                        u_probs = c(sex = 0.3, job = 0.3),
-)
+                        control = rl_control(m_probs = c(sex = 0.9, job = 0.9),
+                                             u_probs = c(sex = 0.3, job = 0.3)))
   # rec1(M,A->a1 both agree):         LR=9,   post = 9*(1/3)/(9*(1/3)+2/3) = 9/11
   # rec2(F,B->a2 sex-disagree,job-agree): LR=3/7, post = (3/7)*(1/3)/((3/7)*(1/3)+2/3) = 3/17
   # rec3(M,A->a3 sex-disagree,job-agree): same LR=3/7, post = 3/17
   expect_equal(res$per_record$risk, c(9/11, 3/17, 3/17), tolerance = 1e-6)
 })
 
-test_that("probabilistic: numeric variable with MAD-based tolerance", {
-  # Skinner (2008) posterior, p=1/3
-  # MAD(c(20,40,60)) = 1.4826*20 = 29.65; LR_agree = 0.95/0.2 = 4.75
-  x <- data.frame(age = c(20, 40, 60))
-  xa <- data.frame(age = c(21, 39, 62))
+test_that("probabilistic: numeric variable uses exact equality", {
+  # Skinner (2008) posterior, p=1/3, LR_agree = 0.95/0.2 = 4.75
+  x  <- data.frame(age = c(20, 40, 60))
+  xa <- data.frame(age = c(20, 40, 60))  # exact copies: all true pairs agree
   res <- recordLinkage(x, xa, key = "age", method = "probabilistic",
-                        m_probs = c(age = 0.95), u_probs = c(age = 0.2),
-)
-  # All three true matches agree (within tol 29.65): LR=4.75 each
+                        control = rl_control(m_probs = c(age = 0.95),
+                                             u_probs = c(age = 0.2)))
+  # All three true matches agree exactly: LR = exp(log(0.95/0.2)) = 4.75
   # post = 4.75*(1/3)/(4.75*(1/3)+2/3) = 4.75/6.75 = 19/27
   expect_equal(res$per_record$risk, rep(19/27, 3), tolerance = 1e-4)
+
+  # Perturbed values should NOT agree under exact equality
+  xb <- data.frame(age = c(21, 39, 62))
+  res2 <- recordLinkage(x, xb, key = "age", method = "probabilistic",
+                         control = rl_control(m_probs = c(age = 0.95),
+                                              u_probs = c(age = 0.2)))
+  # No exact agreement -> all LR < 0 for true match -> risk << 19/27
+  expect_true(all(res2$per_record$risk < 0.1))
 })
 
 
@@ -1298,17 +1314,20 @@ test_that("NA handling: na_anon modes give correct distances", {
   xa <- data.frame(age = c(NA_real_, NA_real_), sex = factor(c("M", "F")))
 
   # match: NA → d=0
-  r1 <- recordLinkage(x, xa, key = c("age", "sex"), na_anon = "match")
+  r1 <- recordLinkage(x, xa, key = c("age", "sex"),
+                      control = rl_control(na_anon = "match"))
   expect_equal(r1$per_record$d_true, c(0, 0))
   expect_equal(r1$per_record$risk, c(1, 1))
 
   # mismatch: NA → d=1 for that variable
-  r2 <- recordLinkage(x, xa, key = c("age", "sex"), na_anon = "mismatch")
+  r2 <- recordLinkage(x, xa, key = c("age", "sex"),
+                      control = rl_control(na_anon = "mismatch"))
   expect_equal(r2$per_record$d_true, c(0.5, 0.5))
   expect_equal(r2$per_record$risk, c(1, 1))
 
   # ignore: NA variable excluded from distance
-  r3 <- recordLinkage(x, xa, key = c("age", "sex"), na_anon = "ignore")
+  r3 <- recordLinkage(x, xa, key = c("age", "sex"),
+                      control = rl_control(na_anon = "ignore"))
   expect_equal(r3$per_record$d_true, c(0, 0))
   expect_equal(r3$per_record$risk, c(1, 1))
 })
@@ -1328,7 +1347,7 @@ test_that("custom variable weights change distances correctly", {
   xa <- data.frame(age = c(25, 20), sex = factor(c("F", "M")))
   # weights=(3,1): rec1 d(a1)=(3*1+1*1)/4=1, d(a2)=0. nearest=a2. true=a1. risk=0.
   res <- recordLinkage(x, xa, key = c("age", "sex"),
-                        weights = c(age = 3, sex = 1))
+                        control = rl_control(weights = c(age = 3, sex = 1)))
   expect_equal(res$per_record$risk, c(0, 1))
 })
 
