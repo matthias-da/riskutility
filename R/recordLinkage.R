@@ -47,7 +47,7 @@
 #'   independent risk because competing query records can no longer "share"
 #'   a popular candidate. Requires \pkg{clue}; only supported for
 #'   \code{method = "distance-based"} (bijective assignment would discard the
-#'   Skinner posterior for \code{"probabilistic"} -- use
+#'   multinomial posterior for \code{"probabilistic"} -- use
 #'   \code{matching = "independent"} instead).
 #' }
 #'
@@ -95,13 +95,16 @@
 #' The Fellegi-Sunter probabilistic method estimates match (m) and
 #' non-match (u) probabilities for each variable using exact agreement,
 #' then computes log-likelihood ratios to score candidate pairs.
-#' Per-record risk is the Skinner (2008) posterior identification probability:
-#' \deqn{P(\text{match} \mid \gamma) = \frac{\Lambda \cdot p}{\Lambda \cdot p + (1 - p)}}
-#' where \eqn{\Lambda = m(\gamma)/u(\gamma)} is the likelihood ratio and
-#' \eqn{p = 1/|B|} is the closed-world prior (one true match among the
-#' \eqn{|B|} candidates in blocking group \eqn{B}; without blocking
-#' \eqn{|B| = n}). This is directly interpretable as the probability that
-#' the attacker's link is correct, given the observed agreement pattern.
+#' Per-record risk is a normalized multinomial posterior over the candidate
+#' set: treating "which candidate is the true match" as a categorical choice
+#' among the \eqn{|B|} candidates in blocking group \eqn{B} (without
+#' blocking, \eqn{|B| = n}), with a flat prior over candidates,
+#' \deqn{P(\text{candidate } j \text{ is the match} \mid \gamma) =
+#' \frac{\Lambda_j}{\sum_{k \in B} \Lambda_k}}
+#' where \eqn{\Lambda_j = m(\gamma_j)/u(\gamma_j)} is the likelihood ratio
+#' for candidate \eqn{j}. This concentrates mass on the top-ranked candidate
+#' when its likelihood ratio dominates its competitors, and reduces to
+#' \eqn{1/|B|} when all candidates are equally likely.
 #'
 #' User-supplied \code{m_probs} and \code{u_probs} (via \code{rl_control()})
 #' override the supervised estimation. NA pairs always contribute 0 to the
@@ -197,7 +200,7 @@
 #'       to both methods: \code{risk} (numeric, re-identification risk),
 #'       \code{cand_n} (integer; for distance-based, size of the attacker's
 #'         guess set; for probabilistic, size of the blocking group used in
-#'         the Skinner prior),
+#'         the multinomial posterior),
 #'       \code{true_in_set} (logical),
 #'       \code{risk_band} (ordered factor with levels \code{"very_low"},
 #'         \code{"low"}, \code{"moderate"}, \code{"high"}, \code{"very_high"},
@@ -441,8 +444,9 @@ recordLinkage.default <- function(X,
     if (method == "probabilistic") {
         if (matching == "bijective")
             stop("'matching = \"bijective\"' is not supported for ",
-                 "method = \"probabilistic\": it would discard the Skinner ",
-                 "posterior. Use matching = \"independent\".", call. = FALSE)
+                 "method = \"probabilistic\": it would discard the ",
+                 "multinomial posterior. Use matching = \"independent\".",
+                 call. = FALSE)
         if (direction != "forward") {
             warning("'direction' is only relevant for method = \"distance-based\". ",
                     "Probabilistic linkage always runs forward (original as query).",
@@ -456,7 +460,8 @@ recordLinkage.default <- function(X,
                     call. = FALSE)
         if (risk_weighting != "uniform")
             warning("'risk_weighting' is ignored for method = \"probabilistic\", ",
-                    "which always reports the Skinner (2008) posterior.",
+                    "which always reports the normalized multinomial ",
+                    "posterior over the candidate set.",
                     call. = FALSE)
         if (!is.null(weights) || !is.null(type) || !is.null(kappa) ||
             strategy != "nearest" || !is.null(k))
@@ -671,19 +676,15 @@ recordLinkage.default <- function(X,
                 lr_true[i] <- lr[j_in]
                 # Rank by descending LR (rank 1 = best match)
                 lr_rank[i] <- as.integer(rank(-lr, ties.method = "min")[j_in])
-                # FIXME: replace Skinner (2008) pairwise posterior with the
-                # normalized multinomial posterior LR_true / sum(LR_all).
-                # Skinner computes P(match | gamma_true) using only the true
-                # match's LR and a flat prior 1/|cand|; it ignores how well the
-                # true match's LR dominates competitors, so it systematically
-                # underestimates risk when the LR discriminates (e.g. two male
-                # candidates with similar age give ~25% instead of ~50%).
-                # The normalized posterior risk = exp(lr[j_in]) / sum(exp(lr))
-                # correctly concentrates mass on the top-ranked candidates and
-                # reduces to 1/N when all LRs are equal.
-                p_prior  <- 1 / length(cand)
-                lr_ratio <- exp(lr[j_in])
-                risk[i]  <- lr_ratio * p_prior / (lr_ratio * p_prior + (1 - p_prior))
+                # Multinomial posterior over the candidate set: normalize the
+                # likelihoods so each candidate's evidence is weighed against
+                # its competitors.
+                # Reduces to 1/|cand| when all
+                # LRs tie; concentrates near 1 when the true match's LR
+                # dominates its competitors.
+                post    <- exp(lr - max(lr))
+                post    <- post / sum(post)
+                risk[i] <- post[j_in]
             }
             # else: risk[i] stays 0 (true match not in search block)
 

@@ -585,6 +585,36 @@ them internally:
 User-supplied values via `m_probs` and `u_probs` override the estimation
 and are recommended when the perturbation mechanism is well understood.
 
+## From Log-Likelihood Ratios to Per-Record Risk
+
+Fellegi and Sunter's original theorem [@fellegi1969theory] is a
+**threshold classifier**, not a posterior-probability model. Given the
+log-likelihood ratio $\Lambda$, it assigns each pair to link,
+possible-link, or non-link by comparing $\Lambda$ against two cutoffs
+chosen to hit fixed target error rates $(\mu, \lambda)$ (false-link and
+false-non-link rates) across the whole comparison space, and this rule
+is proven optimal *without* ever introducing a prior probability of a
+match -- the error-rate guarantees hold regardless of $P(M)$ and $P(U)$.
+The 1969 paper never defines a per-pair posterior probability of a
+match.
+
+`recordLinkage()` uses only the log-LR-scoring half of this framework
+(estimating $m_v$, $u_v$ and computing $\Lambda_{ij}$ as above). To turn
+$\Lambda$ into a per-record re-identification **risk** -- comparable to
+the distance-based method's candidate-set risk -- it adds a Bayesian
+layer that is *not* part of Fellegi and Sunter's original theory:
+treating "which candidate in the record's blocking group is the true
+match" as a categorical choice with a flat prior over candidates, the
+posterior probability that candidate $j$ is the true match is
+$$P(j \text{ is the match} \mid \gamma) = \frac{\exp(\Lambda_j)}{\sum_{k \in B} \exp(\Lambda_k)},$$
+the normalized softmax of the log-likelihood ratios across all
+candidates $B$ in the record's blocking group (without blocking, $B$ is
+the full anonymized dataset). This reduces to $1/|B|$ when no
+candidate's evidence dominates, and concentrates near 1 when one
+candidate's $\Lambda$ clearly dominates its competitors. It is
+riskutility's addition for risk quantification, not a result from the
+original Fellegi-Sunter paper.
+
 ## Toy Example: 5 Records (All Categorical)
 
 We use a new all-categorical toy example here to avoid the complication
@@ -666,10 +696,15 @@ knitr::kable(ht, caption = "Log-LR scores for original record 1 vs all anonymize
 ```
 
 For anonymized record 1 (all three variables agree):
-$\Lambda = 0.642 + 1.163 + 2.140 = 3.945$. This is the highest score.
-With `fs_threshold = 0` (the default -- include all pairs with non-negative
-log-likelihood ratio), only anonymized record 1 qualifies, so
-$r_1 = 1.0$.
+$\Lambda = 0.642 + 1.163 + 2.140 = 3.945$. This is the highest score, but
+the multinomial posterior normalizes it against *all* five candidates,
+including the four with negative $\Lambda$ (anon 2 and 3 agree on
+nothing, $\Lambda = -5.417$; anon 4 agrees only on region,
+$\Lambda = -2.932$; anon 5 agrees only on sex, $\Lambda = -2.472$):
+$$r_1 = \frac{e^{3.945}}{e^{3.945} + e^{-5.417} + e^{-5.417} + e^{-2.932} + e^{-2.472}} \approx 0.997.$$
+Because anon 1's evidence so clearly dominates its competitors, almost
+all posterior mass concentrates on it -- but not exactly all, since the
+weaker competitors still contribute a small amount.
 
 **Key insight**: job agreement contributes $\log(0.85/0.10) = 2.140$ --
 more than 3 times the contribution of sex agreement
@@ -705,9 +740,18 @@ ht4 <- data.frame(
 knitr::kable(ht4, caption = "Log-LR scores for original record 4 vs all anonymized records")
 ```
 
-All scores are negative (evidence against a match), so with the default
-threshold of 0, the candidate set is empty and $r_4 = 0$. The
-perturbation successfully protected this record.
+All five scores are negative (weak evidence either way): region "W"
+never appears in the anonymized data, so at best only a partial
+agreement is possible. Record 4's true match, anon row 4 (sex agrees
+only, $\Lambda = -2.472$), is not even the best-scoring candidate here
+-- anon row 1 (job agrees only, $\Lambda = -1.485$) scores better by
+chance. Normalizing across all five candidates:
+$$r_4 = \frac{e^{-2.472}}{e^{-1.485} + 3e^{-2.472} + e^{-5.417}} \approx 0.174.$$
+This falls *below* the naive uniform baseline of $1/5 = 0.20$: since the
+true match isn't even the top-ranked candidate, the posterior actually
+favors a non-match candidate slightly more. The perturbation meaningfully
+reduces this record's risk relative to a confident match like record 1,
+but does not drive it to exactly zero -- some ambiguous evidence remains.
 
 Now verify with `recordLinkage()`:
 
@@ -715,19 +759,22 @@ Now verify with `recordLinkage()`:
 res_prob <- recordLinkage(orig_p, anon_p,
                           key = c("sex", "region", "job"),
                           method = "probabilistic",
-                          m_probs = m, u_probs = u)
-knitr::kable(res_prob$per_record[, c("risk", "cand_n", "true_in_set", "d_true")],
+                          control = rl_control(m_probs = m, u_probs = u))
+knitr::kable(res_prob$per_record[, c("risk", "cand_n", "true_in_set", "lr_true", "lr_rank")],
              digits = 4, caption = "Per-record risk (probabilistic)")
 ```
 
-The probabilistic method correctly identifies record 1 (all variables
-agree, yielding the highest $\Lambda$, unique match, $r_1 = 1.0$)
-and fully protects record 4 (region "W" absent in the anonymized
-data, all scores negative, $r_4 = 0.0$). Compared to the distance-based
-method, the probabilistic approach automatically gives more weight to
-agreements on rare values: job agreement (with 4+ categories)
-contributes more than three times as much evidence as sex agreement (with only 2
-categories), reflecting the discriminative power of each variable.
+The probabilistic method assigns record 1 the highest risk
+($r_1 \approx 0.997$): its agreement pattern dominates all competitors.
+Record 4 is only partially protected ($r_4 \approx 0.174$, below the
+$1/5$ uniform baseline): region "W" never appears in the anonymized
+data and no candidate's agreement pattern is strong evidence of a
+match, but the true match is not even the best-scoring candidate.
+Compared to the distance-based method, the probabilistic approach
+automatically gives more weight to agreements on rare values: job
+agreement (with 4+ categories) contributes more than three times as
+much evidence as sex agreement (with only 2 categories), reflecting
+the discriminative power of each variable.
 
 ## Real-World Example (n = 500)
 
@@ -897,10 +944,13 @@ object of class `"recordLinkageRisk"` with the following components:
 - `$per_record`: a `data.frame` with one row per query record,
   containing `risk` (re-identification risk), `cand_n` (candidate set
   size), `true_in_set` (logical, whether the true match is among
-  candidates), `d_true` (distance to true match), `d_min` (distance
-  to nearest candidate), `d_rank` (rank of the true match among
-  candidates by distance), and `risk_band` (factor categorizing risk
-  into bands from "very_low" to "unique_match").
+  candidates), and `risk_band` (factor categorizing risk into bands
+  from "very_low" to "unique_match"). Distance-based results add
+  `d_true` (distance to true match), `d_min` (distance to nearest
+  candidate), and `d_rank` (rank of the true match among candidates by
+  distance). Probabilistic results add `lr_true` (log-likelihood ratio
+  of the true match) and `lr_rank` (rank of the true match among
+  candidates by log-LR) instead.
 - `$overall`: a list with summary statistics: `mean_risk`, `max_risk`,
   `median_risk`, `pct_high_risk` (fraction above threshold),
   `pct_true_in_set`, `n_unique_match` (records with $r = 1$), and

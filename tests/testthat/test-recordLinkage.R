@@ -1229,51 +1229,66 @@ test_that("distance-based:softmax weighting hand-computed", {
 
 
 test_that("probabilistic: hand-computed risk with user m/u (categorical)", {
-  # Skinner (2008) posterior: P(match|gamma) = LR*p / (LR*p + (1-p)), p=1/n=1/3
+  # Multinomial posterior: P(cand j is match|gamma) = LR_j / sum(LR_all)
   # LR_agree = 0.9/0.3 = 3; LR_disagree = 0.1/0.7 = 1/7
   x <- data.frame(sex = factor(c("M", "F", "M")))
   xa <- data.frame(sex = factor(c("M", "F", "F")))
   res <- recordLinkage(x, xa, key = "sex", method = "probabilistic",
                         control = rl_control(m_probs = c(sex = 0.9),
                                              u_probs = c(sex = 0.3)))
-  # rec1(M->a1 agree):    LR=3,   post = 3*(1/3)/(3*(1/3)+2/3) = 3/5
-  # rec2(F->a2 agree):    LR=3,   post = 3/5
-  # rec3(M->a3 disagree): LR=1/7, post = (1/7)*(1/3)/((1/7)*(1/3)+2/3) = 1/15
-  expect_equal(res$per_record$risk, c(3/5, 3/5, 1/15), tolerance = 1e-6)
+  # rec1(M->a1 agree, LR=3): candidates R=(3, 1/7, 1/7), sum=23/7,
+  #   post = 3/(23/7) = 21/23
+  # rec2(F->a2 agree, LR=3): candidates R=(1/7, 3, 3), sum=43/7,
+  #   post = 3/(43/7) = 21/43 (lower than rec1: a3 also agrees with F,
+  #   so the evidence is shared between two equally good candidates)
+  # rec3(M->a3 disagree, LR=1/7): candidates R=(3, 1/7, 1/7), sum=23/7,
+  #   post = (1/7)/(23/7) = 1/23
+  expect_equal(res$per_record$risk, c(21/23, 21/43, 1/23), tolerance = 1e-6)
 })
 
 test_that("probabilistic: 2-var all-agree and all-disagree patterns", {
-  # Skinner (2008) posterior, p=1/3
+  # Multinomial posterior: P(cand j is match|gamma) = LR_j / sum(LR_all)
   # LR_agree_each = 0.9/0.3 = 3; LR_disagree_each = 0.1/0.7 = 1/7
   x <- data.frame(sex = factor(c("M","F","M")), job = factor(c("A","B","A")))
   xa <- data.frame(sex = factor(c("M","M","F")), job = factor(c("A","B","A")))
   res <- recordLinkage(x, xa, key = c("sex","job"), method = "probabilistic",
                         control = rl_control(m_probs = c(sex = 0.9, job = 0.9),
                                              u_probs = c(sex = 0.3, job = 0.3)))
-  # rec1(M,A->a1 both agree):         LR=9,   post = 9*(1/3)/(9*(1/3)+2/3) = 9/11
-  # rec2(F,B->a2 sex-disagree,job-agree): LR=3/7, post = (3/7)*(1/3)/((3/7)*(1/3)+2/3) = 3/17
-  # rec3(M,A->a3 sex-disagree,job-agree): same LR=3/7, post = 3/17
-  expect_equal(res$per_record$risk, c(9/11, 3/17, 3/17), tolerance = 1e-6)
+  # rec1(M,A->a1 both agree, LR=9): candidates R=(9, 3/7, 3/7), sum=69/7,
+  #   post = 9/(69/7) = 21/23
+  # rec2(F,B->a2 sex-disagree,job-agree, LR=3/7): candidates
+  #   R=(1/49, 3/7, 3/7), sum=43/49, post = (3/7)/(43/49) = 21/43
+  # rec3(M,A->a3 sex-disagree,job-agree, LR=3/7): same candidate set as
+  #   rec1 (x3 == x1), sum=69/7, post = (3/7)/(69/7) = 1/23
+  expect_equal(res$per_record$risk, c(21/23, 21/43, 1/23), tolerance = 1e-6)
 })
 
 test_that("probabilistic: numeric variable uses exact equality", {
-  # Skinner (2008) posterior, p=1/3, LR_agree = 0.95/0.2 = 4.75
+  # Multinomial posterior, LR_agree = 0.95/0.2 = 19/4, LR_disagree = 0.05/0.8 = 1/16
   x  <- data.frame(age = c(20, 40, 60))
   xa <- data.frame(age = c(20, 40, 60))  # exact copies: all true pairs agree
   res <- recordLinkage(x, xa, key = "age", method = "probabilistic",
                         control = rl_control(m_probs = c(age = 0.95),
                                              u_probs = c(age = 0.2)))
-  # All three true matches agree exactly: LR = exp(log(0.95/0.2)) = 4.75
-  # post = 4.75*(1/3)/(4.75*(1/3)+2/3) = 4.75/6.75 = 19/27
-  expect_equal(res$per_record$risk, rep(19/27, 3), tolerance = 1e-4)
+  # Each query's true match agrees (LR=19/4) while the other two candidates
+  # disagree (LR=1/16 each): sum = 19/4 + 2/16 = 39/8,
+  # post = (19/4)/(39/8) = 38/39 -- close to 1 since the true match clearly
+  # dominates its (non-agreeing) competitors.
+  expect_equal(res$per_record$risk, rep(38/39, 3), tolerance = 1e-4)
 
   # Perturbed values should NOT agree under exact equality
   xb <- data.frame(age = c(21, 39, 62))
   res2 <- recordLinkage(x, xb, key = "age", method = "probabilistic",
                          control = rl_control(m_probs = c(age = 0.95),
                                               u_probs = c(age = 0.2)))
-  # No exact agreement -> all LR < 0 for true match -> risk << 19/27
-  expect_true(all(res2$per_record$risk < 0.1))
+  # No candidate agrees with any query (all pairs disagree equally), so
+  # there is no discriminating evidence at all: the posterior reverts to
+  # the uniform base rate 1/3, not to a small absolute number -- with 3
+  # equally-uninformative candidates an attacker's baseline guess still
+  # succeeds 1/3 of the time. This is much lower than the 38/39 confident
+  # case above, which is the relevant comparison.
+  expect_equal(res2$per_record$risk, rep(1/3, 3), tolerance = 1e-6)
+  expect_true(all(res2$per_record$risk < res$per_record$risk))
 })
 
 
