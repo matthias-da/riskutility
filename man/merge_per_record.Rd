@@ -20,7 +20,7 @@ merge_per_record(x, ...)
 A data frame combining \code{data} and \code{x$per_record}.
 }
 \description{
-Joins per-record risk diagnostics back to the original (or synthetic)
+Joins per-record risk diagnostics back to the original (or anonymized)
 data frame.
 }
 \seealso{

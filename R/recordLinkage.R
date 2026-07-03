@@ -13,14 +13,45 @@
 #'   \item \strong{Exact QI knowledge:} the attacker knows the target's quasi-identifiers
 #'   exactly for the variables specified in \code{key}.
 #'   \item \strong{Linking rule:} the attacker applies a strategy (see \code{strategy})
-#'   based on distances, probabilistic scores, or transition probabilities.
+#'   based on Gower distances (distance-based method) or Fellegi-Sunter
+#'   likelihood ratios (probabilistic method).
 #' }
 #'
 #' Ground truth for scoring is taken either from row alignment (\code{truth="row"})
 #' or a shared identifier column (\code{truth="id"}). Note that \code{truth} affects only the
 #' \emph{evaluation} of success; it is not an attacker capability.
 #'
-#' @section Distance measure:
+#' @section Tuning via rl_control():
+#' Method-specific tuning parameters are \strong{not} direct arguments of
+#' \code{recordLinkage()}; they are set via \code{control = }\code{\link{rl_control}()}.
+#' Distance-based tuning: \code{weights}, \code{type}, \code{risk_weighting},
+#' \code{kappa}, \code{strategy}, \code{k}, \code{na_anon}. Probabilistic
+#' tuning: \code{m_probs}, \code{u_probs}, \code{breaks}. Passing a parameter
+#' that is irrelevant to the chosen \code{method} produces a warning and is
+#' ignored. See \code{\link{rl_control}} for the full list and defaults.
+#'
+#' @section Matching modes:
+#' \code{matching} controls how attacker guesses are assigned across the
+#' whole query set, not just per record:
+#' \itemize{
+#'   \item \strong{\code{"independent"}} (default): each query record is
+#'   scored against its candidates independently, so multiple query records
+#'   may attribute risk to the same search-side record (classical DBRL).
+#'   \item \strong{\code{"bijective"}}: a global one-to-one assignment is
+#'   solved with the Hungarian algorithm (\code{clue::solve_LSAP()}), so each
+#'   search-side record can be claimed by at most one query record. This
+#'   models a GDBRL attacker (Herranz, Nin, Rodriguez & Tassa, 2016) who
+#'   links the whole dataset at once rather than record-by-record. Per-record
+#'   risk is binary (1 if assigned to the true match, 0 otherwise) rather
+#'   than a candidate-set probability, and is typically higher than
+#'   independent risk because competing query records can no longer "share"
+#'   a popular candidate. Requires \pkg{clue}; only supported for
+#'   \code{method = "distance-based"} (bijective assignment would discard the
+#'   Skinner posterior for \code{"probabilistic"} -- use
+#'   \code{matching = "independent"} instead).
+#' }
+#'
+#' @section Distance-based method:
 #' For the distance-based method, record linkage is based on a weighted Gower-type
 #' distance over the quasi-identifiers. For an original record \eqn{i} and a candidate
 #' record \eqn{j} in the perturbed data, the distance is
@@ -77,26 +108,29 @@
 #' log-likelihood ratio (variable dropped). Direction, \code{na_anon}, and
 #' \code{risk_weighting} do not apply to this method.
 #'
-#' \strong{Matching mode:}
-#' Use \code{matching = "independent"} (default) for classical per-record risk
-#' (DBRL). Bijective matching is not available for the probabilistic method;
-#' use \code{method = "distance-based"} if one-to-one assignment is required.
+#' See the Matching modes section above; bijective assignment is not
+#' available for this method.
 #'
-#' @section Softmax risk weighting:
-#' When \code{risk_weighting = "softmax"} (set via \code{rl_control()}), closer
-#' candidates receive higher attribution probability via:
-#' \deqn{w_j = \frac{\exp(-\kappa \cdot d_j)}{\sum_k \exp(-\kappa \cdot d_k)}}
-#' The temperature \code{kappa} is auto-calibrated from the distance range
-#' if not supplied. This replaces the uniform \eqn{1/|candidate\_set|} risk.
-#'
-#' @section Harmonic rank weighting:
-#' When \code{risk_weighting = "harmonic"} (set via \code{rl_control()}),
-#' candidates are weighted by the reciprocal of their distance rank:
-#' \deqn{w_j = \frac{1/r_j}{\sum_k 1/r_k}}
-#' where \eqn{r_j} is the rank of candidate \eqn{j} by ascending distance
-#' (rank 1 = closest). Ties receive the minimum rank. Unlike softmax, harmonic
-#' weighting requires no tuning parameter and depends only on the ordering of
-#' candidates, not their absolute distances.
+#' @section Risk weighting:
+#' \code{risk_weighting} (set via \code{rl_control()}) controls how risk is
+#' distributed across the candidates in the attacker's guess set when the
+#' true match is among them:
+#' \itemize{
+#'   \item \strong{\code{"uniform"}} (default): risk is split equally across
+#'   the guess set, \eqn{1/|candidate\_set|}.
+#'   \item \strong{\code{"softmax"}}: closer candidates receive higher
+#'   attribution probability via
+#'   \deqn{w_j = \frac{\exp(-\kappa \cdot d_j)}{\sum_k \exp(-\kappa \cdot d_k)}}
+#'   The temperature \code{kappa} is auto-calibrated from the distance range
+#'   if not supplied.
+#'   \item \strong{\code{"harmonic"}}: candidates are weighted by the
+#'   reciprocal of their distance rank,
+#'   \deqn{w_j = \frac{1/r_j}{\sum_k 1/r_k}}
+#'   where \eqn{r_j} is the rank of candidate \eqn{j} by ascending distance
+#'   (rank 1 = closest; ties receive the minimum rank). Unlike softmax,
+#'   harmonic weighting requires no tuning parameter and depends only on the
+#'   ordering of candidates, not their absolute distances.
+#' }
 #'
 #' @section Direction:
 #' Only applies to \code{method = "distance-based"}.
@@ -256,7 +290,8 @@
 #' datasets. Data & Knowledge Engineering, 100, 78-93.
 #'
 #' @seealso \code{\link{individual_risk}}, \code{\link{dcr}},
-#'   \code{\link{nndr}}
+#'   \code{\link{nndr}}. See \code{vignette("recordLinkage", package = "riskutility")}
+#'   for derivations and worked examples of all methods above.
 #' @family privacy-models
 #' @importFrom stats quantile
 #' @importFrom graphics hist abline legend par plot points
@@ -299,6 +334,12 @@ recordLinkage.synth_pair <- function(X, ...) {
 #'   \item{\code{strategy}}{Adversary candidate-set strategy: \code{"nearest"}
 #'     (default) or \code{"topk"}.}
 #'   \item{\code{k}}{Candidate set size for \code{strategy = "topk"}.}
+#'   \item{\code{na_anon}}{How a missing quasi-identifier value in the anonymized
+#'     data is handled during distance computation: \code{"ignore"} (default,
+#'     variable dropped from that pairwise comparison), \code{"match"} (NA
+#'     counts as agreement, distance contribution 0), or \code{"mismatch"} (NA
+#'     counts as full disagreement, distance contribution 1). Ignored for
+#'     \code{method = "probabilistic"}, which always drops NA pairs.}
 #' }
 #'
 #' @section Probabilistic parameters:
@@ -315,16 +356,6 @@ recordLinkage.synth_pair <- function(X, ...) {
 #'     replaced by the integer bin index before computing agreement. Only used
 #'     when \code{method = "probabilistic"}. Example:
 #'     \code{breaks = list(age = c(30, 60), income = c(2000, 5000))}.}
-#' }
-#'
-#' @section Distance-based-only parameters:
-#' \describe{
-#'   \item{\code{na_anon}}{How a missing quasi-identifier value in the anonymized
-#'     data is handled during distance computation: \code{"ignore"} (default,
-#'     variable dropped from that pairwise comparison), \code{"match"} (NA
-#'     counts as agreement, distance contribution 0), or \code{"mismatch"} (NA
-#'     counts as full disagreement, distance contribution 1). Ignored for
-#'     \code{method = "probabilistic"}, which always drops NA pairs.}
 #' }
 #'
 #' @param weights named numeric vector or NULL.
@@ -798,7 +829,7 @@ recordLinkage.default <- function(X,
         overall = overall,
         privacy_pass = overall$mean_risk <= risk_threshold,
         n_original = nrow(X),
-        n_synthetic = nrow(x_anon),
+        n_anon = nrow(x_anon),
         n_query = n_query,
         direction = direction,
         key_vars = key,
@@ -832,7 +863,7 @@ recordLinkage.default <- function(X,
 #'
 #' @param x object of class \code{"recordLinkageRisk"}.
 #' @param n integer, number of records to return (default 10).
-#' @param data optional data frame (original or synthetic depending on
+#' @param data optional data frame (original or anonymized depending on
 #'   direction) whose key-variable columns are appended.
 #' @param ... ignored.
 #' @return A data frame with per-record diagnostics for the top-n riskiest
@@ -901,7 +932,7 @@ risk_by_group.recordLinkageRisk <- function(x, group, data = NULL, ...) {
 
 #' Merge Per-Record Risks Back to Data
 #'
-#' Joins per-record risk diagnostics back to the original (or synthetic)
+#' Joins per-record risk diagnostics back to the original (or anonymized)
 #' data frame.
 #'
 #' @param x object of class \code{"recordLinkageRisk"}.
@@ -1386,9 +1417,9 @@ print.recordLinkageRisk <- function(x, ...) {
         cat("Matching:    bijective (Hungarian algorithm)\n")
     cat("Weighting:   ", s$control$risk_weighting, "\n", sep = "")
     cat("Keys:        ", paste(s$key, collapse = ", "), "\n", sep = "")
-    rec_label <- if (dir == "reverse") " (risk per synthetic record)" else ""
+    rec_label <- if (dir == "reverse") " (risk per anonymized record)" else ""
     cat("Records:     ", x$n_original, " original, ",
-        x$n_synthetic, " synthetic", rec_label, "\n", sep = "")
+        x$n_anon, " anonymized", rec_label, "\n", sep = "")
     cat("Truth:       ", s$truth,
         if (!is.null(s$id)) paste0(" (id: ", s$id, ")") else "", "\n", sep = "")
 
@@ -1477,7 +1508,7 @@ summary.recordLinkageRisk <- function(object, ...) {
                    else "independent",
         key_vars = object$key_vars,
         n_original = object$n_original,
-        n_synthetic = object$n_synthetic,
+        n_anon = object$n_anon,
         mean_risk = object$overall$mean_risk,
         max_risk = object$overall$max_risk,
         risk_quantiles = risk_quantiles,
@@ -1517,7 +1548,7 @@ print.summary.recordLinkageRisk <- function(x, ...) {
         cat("Method:", x$method, "\n")
     }
     cat("Key variables:", paste(x$key_vars, collapse = ", "), "\n")
-    cat("Records:", x$n_original, "original,", x$n_synthetic, "synthetic\n\n")
+    cat("Records:", x$n_original, "original,", x$n_anon, "anonymized\n\n")
 
     cat("Risk Distribution:\n")
     rq <- x$risk_quantiles
@@ -1530,7 +1561,7 @@ print.summary.recordLinkageRisk <- function(x, ...) {
     bn <- c("Unique match (=1)", "Very high (>0.5)",
             "High (0.2-0.5)", "Moderate (0.1-0.2)",
             "Low (0.05-0.1)", "Very low (<0.05)")
-    n_denom <- if (dir == "reverse") x$n_synthetic else x$n_original
+    n_denom <- if (dir == "reverse") x$n_anon else x$n_original
     for (i in seq_along(x$risk_bands)) {
         pct <- 100 * x$risk_bands[i] / n_denom
         cat(sprintf("  %-22s %5d (%5.1f%%)\n",

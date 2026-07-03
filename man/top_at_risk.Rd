@@ -16,7 +16,7 @@ top_at_risk(x, ...)
 
 \item{n}{integer, number of records to return (default 10).}
 
-\item{data}{optional data frame (original or synthetic depending on
+\item{data}{optional data frame (original or anonymized depending on
 direction) whose key-variable columns are appended.}
 }
 \value{

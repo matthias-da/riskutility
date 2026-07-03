@@ -35,12 +35,12 @@ test_that("recordLinkage returns correct class and expected fields", {
   expect_true(is.list(res$settings))
 })
 
-test_that("recordLinkage stores n_original, n_synthetic, key_vars, method", {
+test_that("recordLinkage stores n_original, n_anon, key_vars, method", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex"))
 
   expect_equal(res$n_original, 50)
-  expect_equal(res$n_synthetic, 50)
+  expect_equal(res$n_anon, 50)
   expect_equal(res$key_vars, c("age", "sex"))
   expect_equal(res$method, "distance-based")
 })
@@ -468,7 +468,7 @@ test_that("reverse distance-based differs from forward", {
   fwd <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
   rev <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
                        direction = "reverse")
-  # Forward has one row per original, reverse per synthetic
+  # Forward has one row per original, reverse per anonymized record
   expect_equal(nrow(fwd$per_record), nrow(d$x))
   expect_equal(nrow(rev$per_record), nrow(d$x_anon))
   expect_equal(fwd$direction, "forward")
@@ -511,7 +511,7 @@ test_that("reverse print shows direction", {
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
                        direction = "reverse")
   expect_output(print(res), "reverse")
-  expect_output(print(res), "risk per synthetic record")
+  expect_output(print(res), "risk per anonymized record")
 })
 
 test_that("reverse summary shows direction", {

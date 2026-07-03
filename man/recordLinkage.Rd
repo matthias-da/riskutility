@@ -133,7 +133,8 @@ record in the released dataset.
 \item \strong{Exact QI knowledge:} the attacker knows the target's quasi-identifiers
 exactly for the variables specified in \code{key}.
 \item \strong{Linking rule:} the attacker applies a strategy (see \code{strategy})
-based on distances, probabilistic scores, or transition probabilities.
+based on Gower distances (distance-based method) or Fellegi-Sunter
+likelihood ratios (probabilistic method).
 }
 
 Ground truth for scoring is taken either from row alignment (\code{truth="row"})
@@ -141,7 +142,41 @@ or a shared identifier column (\code{truth="id"}). Note that \code{truth} affect
 \emph{evaluation} of success; it is not an attacker capability.
 }
 
-\section{Distance measure}{
+\section{Tuning via rl_control()}{
+
+Method-specific tuning parameters are \strong{not} direct arguments of
+\code{recordLinkage()}; they are set via \code{control = }\code{\link{rl_control}()}.
+Distance-based tuning: \code{weights}, \code{type}, \code{risk_weighting},
+\code{kappa}, \code{strategy}, \code{k}, \code{na_anon}. Probabilistic
+tuning: \code{m_probs}, \code{u_probs}, \code{breaks}. Passing a parameter
+that is irrelevant to the chosen \code{method} produces a warning and is
+ignored. See \code{\link{rl_control}} for the full list and defaults.
+}
+
+\section{Matching modes}{
+
+\code{matching} controls how attacker guesses are assigned across the
+whole query set, not just per record:
+\itemize{
+\item \strong{\code{"independent"}} (default): each query record is
+scored against its candidates independently, so multiple query records
+may attribute risk to the same search-side record (classical DBRL).
+\item \strong{\code{"bijective"}}: a global one-to-one assignment is
+solved with the Hungarian algorithm (\code{clue::solve_LSAP()}), so each
+search-side record can be claimed by at most one query record. This
+models a GDBRL attacker (Herranz, Nin, Rodriguez & Tassa, 2016) who
+links the whole dataset at once rather than record-by-record. Per-record
+risk is binary (1 if assigned to the true match, 0 otherwise) rather
+than a candidate-set probability, and is typically higher than
+independent risk because competing query records can no longer "share"
+a popular candidate. Requires \pkg{clue}; only supported for
+\code{method = "distance-based"} (bijective assignment would discard the
+Skinner posterior for \code{"probabilistic"} -- use
+\code{matching = "independent"} instead).
+}
+}
+
+\section{Distance-based method}{
 
 For the distance-based method, record linkage is based on a weighted Gower-type
 distance over the quasi-identifiers. For an original record \eqn{i} and a candidate
@@ -201,30 +236,31 @@ override the supervised estimation. NA pairs always contribute 0 to the
 log-likelihood ratio (variable dropped). Direction, \code{na_anon}, and
 \code{risk_weighting} do not apply to this method.
 
-\strong{Matching mode:}
-Use \code{matching = "independent"} (default) for classical per-record risk
-(DBRL). Bijective matching is not available for the probabilistic method;
-use \code{method = "distance-based"} if one-to-one assignment is required.
+See the Matching modes section above; bijective assignment is not
+available for this method.
 }
 
-\section{Softmax risk weighting}{
+\section{Risk weighting}{
 
-When \code{risk_weighting = "softmax"} (set via \code{rl_control()}), closer
-candidates receive higher attribution probability via:
+\code{risk_weighting} (set via \code{rl_control()}) controls how risk is
+distributed across the candidates in the attacker's guess set when the
+true match is among them:
+\itemize{
+\item \strong{\code{"uniform"}} (default): risk is split equally across
+the guess set, \eqn{1/|candidate\_set|}.
+\item \strong{\code{"softmax"}}: closer candidates receive higher
+attribution probability via
 \deqn{w_j = \frac{\exp(-\kappa \cdot d_j)}{\sum_k \exp(-\kappa \cdot d_k)}}
 The temperature \code{kappa} is auto-calibrated from the distance range
-if not supplied. This replaces the uniform \eqn{1/|candidate\_set|} risk.
-}
-
-\section{Harmonic rank weighting}{
-
-When \code{risk_weighting = "harmonic"} (set via \code{rl_control()}),
-candidates are weighted by the reciprocal of their distance rank:
+if not supplied.
+\item \strong{\code{"harmonic"}}: candidates are weighted by the
+reciprocal of their distance rank,
 \deqn{w_j = \frac{1/r_j}{\sum_k 1/r_k}}
 where \eqn{r_j} is the rank of candidate \eqn{j} by ascending distance
-(rank 1 = closest). Ties receive the minimum rank. Unlike softmax, harmonic
-weighting requires no tuning parameter and depends only on the ordering of
-candidates, not their absolute distances.
+(rank 1 = closest; ties receive the minimum rank). Unlike softmax,
+harmonic weighting requires no tuning parameter and depends only on the
+ordering of candidates, not their absolute distances.
+}
 }
 
 \section{Direction}{
@@ -310,7 +346,8 @@ datasets. Data & Knowledge Engineering, 100, 78-93.
 }
 \seealso{
 \code{\link{individual_risk}}, \code{\link{dcr}},
-\code{\link{nndr}}
+\code{\link{nndr}}. See \code{vignette("recordLinkage", package = "riskutility")}
+for derivations and worked examples of all methods above.
 
 Other privacy-models: 
 \code{\link{attacker_risk}()},

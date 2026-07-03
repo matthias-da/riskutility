@@ -66,6 +66,12 @@ weighting, no tuning parameter).}
 \item{\code{strategy}}{Adversary candidate-set strategy: \code{"nearest"}
 (default) or \code{"topk"}.}
 \item{\code{k}}{Candidate set size for \code{strategy = "topk"}.}
+\item{\code{na_anon}}{How a missing quasi-identifier value in the anonymized
+data is handled during distance computation: \code{"ignore"} (default,
+variable dropped from that pairwise comparison), \code{"match"} (NA
+counts as agreement, distance contribution 0), or \code{"mismatch"} (NA
+counts as full disagreement, distance contribution 1). Ignored for
+\code{method = "probabilistic"}, which always drops NA pairs.}
 }
 }
 
@@ -84,18 +90,6 @@ vector of cut points (excluding \code{-Inf}/\code{Inf}); the variable is
 replaced by the integer bin index before computing agreement. Only used
 when \code{method = "probabilistic"}. Example:
 \code{breaks = list(age = c(30, 60), income = c(2000, 5000))}.}
-}
-}
-
-\section{Distance-based-only parameters}{
-
-\describe{
-\item{\code{na_anon}}{How a missing quasi-identifier value in the anonymized
-data is handled during distance computation: \code{"ignore"} (default,
-variable dropped from that pairwise comparison), \code{"match"} (NA
-counts as agreement, distance contribution 0), or \code{"mismatch"} (NA
-counts as full disagreement, distance contribution 1). Ignored for
-\code{method = "probabilistic"}, which always drops NA pairs.}
 }
 }
 
