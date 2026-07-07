@@ -1054,21 +1054,21 @@ will be missed.
 
 ## Direction: Forward vs. Reverse
 
-By default (`direction = "forward"`), the function iterates over original
-records and searches in the anonymized data. This answers: *how easily
-can each individual be re-identified?*
+By default (`direction = "original_to_anon"`), the function iterates over
+original records and searches in the anonymized data. This answers: *how
+easily can each individual be re-identified?*
 
-With `direction = "reverse"`, iteration is over anonymized records,
+With `direction = "anon_to_original"`, iteration is over anonymized records,
 searching in the original data. This answers: *how disclosive is each
 released record?*
 
 ```{r direction}
 res_fwd2 <- recordLinkage(census, census_anon,
                           key = c("age", "sex", "region", "educ"),
-                          direction = "forward")
+                          direction = "original_to_anon")
 res_rev2 <- recordLinkage(census, census_anon,
                           key = c("age", "sex", "region", "educ"),
-                          direction = "reverse")
+                          direction = "anon_to_original")
 
 dir_comp <- data.frame(
   Direction = c("Forward", "Reverse"),
@@ -1083,11 +1083,37 @@ knitr::kable(dir_comp, digits = 4,
              caption = "Forward vs. reverse direction (distance-based)")
 ```
 
-For the distance-based method, distances are symmetric, so only the
-evaluation perspective changes when switching direction. For the
-probabilistic method, the log-likelihood ratios are also symmetric,
-though auto-estimated m/u parameters are always fitted in the forward
-direction.
+For the distance-based method, the nearest-neighbour relation itself is
+asymmetric, so the two directions genuinely differ. For the probabilistic
+method, the pairwise log-likelihood ratio is symmetric, and the
+auto-estimated m/u parameters are always fitted from the forward
+(original-to-anonymized) truth correspondence regardless of direction --
+but the candidate set each record's risk is normalized against still
+depends on which side is scored as query, so forward and reverse
+probabilistic risk estimates can differ as well:
+
+```{r direction-prob}
+res_fwd3 <- recordLinkage(census, census_anon,
+                          key = c("age", "sex", "region", "educ"),
+                          method = "probabilistic",
+                          direction = "original_to_anon")
+res_rev3 <- recordLinkage(census, census_anon,
+                          key = c("age", "sex", "region", "educ"),
+                          method = "probabilistic",
+                          direction = "anon_to_original")
+
+dir_comp_prob <- data.frame(
+  Direction = c("Forward", "Reverse"),
+  Mean_risk = c(res_fwd3$overall$mean_risk,
+                res_rev3$overall$mean_risk),
+  Max_risk = c(res_fwd3$overall$max_risk,
+               res_rev3$overall$max_risk),
+  Pct_high = c(100 * res_fwd3$overall$pct_high_risk,
+               100 * res_rev3$overall$pct_high_risk)
+)
+knitr::kable(dir_comp_prob, digits = 4,
+             caption = "Forward vs. reverse direction (probabilistic)")
+```
 
 ## Ground Truth Options
 

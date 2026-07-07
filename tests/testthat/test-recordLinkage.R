@@ -423,17 +423,17 @@ test_that("topk strategy with k=3 returns valid results", {
 test_that("reverse returns correct dimensions and fields", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       direction = "reverse")
+                       direction = "anon_to_original")
   expect_s3_class(res, "recordLinkageRisk")
   expect_equal(nrow(res$per_record), nrow(d$x_anon))
   expect_equal(res$n_query, nrow(d$x_anon))
-  expect_equal(res$direction, "reverse")
+  expect_equal(res$direction, "anon_to_original")
 })
 
 test_that("reverse truth='row' works with equal sizes", {
   d <- .make_test_data(30)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       direction = "reverse", truth = "row")
+                       direction = "anon_to_original", truth = "row")
   expect_equal(nrow(res$per_record), 30)
   expect_true(all(res$per_record$risk >= 0))
   expect_true(all(res$per_record$risk <= 1))
@@ -446,9 +446,9 @@ test_that("reverse truth='id' maps anon IDs to original IDs", {
   x_anon <- data.frame(id = paste0("id", 1:5), a = c(1, 2, 3, 4, 5),
                         b = factor(c("x", "y", "x", "y", "x")))
   res <- recordLinkage(x, x_anon, key = c("a", "b"),
-                       direction = "reverse", truth = "id", id = "id")
+                       direction = "anon_to_original", truth = "id", id = "id")
   expect_equal(res$overall$mean_risk, 1)
-  expect_equal(res$direction, "reverse")
+  expect_equal(res$direction, "anon_to_original")
 })
 
 test_that("reverse exact copy gives risk = 1", {
@@ -458,7 +458,7 @@ test_that("reverse exact copy gives risk = 1", {
     b = factor(c("x", "y", "x", "y", "x"))
   )
   res <- recordLinkage(x, x, key = c("a", "b"),
-                       direction = "reverse", strategy = "nearest")
+                       direction = "anon_to_original", strategy = "nearest")
   expect_equal(res$per_record$risk, rep(1, 5))
   expect_equal(res$overall$mean_risk, 1)
 })
@@ -467,32 +467,69 @@ test_that("reverse distance-based differs from forward", {
   d <- .make_test_data(50)
   fwd <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
   rev <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       direction = "reverse")
+                       direction = "anon_to_original")
   # Forward has one row per original, reverse per anonymized record
   expect_equal(nrow(fwd$per_record), nrow(d$x))
   expect_equal(nrow(rev$per_record), nrow(d$x_anon))
-  expect_equal(fwd$direction, "forward")
-  expect_equal(rev$direction, "reverse")
+  expect_equal(fwd$direction, "original_to_anon")
+  expect_equal(rev$direction, "anon_to_original")
 })
 
-test_that("direction is ignored for probabilistic with a warning", {
+test_that("reverse works for probabilistic method", {
   d <- .make_test_data(50)
-  expect_warning(
-    res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                         method = "probabilistic", direction = "reverse"),
-    "direction"
-  )
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "probabilistic", direction = "anon_to_original")
   expect_s3_class(res, "recordLinkageRisk")
-  # direction is forced to forward despite the user request
-  expect_equal(res$direction, "forward")
+  expect_equal(res$direction, "anon_to_original")
+  expect_equal(nrow(res$per_record), nrow(d$x_anon))
+  expect_equal(res$n_query, nrow(d$x_anon))
   expect_true(all(res$per_record$risk >= 0))
   expect_true(all(res$per_record$risk <= 1))
+  expect_true(all(c("lr_true", "lr_rank") %in% names(res$per_record)))
+})
+
+test_that("probabilistic forward and reverse can give different risk estimates", {
+  d <- .make_test_data(50)
+  fwd <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "probabilistic")
+  rev <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "probabilistic", direction = "anon_to_original")
+  expect_equal(nrow(fwd$per_record), nrow(d$x))
+  expect_equal(nrow(rev$per_record), nrow(d$x_anon))
+  expect_equal(fwd$direction, "original_to_anon")
+  expect_equal(rev$direction, "anon_to_original")
+})
+
+test_that("probabilistic reverse truth='id' maps anon IDs to original IDs", {
+  set.seed(1)
+  x <- data.frame(id = paste0("id", 1:5), a = c(1, 2, 3, 4, 5),
+                  b = factor(c("x", "y", "x", "y", "x")))
+  x_anon <- data.frame(id = paste0("id", 1:5), a = c(1, 2, 3, 4, 5),
+                        b = factor(c("x", "y", "x", "y", "x")))
+  res <- recordLinkage(x, x_anon, key = c("a", "b"), method = "probabilistic",
+                       direction = "anon_to_original", truth = "id", id = "id")
+  # Soft multinomial posterior over all candidates: near-certain but not
+  # necessarily exactly 1, unlike the hard nearest-neighbor guess set used
+  # by the distance-based method.
+  expect_true(res$overall$mean_risk > 0.99)
+  expect_true(all(res$per_record$true_in_set))
+  expect_equal(res$direction, "anon_to_original")
+})
+
+test_that("probabilistic reverse print/summary/plot show direction", {
+  d <- .make_test_data(30)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "probabilistic", direction = "anon_to_original")
+  expect_output(print(res), "anon_to_original")
+  s <- summary(res)
+  expect_equal(s$direction, "anon_to_original")
+  expect_no_error(plot(res, which = 1))
 })
 
 test_that("reverse blocking works", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       direction = "reverse", block = "region")
+                       direction = "anon_to_original", block = "region")
   expect_s3_class(res, "recordLinkageRisk")
   expect_equal(nrow(res$per_record), nrow(d$x_anon))
 })
@@ -500,7 +537,7 @@ test_that("reverse blocking works", {
 test_that("reverse softmax weighting gives valid risk", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       direction = "reverse",
+                       direction = "anon_to_original",
                        control = rl_control(risk_weighting = "softmax"))
   expect_true(all(res$per_record$risk >= 0))
   expect_true(all(res$per_record$risk <= 1))
@@ -509,24 +546,24 @@ test_that("reverse softmax weighting gives valid risk", {
 test_that("reverse print shows direction", {
   d <- .make_test_data(30)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       direction = "reverse")
-  expect_output(print(res), "reverse")
+                       direction = "anon_to_original")
+  expect_output(print(res), "anon_to_original")
   expect_output(print(res), "risk per anonymized record")
 })
 
 test_that("reverse summary shows direction", {
   d <- .make_test_data(30)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       direction = "reverse")
+                       direction = "anon_to_original")
   s <- summary(res)
-  expect_equal(s$direction, "reverse")
-  expect_output(print(s), "reverse")
+  expect_equal(s$direction, "anon_to_original")
+  expect_output(print(s), "anon_to_original")
 })
 
 test_that("reverse plot works for which=1,2", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       direction = "reverse")
+                       direction = "anon_to_original")
   expect_no_error(plot(res, which = 1))
   expect_no_error(plot(res, which = 2))
 })
@@ -534,16 +571,16 @@ test_that("reverse plot works for which=1,2", {
 test_that("reverse with synth_pair works", {
   d <- .make_test_data(50)
   pair <- synth_pair(d$x, d$x_anon, key_vars = c("age", "sex", "region"))
-  res <- recordLinkage(pair, direction = "reverse")
+  res <- recordLinkage(pair, direction = "anon_to_original")
   expect_s3_class(res, "recordLinkageRisk")
-  expect_equal(res$direction, "reverse")
+  expect_equal(res$direction, "anon_to_original")
   expect_equal(nrow(res$per_record), nrow(d$x_anon))
 })
 
 test_that("reverse with return_matches stores correct indices", {
   d <- .make_test_data(20)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       direction = "reverse", return_matches = TRUE)
+                       direction = "anon_to_original", return_matches = TRUE)
   expect_true(!is.null(res$matches))
   expect_equal(length(res$matches), nrow(d$x_anon))
   # Matches should be indices into X (the search data in reverse)
@@ -554,9 +591,9 @@ test_that("reverse with return_matches stores correct indices", {
 test_that("forward default backward compat: direction='forward', n_query set", {
   d <- .make_test_data(30)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
-  expect_equal(res$direction, "forward")
+  expect_equal(res$direction, "original_to_anon")
   expect_equal(res$n_query, nrow(d$x))
-  expect_equal(res$settings$direction, "forward")
+  expect_equal(res$settings$direction, "original_to_anon")
 })
 
 
@@ -942,7 +979,7 @@ test_that("bijective: works with reverse direction", {
   skip_if_not_installed("clue")
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       direction = "reverse", matching = "bijective")
+                       direction = "anon_to_original", matching = "bijective")
   expect_s3_class(res, "recordLinkageRisk")
   expect_equal(nrow(res$per_record), nrow(d$x_anon))
   expect_true(all(res$per_record$risk %in% c(0, 1)))

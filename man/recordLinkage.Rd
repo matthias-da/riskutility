@@ -15,7 +15,7 @@ recordLinkage(X, ...)
   x_anon,
   key,
   method = c("distance-based", "probabilistic"),
-  direction = c("forward", "reverse"),
+  direction = c("original_to_anon", "anon_to_original"),
   truth = c("row", "id"),
   id = NULL,
   block = NULL,
@@ -40,12 +40,12 @@ weighted Gower distance) or \code{"probabilistic"} (Fellegi-Sunter
 log-likelihood ratios).}
 
 \item{direction}{character. Direction of the linkage attack:
-\code{"forward"} (default) loops over original records and searches in the
-anonymized data (prosecutor / nosy-neighbour scenario);
-\code{"reverse"} loops over anonymized records and searches in the
-original data (journalist scenario).
-Only applies to \code{method = "distance-based"}; probabilistic linkage
-always runs forward.}
+\code{"original_to_anon"} (default) loops over original records and
+searches in the anonymized data (prosecutor / nosy-neighbour scenario);
+\code{"anon_to_original"} loops over anonymized records and searches in
+the original data (journalist scenario).
+Applies to both \code{method = "distance-based"} and
+\code{"probabilistic"}; see the Direction section below.}
 
 \item{truth}{character. How to define the true match for scoring:
 one of \code{"row"} (default) or \code{"id"}.
@@ -106,13 +106,14 @@ match), \code{lr_rank} (rank of true match by descending log-LR).}
 (Gini coefficient of risk concentration).}
 \item{var_importance}{named numeric vector of per-variable mean weighted
 distance (distance-based only; absent for probabilistic).}
-\item{direction}{character, \code{"forward"} or \code{"reverse"}
-(distance-based only; always \code{"forward"} for probabilistic).}
+\item{direction}{character, \code{"original_to_anon"} or
+\code{"anon_to_original"}.}
 \item{matches}{(optional) list of integer vectors with candidate indices.}
 }
-For distance-based: when \code{direction = "forward"}, \code{per_record}
-has one row per original record; when \code{"reverse"}, one row per
-anonymized record. Probabilistic always runs forward.
+When \code{direction = "original_to_anon"}, \code{per_record} has one row
+per original record; when \code{"anon_to_original"}, one row per
+anonymized record. This applies to both distance-based and probabilistic
+linkage.
 
 Use \code{\link{top_at_risk}}, \code{\link{risk_by_group}},
 \code{\link{merge_per_record}}, and \code{\link{inspect_record}} for
@@ -268,20 +269,29 @@ ordering of candidates, not their absolute distances.
 
 \section{Direction}{
 
-Only applies to \code{method = "distance-based"}.
-With \code{direction = "forward"} (default) the function loops over original
-records and finds nearest matches in the anonymized data. This corresponds
-to a prosecutor or nosy-neighbour attacker who holds external knowledge about
-a target individual and searches the released file for that individual.
+Applies to both \code{method = "distance-based"} and
+\code{method = "probabilistic"}.
+With \code{direction = "original_to_anon"} (default) the function loops
+over original records and finds nearest/best-scoring matches in the
+anonymized data. This corresponds to a prosecutor or nosy-neighbour
+attacker who holds external knowledge about a target individual and
+searches the released file for that individual.
 
-With \code{direction = "reverse"} the loop runs over anonymized records and
-finds nearest matches in the original data. This is the direction used by the
-classical DBRL literature (Domingo-Ferrer and Torra, 2003; Herranz et al.,
-2016) and by \pkg{sdcMicro}'s \code{dRiskRMD}, and corresponds to a
-journalist-type attacker who holds the released file and a reference database
-and tries to identify each released record in that reference.
-The two directions can produce different risk estimates because the
-nearest-neighbour relation is not symmetric.
+With \code{direction = "anon_to_original"} the loop runs over anonymized
+records and finds nearest/best-scoring matches in the original data. This
+is the direction used by the classical DBRL literature (Domingo-Ferrer and
+Torra, 2003; Herranz et al., 2016) and by \pkg{sdcMicro}'s
+\code{dRiskRMD}, and corresponds to a journalist-type attacker who holds
+the released file and a reference database and tries to identify each
+released record in that reference.
+The two directions can produce different risk estimates: for distance-based
+linkage the nearest-neighbour relation is not symmetric; for probabilistic
+linkage the pairwise log-likelihood ratio is symmetric, but the candidate
+set (and hence the multinomial posterior each record is normalized against)
+differs by direction. The Fellegi-Sunter \code{m}/\code{u} probabilities are
+always estimated from the original-to-anonymized truth correspondence
+regardless of \code{direction}, since they are properties of the
+true-match pairing rather than of the query/search roles.
 }
 
 \examples{
@@ -307,7 +317,7 @@ summary(res1)
 
 # Reverse direction: risk per released record
 res1r <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-                       direction = "reverse")
+                       direction = "anon_to_original")
 print(res1r)
 
 \donttest{

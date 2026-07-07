@@ -136,20 +136,29 @@
 #' }
 #'
 #' @section Direction:
-#' Only applies to \code{method = "distance-based"}.
-#' With \code{direction = "forward"} (default) the function loops over original
-#' records and finds nearest matches in the anonymized data. This corresponds
-#' to a prosecutor or nosy-neighbour attacker who holds external knowledge about
-#' a target individual and searches the released file for that individual.
+#' Applies to both \code{method = "distance-based"} and
+#' \code{method = "probabilistic"}.
+#' With \code{direction = "original_to_anon"} (default) the function loops
+#' over original records and finds nearest/best-scoring matches in the
+#' anonymized data. This corresponds to a prosecutor or nosy-neighbour
+#' attacker who holds external knowledge about a target individual and
+#' searches the released file for that individual.
 #'
-#' With \code{direction = "reverse"} the loop runs over anonymized records and
-#' finds nearest matches in the original data. This is the direction used by the
-#' classical DBRL literature (Domingo-Ferrer and Torra, 2003; Herranz et al.,
-#' 2016) and by \pkg{sdcMicro}'s \code{dRiskRMD}, and corresponds to a
-#' journalist-type attacker who holds the released file and a reference database
-#' and tries to identify each released record in that reference.
-#' The two directions can produce different risk estimates because the
-#' nearest-neighbour relation is not symmetric.
+#' With \code{direction = "anon_to_original"} the loop runs over anonymized
+#' records and finds nearest/best-scoring matches in the original data. This
+#' is the direction used by the classical DBRL literature (Domingo-Ferrer and
+#' Torra, 2003; Herranz et al., 2016) and by \pkg{sdcMicro}'s
+#' \code{dRiskRMD}, and corresponds to a journalist-type attacker who holds
+#' the released file and a reference database and tries to identify each
+#' released record in that reference.
+#' The two directions can produce different risk estimates: for distance-based
+#' linkage the nearest-neighbour relation is not symmetric; for probabilistic
+#' linkage the pairwise log-likelihood ratio is symmetric, but the candidate
+#' set (and hence the multinomial posterior each record is normalized against)
+#' differs by direction. The Fellegi-Sunter \code{m}/\code{u} probabilities are
+#' always estimated from the original-to-anonymized truth correspondence
+#' regardless of \code{direction}, since they are properties of the
+#' true-match pairing rather than of the query/search roles.
 #'
 #' @param X data.frame or \code{\link{synth_pair}} object. Original microdata.
 #' @param x_anon data.frame. Perturbed/anonymized microdata.
@@ -158,12 +167,12 @@
 #'   weighted Gower distance) or \code{"probabilistic"} (Fellegi-Sunter
 #'   log-likelihood ratios).
 #' @param direction character. Direction of the linkage attack:
-#'   \code{"forward"} (default) loops over original records and searches in the
-#'   anonymized data (prosecutor / nosy-neighbour scenario);
-#'   \code{"reverse"} loops over anonymized records and searches in the
-#'   original data (journalist scenario).
-#'   Only applies to \code{method = "distance-based"}; probabilistic linkage
-#'   always runs forward.
+#'   \code{"original_to_anon"} (default) loops over original records and
+#'   searches in the anonymized data (prosecutor / nosy-neighbour scenario);
+#'   \code{"anon_to_original"} loops over anonymized records and searches in
+#'   the original data (journalist scenario).
+#'   Applies to both \code{method = "distance-based"} and
+#'   \code{"probabilistic"}; see the Direction section below.
 #' @param truth character. How to define the true match for scoring:
 #'   one of \code{"row"} (default) or \code{"id"}.
 #'   \code{"row"} requires equal row counts and assumes row \eqn{i}
@@ -218,13 +227,14 @@
 #'       (Gini coefficient of risk concentration).}
 #'     \item{var_importance}{named numeric vector of per-variable mean weighted
 #'       distance (distance-based only; absent for probabilistic).}
-#'     \item{direction}{character, \code{"forward"} or \code{"reverse"}
-#'       (distance-based only; always \code{"forward"} for probabilistic).}
+#'     \item{direction}{character, \code{"original_to_anon"} or
+#'       \code{"anon_to_original"}.}
 #'     \item{matches}{(optional) list of integer vectors with candidate indices.}
 #'   }
-#'   For distance-based: when \code{direction = "forward"}, \code{per_record}
-#'   has one row per original record; when \code{"reverse"}, one row per
-#'   anonymized record. Probabilistic always runs forward.
+#'   When \code{direction = "original_to_anon"}, \code{per_record} has one row
+#'   per original record; when \code{"anon_to_original"}, one row per
+#'   anonymized record. This applies to both distance-based and probabilistic
+#'   linkage.
 #'
 #'   Use \code{\link{top_at_risk}}, \code{\link{risk_by_group}},
 #'   \code{\link{merge_per_record}}, and \code{\link{inspect_record}} for
@@ -253,7 +263,7 @@
 #'
 #' # Reverse direction: risk per released record
 #' res1r <- recordLinkage(x, x_anon, key = c("age","sex","region"),
-#'                        direction = "reverse")
+#'                        direction = "anon_to_original")
 #' print(res1r)
 #'
 #' \donttest{
@@ -407,7 +417,8 @@ recordLinkage.default <- function(X,
                                   x_anon,
                                   key,
                                   method = c("distance-based", "probabilistic"),
-                                  direction = c("forward", "reverse"),
+                                  direction = c("original_to_anon",
+                                                "anon_to_original"),
                                   truth = c("row", "id"),
                                   id = NULL,
                                   block = NULL,
@@ -447,12 +458,6 @@ recordLinkage.default <- function(X,
                  "method = \"probabilistic\": it would discard the ",
                  "multinomial posterior. Use matching = \"independent\".",
                  call. = FALSE)
-        if (direction != "forward") {
-            warning("'direction' is only relevant for method = \"distance-based\". ",
-                    "Probabilistic linkage always runs forward (original as query).",
-                    call. = FALSE)
-            direction <- "forward"
-        }
         if (na_anon != "ignore")
             warning("'na_anon' in rl_control() is only used for ",
                     "method = \"distance-based\". ",
@@ -511,7 +516,7 @@ recordLinkage.default <- function(X,
 
     n <- nrow(X)
 
-    # ground truth mapping (forward, for FS estimation) ----
+    # ground truth mapping (original-to-anon, for FS estimation) ----
     if (truth == "row") {
         if (nrow(x_anon) != n)
             stop("If truth='row', x_anon must have same number of rows as X.")
@@ -526,7 +531,7 @@ recordLinkage.default <- function(X,
     }
 
     # direction-dependent query/search setup ----
-    if (direction == "forward") {
+    if (direction == "original_to_anon") {
         n_query <- n
         query_data <- X
         search_data <- x_anon
@@ -1406,7 +1411,7 @@ print.recordLinkageRisk <- function(x, ...) {
     o <- x$overall
     meth <- x$method
 
-    dir <- if (is.null(x$direction)) "forward" else x$direction
+    dir <- if (is.null(x$direction)) "original_to_anon" else x$direction
 
     cat("Record Linkage Risk\n")
     cat("===================\n\n")
@@ -1418,7 +1423,8 @@ print.recordLinkageRisk <- function(x, ...) {
         cat("Matching:    bijective (Hungarian algorithm)\n")
     cat("Weighting:   ", s$control$risk_weighting, "\n", sep = "")
     cat("Keys:        ", paste(s$key, collapse = ", "), "\n", sep = "")
-    rec_label <- if (dir == "reverse") " (risk per anonymized record)" else ""
+    rec_label <- if (dir == "anon_to_original")
+        " (risk per anonymized record)" else ""
     cat("Records:     ", x$n_original, " original, ",
         x$n_anon, " anonymized", rec_label, "\n", sep = "")
     cat("Truth:       ", s$truth,
@@ -1504,7 +1510,8 @@ summary.recordLinkageRisk <- function(object, ...) {
 
     summ <- list(
         method = object$method,
-        direction = if (is.null(object$direction)) "forward" else object$direction,
+        direction = if (is.null(object$direction)) "original_to_anon"
+                    else object$direction,
         matching = if (!is.null(object$settings$matching)) object$settings$matching
                    else "independent",
         key_vars = object$key_vars,
@@ -1535,19 +1542,15 @@ summary.recordLinkageRisk <- function(object, ...) {
 #' @return The input object, invisibly.
 #' @export
 print.summary.recordLinkageRisk <- function(x, ...) {
-    dir <- if (is.null(x$direction)) "forward" else x$direction
+    dir <- if (is.null(x$direction)) "original_to_anon" else x$direction
 
     cat("Summary: Record Linkage Risk\n")
     cat("============================\n\n")
 
     mtch <- if (!is.null(x$matching)) x$matching else "independent"
-    if (x$method == "distance-based") {
-        cat("Method:", x$method, "| Direction:", dir, "\n")
-        if (mtch == "bijective")
-            cat("Matching: bijective (Hungarian algorithm)\n")
-    } else {
-        cat("Method:", x$method, "\n")
-    }
+    cat("Method:", x$method, "| Direction:", dir, "\n")
+    if (x$method == "distance-based" && mtch == "bijective")
+        cat("Matching: bijective (Hungarian algorithm)\n")
     cat("Key variables:", paste(x$key_vars, collapse = ", "), "\n")
     cat("Records:", x$n_original, "original,", x$n_anon, "anonymized\n\n")
 
@@ -1562,7 +1565,7 @@ print.summary.recordLinkageRisk <- function(x, ...) {
     bn <- c("Unique match (=1)", "Very high (>0.5)",
             "High (0.2-0.5)", "Moderate (0.1-0.2)",
             "Low (0.05-0.1)", "Very low (<0.05)")
-    n_denom <- if (dir == "reverse") x$n_anon else x$n_original
+    n_denom <- if (dir == "anon_to_original") x$n_anon else x$n_original
     for (i in seq_along(x$risk_bands)) {
         pct <- 100 * x$risk_bands[i] / n_denom
         cat(sprintf("  %-22s %5d (%5.1f%%)\n",
@@ -1632,8 +1635,8 @@ plot.recordLinkageRisk <- function(x, y = NULL, ..., which = 1,
     show <- rep(FALSE, n_types)
     show[which] <- TRUE
 
-    dir <- if (is.null(x$direction)) "forward" else x$direction
-    dir_suffix <- if (dir == "reverse") " (reverse)" else ""
+    dir <- if (is.null(x$direction)) "original_to_anon" else x$direction
+    dir_suffix <- if (dir == "anon_to_original") " (anon_to_original)" else ""
     thresh <- if (!is.null(x$settings$risk_threshold))
         x$settings$risk_threshold else 0.1
 

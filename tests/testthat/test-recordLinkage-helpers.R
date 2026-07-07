@@ -25,13 +25,13 @@ test_that("probabilistic: unnamed m_probs is rejected", {
   )
 })
 
-test_that("probabilistic: direction != 'forward' warns and is ignored", {
+test_that("probabilistic: direction = 'reverse' runs without warning", {
   x <- data.frame(a = 1:5, b = factor(letters[1:5]))
-  expect_warning(
+  res <- expect_no_warning(
     recordLinkage(x, x, key = c("a", "b"), method = "probabilistic",
-                  direction = "reverse"),
-    "direction"
+                  direction = "anon_to_original")
   )
+  expect_equal(res$direction, "anon_to_original")
 })
 
 test_that("probabilistic: na_anon != 'ignore' in rl_control() warns", {
