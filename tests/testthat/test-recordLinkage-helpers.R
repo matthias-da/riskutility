@@ -34,12 +34,11 @@ test_that("probabilistic: direction = 'reverse' runs without warning", {
   expect_equal(res$direction, "anon_to_original")
 })
 
-test_that("probabilistic: na_anon != 'ignore' in rl_control() warns", {
+test_that("probabilistic: na_anon != 'ignore' in rl_control() runs without warning", {
   x <- data.frame(a = 1:5, b = factor(letters[1:5]))
-  expect_warning(
+  expect_no_warning(
     recordLinkage(x, x, key = c("a", "b"), method = "probabilistic",
-                  control = rl_control(na_anon = "match")),
-    "na_anon"
+                  control = rl_control(na_anon = "match"))
   )
 })
 

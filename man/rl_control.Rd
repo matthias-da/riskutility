@@ -38,7 +38,8 @@ rl_control(
 \item{breaks}{named list of numeric break vectors or NULL.}
 
 \item{na_anon}{character, one of \code{"ignore"} (default), \code{"match"},
-\code{"mismatch"}.}
+\code{"mismatch"}. Applies to both \code{method}s; see the
+\emph{Shared parameters} section for the method-specific effect.}
 }
 \value{
 An object of class \code{"rl_control"}.
@@ -66,12 +67,6 @@ weighting, no tuning parameter).}
 \item{\code{strategy}}{Adversary candidate-set strategy: \code{"nearest"}
 (default) or \code{"topk"}.}
 \item{\code{k}}{Candidate set size for \code{strategy = "topk"}.}
-\item{\code{na_anon}}{How a missing quasi-identifier value in the anonymized
-data is handled during distance computation: \code{"ignore"} (default,
-variable dropped from that pairwise comparison), \code{"match"} (NA
-counts as agreement, distance contribution 0), or \code{"mismatch"} (NA
-counts as full disagreement, distance contribution 1). Ignored for
-\code{method = "probabilistic"}, which always drops NA pairs.}
 }
 }
 
@@ -90,6 +85,22 @@ vector of cut points (excluding \code{-Inf}/\code{Inf}); the variable is
 replaced by the integer bin index before computing agreement. Only used
 when \code{method = "probabilistic"}. Example:
 \code{breaks = list(age = c(30, 60), income = c(2000, 5000))}.}
+}
+}
+
+\section{Shared parameters}{
+
+\describe{
+\item{\code{na_anon}}{How a missing quasi-identifier value (in either
+record of a pairwise comparison) is handled. Applies to both methods,
+with a method-specific effect: \code{"ignore"} (default) drops the
+variable from that pairwise comparison (distance-based: excluded from
+the Gower numerator/denominator; probabilistic: contributes 0 to the
+log-likelihood ratio). \code{"match"} treats the pair as agreement
+(distance-based: contributes 0 distance; probabilistic: contributes
+\eqn{\log(m/u)}). \code{"mismatch"} treats the pair as disagreement
+(distance-based: contributes distance 1; probabilistic: contributes
+\eqn{\log((1-m)/(1-u))}).}
 }
 }
 

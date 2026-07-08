@@ -25,10 +25,13 @@
 #' Method-specific tuning parameters are \strong{not} direct arguments of
 #' \code{recordLinkage()}; they are set via \code{control = }\code{\link{rl_control}()}.
 #' Distance-based tuning: \code{weights}, \code{type}, \code{risk_weighting},
-#' \code{kappa}, \code{strategy}, \code{k}, \code{na_anon}. Probabilistic
-#' tuning: \code{m_probs}, \code{u_probs}, \code{breaks}. Passing a parameter
-#' that is irrelevant to the chosen \code{method} produces a warning and is
-#' ignored. See \code{\link{rl_control}} for the full list and defaults.
+#' \code{kappa}, \code{strategy}, \code{k}. Probabilistic
+#' tuning: \code{m_probs}, \code{u_probs}, \code{breaks}. \code{na_anon}
+#' applies to both methods (see the \emph{Distance-based method} and
+#' \emph{Probabilistic method} sections below for its method-specific
+#' effect). Passing a parameter that is irrelevant to the chosen
+#' \code{method} produces a warning and is ignored. See
+#' \code{\link{rl_control}} for the full list and defaults.
 #'
 #' @section Matching modes:
 #' \code{matching} controls how attacker guesses are assigned across the
@@ -45,10 +48,15 @@
 #'   risk is binary (1 if assigned to the true match, 0 otherwise) rather
 #'   than a candidate-set probability, and is typically higher than
 #'   independent risk because competing query records can no longer "share"
-#'   a popular candidate. Requires \pkg{clue}; only supported for
-#'   \code{method = "distance-based"} (bijective assignment would discard the
-#'   multinomial posterior for \code{"probabilistic"} -- use
-#'   \code{matching = "independent"} instead).
+#'   a popular candidate. Requires \pkg{clue}. For \code{method =
+#'   "distance-based"} the assignment cost is the Gower distance (minimized);
+#'   for \code{method = "probabilistic"} the cost is the Fellegi-Sunter
+#'   log-likelihood ratio, transformed to a minimization via
+#'   \eqn{cost = \max(LR) - LR} within each block, so the assignment
+#'   maximizes total log-LR across the whole query set. This replaces the
+#'   independent-mode multinomial posterior with the binary GDBRL-style
+#'   outcome, exactly as it replaces the distance-based softmax/harmonic
+#'   risk (see Risk weighting section below).
 #' }
 #'
 #' @section Distance-based method:
@@ -107,12 +115,24 @@
 #' \eqn{1/|B|} when all candidates are equally likely.
 #'
 #' User-supplied \code{m_probs} and \code{u_probs} (via \code{rl_control()})
-#' override the supervised estimation. NA pairs always contribute 0 to the
-#' log-likelihood ratio (variable dropped). Direction, \code{na_anon}, and
-#' \code{risk_weighting} do not apply to this method.
+#' override the supervised estimation. A variable with a missing value on
+#' either side of a comparison is resolved via \code{na_anon}: \code{"ignore"}
+#' (default) drops the variable from that pair's log-likelihood ratio
+#' (contributes 0); \code{"match"} treats the pair as agreement (contributes
+#' \eqn{\log(m/u)}); \code{"mismatch"} treats it as disagreement (contributes
+#' \eqn{\log((1-m)/(1-u))}). Because risk is a softmax over the whole
+#' candidate block, this is not a neutral shift: \code{"match"}/\code{"mismatch"}
+#' redistribute posterior mass toward/away from candidates with missing
+#' values relative to their competitors. \code{m_probs}/\code{u_probs} are
+#' themselves estimated only from non-missing pairs, so \code{"match"}/
+#' \code{"mismatch"} plug in an assumed, not empirically calibrated, outcome
+#' for the missing case. Direction and \code{risk_weighting} do not apply to
+#' this method.
 #'
-#' See the Matching modes section above; bijective assignment is not
-#' available for this method.
+#' See the Matching modes section above for \code{matching = "bijective"},
+#' which replaces the multinomial posterior with a global one-to-one
+#' assignment on the log-likelihood ratios (a GDBRL attacker applied to LR
+#' scores instead of distances).
 #'
 #' @section Risk weighting:
 #' \code{risk_weighting} (set via \code{rl_control()}) controls how risk is
@@ -186,9 +206,11 @@
 #' @param return_matches logical. If TRUE, returns candidate indices per record (may be memory-heavy).
 #' @param matching character. Matching mode: \code{"independent"} (default) scores
 #'   each record independently (classical DBRL), \code{"bijective"} enforces
-#'   one-to-one assignment via the Hungarian algorithm (GDBRL).
-#'   Bijective matching requires the \pkg{clue} package and is only supported
-#'   for \code{method = "distance-based"}.
+#'   one-to-one assignment via the Hungarian algorithm (GDBRL). Supported for
+#'   both \code{method = "distance-based"} (cost = Gower distance) and
+#'   \code{method = "probabilistic"} (cost = \eqn{\max(LR) - LR}, i.e. the
+#'   assignment maximizes total log-likelihood ratio). Bijective matching
+#'   requires the \pkg{clue} package.
 #'   See Herranz, Nin, Rodriguez & Tassa (2016).
 #' @param risk_threshold numeric. Threshold for classifying records as "high risk"
 #'   and for the \code{privacy_pass} flag (default 0.1). Records with risk above
@@ -217,12 +239,13 @@
 #'       Distance-based only: \code{d_true} (Gower distance to true match),
 #'       \code{d_min} (minimum distance to any candidate),
 #'       \code{d_rank} (rank of true match by ascending distance).
-#'       With \code{matching = "bijective"}, an additional
-#'       \code{bijective_assigned} column gives the Hungarian-algorithm
-#'       assignment; \code{d_true}, \code{d_min}, \code{d_rank} retain
-#'       independent-scoring diagnostics.
 #'       Probabilistic only: \code{lr_true} (log-likelihood ratio of the true
-#'       match), \code{lr_rank} (rank of true match by descending log-LR).}
+#'       match), \code{lr_rank} (rank of true match by descending log-LR).
+#'       With \code{matching = "bijective"} (either method), an additional
+#'       \code{bijective_assigned} column gives the Hungarian-algorithm
+#'       assignment; \code{d_true}/\code{d_min}/\code{d_rank} or
+#'       \code{lr_true}/\code{lr_rank} retain independent-scoring
+#'       diagnostics.}
 #'     \item{overall}{list with aggregate statistics including \code{risk_gini}
 #'       (Gini coefficient of risk concentration).}
 #'     \item{var_importance}{named numeric vector of per-variable mean weighted
@@ -347,12 +370,6 @@ recordLinkage.synth_pair <- function(X, ...) {
 #'   \item{\code{strategy}}{Adversary candidate-set strategy: \code{"nearest"}
 #'     (default) or \code{"topk"}.}
 #'   \item{\code{k}}{Candidate set size for \code{strategy = "topk"}.}
-#'   \item{\code{na_anon}}{How a missing quasi-identifier value in the anonymized
-#'     data is handled during distance computation: \code{"ignore"} (default,
-#'     variable dropped from that pairwise comparison), \code{"match"} (NA
-#'     counts as agreement, distance contribution 0), or \code{"mismatch"} (NA
-#'     counts as full disagreement, distance contribution 1). Ignored for
-#'     \code{method = "probabilistic"}, which always drops NA pairs.}
 #' }
 #'
 #' @section Probabilistic parameters:
@@ -371,6 +388,20 @@ recordLinkage.synth_pair <- function(X, ...) {
 #'     \code{breaks = list(age = c(30, 60), income = c(2000, 5000))}.}
 #' }
 #'
+#' @section Shared parameters:
+#' \describe{
+#'   \item{\code{na_anon}}{How a missing quasi-identifier value (in either
+#'     record of a pairwise comparison) is handled. Applies to both methods,
+#'     with a method-specific effect: \code{"ignore"} (default) drops the
+#'     variable from that pairwise comparison (distance-based: excluded from
+#'     the Gower numerator/denominator; probabilistic: contributes 0 to the
+#'     log-likelihood ratio). \code{"match"} treats the pair as agreement
+#'     (distance-based: contributes 0 distance; probabilistic: contributes
+#'     \eqn{\log(m/u)}). \code{"mismatch"} treats the pair as disagreement
+#'     (distance-based: contributes distance 1; probabilistic: contributes
+#'     \eqn{\log((1-m)/(1-u))}).}
+#' }
+#'
 #' @param weights named numeric vector or NULL.
 #' @param type named character vector or NULL.
 #' @param risk_weighting character, one of \code{"uniform"} (default),
@@ -382,7 +413,8 @@ recordLinkage.synth_pair <- function(X, ...) {
 #' @param u_probs named numeric vector or NULL.
 #' @param breaks named list of numeric break vectors or NULL.
 #' @param na_anon character, one of \code{"ignore"} (default), \code{"match"},
-#'   \code{"mismatch"}.
+#'   \code{"mismatch"}. Applies to both \code{method}s; see the
+#'   \emph{Shared parameters} section for the method-specific effect.
 #'
 #' @return An object of class \code{"rl_control"}.
 #' @seealso \code{\link{recordLinkage}}
@@ -453,20 +485,11 @@ recordLinkage.default <- function(X,
 
     # Validate method/matching combinations ----
     if (method == "probabilistic") {
-        if (matching == "bijective")
-            stop("'matching = \"bijective\"' is not supported for ",
-                 "method = \"probabilistic\": it would discard the ",
-                 "multinomial posterior. Use matching = \"independent\".",
-                 call. = FALSE)
-        if (na_anon != "ignore")
-            warning("'na_anon' in rl_control() is only used for ",
-                    "method = \"distance-based\". ",
-                    "The probabilistic method always ignores NA pairs.",
-                    call. = FALSE)
         if (risk_weighting != "uniform")
-            warning("'risk_weighting' is ignored for method = \"probabilistic\", ",
-                    "which always reports the normalized multinomial ",
-                    "posterior over the candidate set.",
+            warning("'risk_weighting' is ignored for method = \"probabilistic\": ",
+                    "with matching = \"independent\" risk is always the ",
+                    "normalized multinomial posterior over the candidate ",
+                    "set; with matching = \"bijective\" risk is binary.",
                     call. = FALSE)
         if (!is.null(weights) || !is.null(type) || !is.null(kappa) ||
             strategy != "nearest" || !is.null(k))
@@ -645,11 +668,11 @@ recordLinkage.default <- function(X,
     cand_n <- integer(n_query)
     true_in_set <- logical(n_query)
     matches <- if (isTRUE(return_matches)) vector("list", n_query) else NULL
+    score_cache <- if (matching == "bijective") vector("list", n_query) else NULL
     if (method == "distance-based") {
         d_true <- rep(NA_real_, n_query)
         d_min  <- rep(NA_real_, n_query)
         d_rank <- rep(NA_integer_, n_query)
-        score_cache <- if (matching == "bijective") vector("list", n_query) else NULL
         var_dist_acc <- setNames(numeric(length(key)), key)
     } else {
         lr_true <- rep(NA_real_, n_query)
@@ -667,12 +690,12 @@ recordLinkage.default <- function(X,
         }
 
         if (method == "probabilistic") {
-            # Fellegi-Sunter: compute log-likelihood ratios (exact agreement, NAs ignored)
+            # Fellegi-Sunter: compute log-likelihood ratios (exact agreement)
             lr <- .fs_log_lr(
                 x_row = query_data[i, key, drop = FALSE],
                 anon_block = search_data[cand, key, drop = FALSE],
                 key = key, m_probs = m_probs, u_probs = u_probs,
-                breaks = breaks
+                breaks = breaks, na_anon = na_anon
             )
 
             tpos <- true_idx[i]
@@ -697,6 +720,9 @@ recordLinkage.default <- function(X,
             true_in_set[i] <- !is.na(j_in)
 
             if (isTRUE(return_matches)) matches[[i]] <- cand
+            if (!is.null(score_cache))
+                score_cache[[i]] <- list(cand = cand, scores = lr,
+                                          maximize = TRUE)
             next
         }
 
@@ -828,6 +854,8 @@ recordLinkage.default <- function(X,
             lr_true = lr_true, lr_rank = lr_rank,
             risk_band = risk_band
         )
+        if (!is.null(bijective_assigned))
+            per_rec$bijective_assigned <- bijective_assigned
     }
 
     out <- list(
@@ -1014,6 +1042,8 @@ inspect_record.recordLinkageRisk <- function(x, i, data_orig = NULL,
     } else {
         out$lr_true <- pr$lr_true
         out$lr_rank <- pr$lr_rank
+        if (!is.null(pr$bijective_assigned))
+            out$bijective_assigned <- pr$bijective_assigned
     }
     if (!is.null(data_orig))
         out$query_record <- data_orig[i, , drop = FALSE]
@@ -1364,7 +1394,7 @@ print.inspect_record <- function(x, ...) {
 
 #' @keywords internal
 .fs_log_lr <- function(x_row, anon_block, key, m_probs, u_probs,
-                       breaks = NULL) {
+                       breaks = NULL, na_anon = "ignore") {
     m <- nrow(anon_block)
     lr <- numeric(m)
 
@@ -1382,10 +1412,13 @@ print.inspect_record <- function(x, ...) {
         uv <- u_probs[v]
         na <- is.na(av) | is.na(xv)
 
-        # Exact agreement for all variable types; NA pairs drop out (contribute 0)
-        gamma <- ifelse(!na, as.character(av) == as.character(xv), FALSE)
+        # Exact agreement for all variable types. NA pairs are resolved
+        # per na_anon: "match" -> treated as agreement, "mismatch" -> treated
+        # as disagreement, "ignore" -> variable dropped (contributes 0).
+        gamma <- ifelse(!na, as.character(av) == as.character(xv),
+                        na_anon == "match")
         contrib <- ifelse(gamma, log(mv / uv), log((1 - mv) / (1 - uv)))
-        contrib[na] <- 0
+        if (na_anon == "ignore") contrib[na] <- 0
         lr <- lr + contrib
     }
 
@@ -1549,7 +1582,7 @@ print.summary.recordLinkageRisk <- function(x, ...) {
 
     mtch <- if (!is.null(x$matching)) x$matching else "independent"
     cat("Method:", x$method, "| Direction:", dir, "\n")
-    if (x$method == "distance-based" && mtch == "bijective")
+    if (mtch == "bijective")
         cat("Matching: bijective (Hungarian algorithm)\n")
     cat("Key variables:", paste(x$key_vars, collapse = ", "), "\n")
     cat("Records:", x$n_original, "original,", x$n_anon, "anonymized\n\n")

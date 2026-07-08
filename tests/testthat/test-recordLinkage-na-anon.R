@@ -2,7 +2,7 @@
 
 library(testthat)
 
-test_that("probabilistic: na_anon in rl_control() has no effect (NAs always ignored)", {
+test_that("probabilistic: na_anon modes give different log-LR for NA pairs", {
   set.seed(2)
   n <- 10
   x <- data.frame(a = round(rnorm(n, 10, 3)),
@@ -11,18 +11,30 @@ test_that("probabilistic: na_anon in rl_control() has no effect (NAs always igno
   x_anon$b[1] <- NA
 
   set.seed(42)
-  r_ig <- suppressWarnings(
-    recordLinkage(x, x_anon, key = c("a", "b"), method = "probabilistic",
-                  truth = "row", control = rl_control(na_anon = "ignore"))
-  )
+  r_ig <- recordLinkage(x, x_anon, key = c("a", "b"), method = "probabilistic",
+                        truth = "row", control = rl_control(na_anon = "ignore"))
   set.seed(42)
-  r_mm <- suppressWarnings(
-    recordLinkage(x, x_anon, key = c("a", "b"), method = "probabilistic",
-                  truth = "row", control = rl_control(na_anon = "mismatch"))
-  )
+  r_ma <- recordLinkage(x, x_anon, key = c("a", "b"), method = "probabilistic",
+                        truth = "row", control = rl_control(na_anon = "match"))
+  set.seed(42)
+  r_mm <- recordLinkage(x, x_anon, key = c("a", "b"), method = "probabilistic",
+                        truth = "row", control = rl_control(na_anon = "mismatch"))
 
-  # Probabilistic always drops NA pairs regardless of na_anon setting.
-  expect_equal(r_ig$per_record$lr_true, r_mm$per_record$lr_true)
+  m_probs <- r_ig$fs_params$m_probs["b"]
+  u_probs <- r_ig$fs_params$u_probs["b"]
+
+  # Row 1 has an NA in 'b'; the difference between modes for that row's
+  # log-LR against itself (truth = "row") is exactly the assumed contribution
+  # of variable 'b': log(m/u) for "match", log((1-m)/(1-u)) for "mismatch",
+  # 0 for "ignore".
+  expect_equal(r_ma$per_record$lr_true[1] - r_ig$per_record$lr_true[1],
+               unname(log(m_probs / u_probs)))
+  expect_equal(r_mm$per_record$lr_true[1] - r_ig$per_record$lr_true[1],
+               unname(log((1 - m_probs) / (1 - u_probs))))
+
+  # Rows without any NA are unaffected by na_anon.
+  expect_equal(r_ig$per_record$lr_true[-1], r_ma$per_record$lr_true[-1])
+  expect_equal(r_ig$per_record$lr_true[-1], r_mm$per_record$lr_true[-1])
 })
 
 test_that("na-free data is unaffected by the na_anon setting", {

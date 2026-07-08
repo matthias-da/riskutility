@@ -64,9 +64,11 @@ Distances are computed only within blocks defined by these variables.}
 
 \item{matching}{character. Matching mode: \code{"independent"} (default) scores
 each record independently (classical DBRL), \code{"bijective"} enforces
-one-to-one assignment via the Hungarian algorithm (GDBRL).
-Bijective matching requires the \pkg{clue} package and is only supported
-for \code{method = "distance-based"}.
+one-to-one assignment via the Hungarian algorithm (GDBRL). Supported for
+both \code{method = "distance-based"} (cost = Gower distance) and
+\code{method = "probabilistic"} (cost = \eqn{\max(LR) - LR}, i.e. the
+assignment maximizes total log-likelihood ratio). Bijective matching
+requires the \pkg{clue} package.
 See Herranz, Nin, Rodriguez & Tassa (2016).}
 
 \item{risk_threshold}{numeric. Threshold for classifying records as "high risk"
@@ -96,12 +98,13 @@ the multinomial posterior),
 Distance-based only: \code{d_true} (Gower distance to true match),
 \code{d_min} (minimum distance to any candidate),
 \code{d_rank} (rank of true match by ascending distance).
-With \code{matching = "bijective"}, an additional
-\code{bijective_assigned} column gives the Hungarian-algorithm
-assignment; \code{d_true}, \code{d_min}, \code{d_rank} retain
-independent-scoring diagnostics.
 Probabilistic only: \code{lr_true} (log-likelihood ratio of the true
-match), \code{lr_rank} (rank of true match by descending log-LR).}
+match), \code{lr_rank} (rank of true match by descending log-LR).
+With \code{matching = "bijective"} (either method), an additional
+\code{bijective_assigned} column gives the Hungarian-algorithm
+assignment; \code{d_true}/\code{d_min}/\code{d_rank} or
+\code{lr_true}/\code{lr_rank} retain independent-scoring
+diagnostics.}
 \item{overall}{list with aggregate statistics including \code{risk_gini}
 (Gini coefficient of risk concentration).}
 \item{var_importance}{named numeric vector of per-variable mean weighted
@@ -148,10 +151,13 @@ or a shared identifier column (\code{truth="id"}). Note that \code{truth} affect
 Method-specific tuning parameters are \strong{not} direct arguments of
 \code{recordLinkage()}; they are set via \code{control = }\code{\link{rl_control}()}.
 Distance-based tuning: \code{weights}, \code{type}, \code{risk_weighting},
-\code{kappa}, \code{strategy}, \code{k}, \code{na_anon}. Probabilistic
-tuning: \code{m_probs}, \code{u_probs}, \code{breaks}. Passing a parameter
-that is irrelevant to the chosen \code{method} produces a warning and is
-ignored. See \code{\link{rl_control}} for the full list and defaults.
+\code{kappa}, \code{strategy}, \code{k}. Probabilistic
+tuning: \code{m_probs}, \code{u_probs}, \code{breaks}. \code{na_anon}
+applies to both methods (see the \emph{Distance-based method} and
+\emph{Probabilistic method} sections below for its method-specific
+effect). Passing a parameter that is irrelevant to the chosen
+\code{method} produces a warning and is ignored. See
+\code{\link{rl_control}} for the full list and defaults.
 }
 
 \section{Matching modes}{
@@ -170,10 +176,15 @@ links the whole dataset at once rather than record-by-record. Per-record
 risk is binary (1 if assigned to the true match, 0 otherwise) rather
 than a candidate-set probability, and is typically higher than
 independent risk because competing query records can no longer "share"
-a popular candidate. Requires \pkg{clue}; only supported for
-\code{method = "distance-based"} (bijective assignment would discard the
-multinomial posterior for \code{"probabilistic"} -- use
-\code{matching = "independent"} instead).
+a popular candidate. Requires \pkg{clue}. For \code{method =
+  "distance-based"} the assignment cost is the Gower distance (minimized);
+for \code{method = "probabilistic"} the cost is the Fellegi-Sunter
+log-likelihood ratio, transformed to a minimization via
+\eqn{cost = \max(LR) - LR} within each block, so the assignment
+maximizes total log-LR across the whole query set. This replaces the
+independent-mode multinomial posterior with the binary GDBRL-style
+outcome, exactly as it replaces the distance-based softmax/harmonic
+risk (see Risk weighting section below).
 }
 }
 
@@ -236,12 +247,24 @@ when its likelihood ratio dominates its competitors, and reduces to
 \eqn{1/|B|} when all candidates are equally likely.
 
 User-supplied \code{m_probs} and \code{u_probs} (via \code{rl_control()})
-override the supervised estimation. NA pairs always contribute 0 to the
-log-likelihood ratio (variable dropped). Direction, \code{na_anon}, and
-\code{risk_weighting} do not apply to this method.
+override the supervised estimation. A variable with a missing value on
+either side of a comparison is resolved via \code{na_anon}: \code{"ignore"}
+(default) drops the variable from that pair's log-likelihood ratio
+(contributes 0); \code{"match"} treats the pair as agreement (contributes
+\eqn{\log(m/u)}); \code{"mismatch"} treats it as disagreement (contributes
+\eqn{\log((1-m)/(1-u))}). Because risk is a softmax over the whole
+candidate block, this is not a neutral shift: \code{"match"}/\code{"mismatch"}
+redistribute posterior mass toward/away from candidates with missing
+values relative to their competitors. \code{m_probs}/\code{u_probs} are
+themselves estimated only from non-missing pairs, so \code{"match"}/
+\code{"mismatch"} plug in an assumed, not empirically calibrated, outcome
+for the missing case. Direction and \code{risk_weighting} do not apply to
+this method.
 
-See the Matching modes section above; bijective assignment is not
-available for this method.
+See the Matching modes section above for \code{matching = "bijective"},
+which replaces the multinomial posterior with a global one-to-one
+assignment on the log-likelihood ratios (a GDBRL attacker applied to LR
+scores instead of distances).
 }
 
 \section{Risk weighting}{

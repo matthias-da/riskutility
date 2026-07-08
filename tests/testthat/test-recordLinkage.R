@@ -950,13 +950,82 @@ test_that("bijective: cand_n is 0 or 1", {
   expect_true(all(res$per_record$cand_n %in% c(0L, 1L)))
 })
 
-test_that("bijective + probabilistic is rejected with informative error", {
+test_that("bijective + probabilistic: exact copy yields all risk = 1", {
+  skip_if_not_installed("clue")
   d <- .make_test_data(30)
-  expect_error(
-    recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                  method = "probabilistic", matching = "bijective"),
-    "not supported"
-  )
+  res <- recordLinkage(d$x, d$x, key = c("age", "sex", "region"),
+                        method = "probabilistic", matching = "bijective")
+  expect_true(all(res$per_record$risk == 1))
+})
+
+test_that("bijective + probabilistic: risk is binary {0, 1}", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                        method = "probabilistic", matching = "bijective")
+  expect_true(all(res$per_record$risk %in% c(0, 1)))
+})
+
+test_that("bijective + probabilistic: bijective_assigned column exists and is unique", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data()
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                        method = "probabilistic", matching = "bijective")
+  expect_true("bijective_assigned" %in% names(res$per_record))
+  assigned <- res$per_record$bijective_assigned
+  nonzero <- assigned[assigned > 0]
+  expect_equal(length(nonzero), length(unique(nonzero)))
+})
+
+test_that("bijective + probabilistic: lr_true/lr_rank retain independent diagnostics", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data(30)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                        method = "probabilistic", matching = "bijective")
+  expect_true(all(c("lr_true", "lr_rank") %in% names(res$per_record)))
+})
+
+test_that("bijective + probabilistic: mean risk >= independent mean risk", {
+  skip_if_not_installed("clue")
+  set.seed(42)
+  n <- 100
+  x <- data.frame(age = sample(18:80, n, TRUE),
+                   sex = factor(sample(c("f", "m"), n, TRUE)),
+                   region = factor(sample(paste0("R", 1:5), n, TRUE)))
+  x_anon <- x
+  x_anon$age <- x_anon$age + sample(-5:5, n, TRUE)
+  res_ind <- recordLinkage(x, x_anon, key = c("age", "sex", "region"),
+                            method = "probabilistic", matching = "independent")
+  res_bij <- recordLinkage(x, x_anon, key = c("age", "sex", "region"),
+                            method = "probabilistic", matching = "bijective")
+  expect_gte(res_bij$overall$mean_risk, res_ind$overall$mean_risk)
+})
+
+test_that("bijective + probabilistic: known permutation yields correct assignment", {
+  skip_if_not_installed("clue")
+  # Anon rows swapped: s1=50, s2=20, s3=80 vs orig q1=20, q2=50, q3=80
+  # With explicit m/u probs favoring exact agreement, the LR-maximizing
+  # assignment matches the exact-agreement pairs: q1->s2, q2->s1, q3->s3.
+  x <- data.frame(age = c(20, 50, 80))
+  x_anon <- data.frame(age = c(50, 20, 80))
+  ctrl <- rl_control(m_probs = c(age = 0.9), u_probs = c(age = 0.1))
+  res <- recordLinkage(x, x_anon, key = "age", method = "probabilistic",
+                        matching = "bijective", control = ctrl)
+  expect_identical(res$per_record$bijective_assigned, c(2L, 1L, 3L))
+  expect_identical(res$per_record$risk, c(0, 0, 1))
+})
+
+test_that("bijective + probabilistic: print/summary show 'bijective'", {
+  skip_if_not_installed("clue")
+  d <- .make_test_data(30)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                        method = "probabilistic", matching = "bijective")
+  out <- capture.output(print(res))
+  expect_true(any(grepl("bijective", out, ignore.case = TRUE)))
+  s <- summary(res)
+  expect_equal(s$matching, "bijective")
+  out2 <- capture.output(print(s))
+  expect_true(any(grepl("bijective", out2, ignore.case = TRUE)))
 })
 
 test_that("bijective: works with blocking", {
