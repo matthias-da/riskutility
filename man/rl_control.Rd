@@ -9,37 +9,42 @@ rl_control(
   type = NULL,
   risk_weighting = c("uniform", "softmax", "harmonic"),
   kappa = NULL,
-  strategy = c("nearest", "topk"),
-  k = NULL,
   m_probs = NULL,
   u_probs = NULL,
   breaks = NULL,
-  na_anon = c("ignore", "match", "mismatch")
+  na_anon = c("ignore", "match", "mismatch"),
+  ...
 )
 }
 \arguments{
-\item{weights}{named numeric vector or NULL.}
+\item{weights}{named numeric vector or NULL; see 'Distance-based
+parameters' section.}
 
-\item{type}{named character vector or NULL.}
+\item{type}{named character vector or NULL; see 'Distance-based
+parameters' section.}
 
 \item{risk_weighting}{character, one of \code{"uniform"} (default),
-\code{"softmax"}, \code{"harmonic"}.}
+\code{"softmax"}, \code{"harmonic"}; see 'Distance-based parameters'
+section.}
 
-\item{kappa}{numeric or NULL.}
+\item{kappa}{numeric or NULL; see 'Distance-based parameters' section.}
 
-\item{strategy}{character, one of \code{"nearest"} (default), \code{"topk"}.}
+\item{m_probs}{named numeric vector or NULL; see 'Probabilistic
+parameters' section.}
 
-\item{k}{integer or NULL.}
+\item{u_probs}{named numeric vector or NULL; see 'Probabilistic
+parameters' section.}
 
-\item{m_probs}{named numeric vector or NULL.}
-
-\item{u_probs}{named numeric vector or NULL.}
-
-\item{breaks}{named list of numeric break vectors or NULL.}
+\item{breaks}{named list of numeric break vectors or NULL; see
+'Probabilistic parameters' section.}
 
 \item{na_anon}{character, one of \code{"ignore"} (default), \code{"match"},
-\code{"mismatch"}. Applies to both \code{method}s; see the
-\emph{Shared parameters} section for the method-specific effect.}
+\code{"mismatch"}; see 'Shared parameters' section.}
+
+\item{...}{not used. Any named argument here is rejected with an error --
+a helpful one for the removed \code{strategy}/\code{k} (now top-level
+arguments of \code{\link{recordLinkage}()}), otherwise a generic
+"unused argument" error.}
 }
 \value{
 An object of class \code{"rl_control"}.
@@ -64,10 +69,13 @@ distance-weighting), or \code{"harmonic"} (rank-based reciprocal
 weighting, no tuning parameter).}
 \item{\code{kappa}}{Temperature for softmax weighting. If \code{NULL}
 (default), auto-calibrated as \code{2 / range(distances)}.}
-\item{\code{strategy}}{Adversary candidate-set strategy: \code{"nearest"}
-(default) or \code{"topk"}.}
-\item{\code{k}}{Candidate set size for \code{strategy = "topk"}.}
 }
+
+\code{strategy} and \code{k} (the adversary candidate-set strategy) are
+not part of this control object -- since they apply to \emph{both}
+methods (they shape the \code{matches} output for probabilistic too, not
+just distance-based \code{risk}/\code{cand_n}), they are top-level
+arguments of \code{\link{recordLinkage}()} instead. See its documentation.
 }
 
 \section{Probabilistic parameters}{

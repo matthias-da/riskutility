@@ -22,16 +22,21 @@
 #' \emph{evaluation} of success; it is not an attacker capability.
 #'
 #' @section Tuning via rl_control():
-#' Method-specific tuning parameters are \strong{not} direct arguments of
+#' Most method-specific tuning parameters are \strong{not} direct arguments of
 #' \code{recordLinkage()}; they are set via \code{control = }\code{\link{rl_control}()}.
 #' Distance-based tuning: \code{weights}, \code{type}, \code{risk_weighting},
-#' \code{kappa}, \code{strategy}, \code{k}. Probabilistic
+#' \code{kappa}. Probabilistic
 #' tuning: \code{m_probs}, \code{u_probs}, \code{breaks}. \code{na_anon}
 #' applies to both methods (see the \emph{Distance-based method} and
 #' \emph{Probabilistic method} sections below for its method-specific
 #' effect). Passing a parameter that is irrelevant to the chosen
 #' \code{method} produces a warning and is ignored. See
 #' \code{\link{rl_control}} for the full list and defaults.
+#'
+#' \code{strategy} and \code{k} are the exception: since they apply to
+#' \emph{both} methods (see \code{strategy}/\code{k} below), they are direct
+#' top-level arguments of \code{recordLinkage()} itself, not part of
+#' \code{control}.
 #'
 #' @section Matching modes:
 #' \code{matching} controls how attacker guesses are assigned across the
@@ -43,7 +48,7 @@
 #'   \item \strong{\code{"bijective"}}: a global one-to-one assignment is
 #'   solved with the Hungarian algorithm (\code{clue::solve_LSAP()}), so each
 #'   search-side record can be claimed by at most one query record. This
-#'   models a GDBRL attacker (Herranz, Nin, Rodriguez & Tassa, 2016) who
+#'   models a GDBRL attacker (Herranz, Nin, Rodriguez & Tassa, 2015) who
 #'   links the whole dataset at once rather than record-by-record. Per-record
 #'   risk is binary (1 if assigned to the true match, 0 otherwise) rather
 #'   than a candidate-set probability, and is typically higher than
@@ -126,8 +131,9 @@
 #' values relative to their competitors. \code{m_probs}/\code{u_probs} are
 #' themselves estimated only from non-missing pairs, so \code{"match"}/
 #' \code{"mismatch"} plug in an assumed, not empirically calibrated, outcome
-#' for the missing case. Direction and \code{risk_weighting} do not apply to
-#' this method.
+#' for the missing case. \code{risk_weighting} does not apply to this method
+#' (see the Risk weighting section below); \code{direction} does apply (see
+#' the Direction section below).
 #'
 #' See the Matching modes section above for \code{matching = "bijective"},
 #' which replaces the multinomial posterior with a global one-to-one
@@ -167,7 +173,7 @@
 #' With \code{direction = "anon_to_original"} the loop runs over anonymized
 #' records and finds nearest/best-scoring matches in the original data. This
 #' is the direction used by the classical DBRL literature (Domingo-Ferrer and
-#' Torra, 2003; Herranz et al., 2016) and by \pkg{sdcMicro}'s
+#' Torra, 2003; Herranz et al., 2015) and by \pkg{sdcMicro}'s
 #' \code{dRiskRMD}, and corresponds to a journalist-type attacker who holds
 #' the released file and a reference database and tries to identify each
 #' released record in that reference.
@@ -203,7 +209,26 @@
 #'   present in both \code{X} and \code{x_anon} that uniquely defines the true match.
 #' @param block character or NULL. Optional subset of \code{key} used for exact blocking.
 #'   Distances are computed only within blocks defined by these variables.
+#'   Conceptually, \code{block} encodes the attacker's certain, exact background
+#'   knowledge: the subset of quasi-identifiers assumed known with certainty about
+#'   the target before any linkage attempt is made. The remaining (non-block)
+#'   \code{key} variables represent softer, scored evidence used to identify the
+#'   record within that already-known group.
 #' @param return_matches logical. If TRUE, returns candidate indices per record (may be memory-heavy).
+#' @param strategy character, one of \code{"nearest"} (default) or
+#'   \code{"topk"}. Adversary candidate-set strategy: which candidates count
+#'   as the closest match(es). Applies to \emph{both} methods, but with a
+#'   different effect: for \code{method = "distance-based"} it shapes
+#'   \code{risk}/\code{cand_n} themselves (the candidate set is the guess set
+#'   the risk computation is weighted over); for
+#'   \code{method = "probabilistic"} it only filters the \code{matches}
+#'   output (when \code{return_matches = TRUE}) to the highest-likelihood-
+#'   ratio candidate(s) -- \code{risk}, \code{cand_n}, \code{lr_true}, and
+#'   \code{lr_rank} always reflect the full candidate block regardless of
+#'   \code{strategy}/\code{k}, and are unaffected if
+#'   \code{return_matches = FALSE}.
+#' @param k integer or NULL. Candidate set size for \code{strategy = "topk"};
+#'   ignored (and not required) for \code{strategy = "nearest"}.
 #' @param matching character. Matching mode: \code{"independent"} (default) scores
 #'   each record independently (classical DBRL), \code{"bijective"} enforces
 #'   one-to-one assignment via the Hungarian algorithm (GDBRL). Supported for
@@ -211,17 +236,18 @@
 #'   \code{method = "probabilistic"} (cost = \eqn{\max(LR) - LR}, i.e. the
 #'   assignment maximizes total log-likelihood ratio). Bijective matching
 #'   requires the \pkg{clue} package.
-#'   See Herranz, Nin, Rodriguez & Tassa (2016).
+#'   See Herranz, Nin, Rodriguez & Tassa (2015).
 #' @param risk_threshold numeric. Threshold for classifying records as "high risk"
 #'   and for the \code{privacy_pass} flag (default 0.1). Records with risk above
 #'   this threshold are counted in \code{n_high_risk} and \code{pct_high_risk}.
 #'   The \code{privacy_pass} flag is TRUE when \code{mean_risk <= risk_threshold}.
 #' @param control an \code{rl_control} object from \code{\link{rl_control}()},
 #'   carrying method-specific tuning parameters. Use
-#'   \code{rl_control(weights, type, risk_weighting, kappa, strategy, k)} for
-#'   distance-based tuning and \code{rl_control(m_probs, u_probs)} for
+#'   \code{rl_control(weights, type, risk_weighting, kappa)} for
+#'   distance-based tuning and \code{rl_control(m_probs, u_probs, breaks)} for
 #'   probabilistic tuning. Irrelevant parameters for the chosen method produce
-#'   a warning and are ignored.
+#'   a warning and are ignored. (\code{strategy}/\code{k} are top-level
+#'   arguments of \code{recordLinkage()} itself, not part of \code{control}.)
 #' @param ... additional arguments passed to methods.
 #' @author Matthias Templ and Roman Müller
 #'
@@ -252,7 +278,16 @@
 #'       distance (distance-based only; absent for probabilistic).}
 #'     \item{direction}{character, \code{"original_to_anon"} or
 #'       \code{"anon_to_original"}.}
-#'     \item{matches}{(optional) list of integer vectors with candidate indices.}
+#'     \item{matches}{(optional, when \code{return_matches = TRUE}) list of
+#'       integer vectors with the attacker's guess-set indices per record,
+#'       i.e. the closest candidate(s) under \code{strategy}/\code{k}: for
+#'       distance-based, the candidate(s) at minimum distance (or the k
+#'       nearest); for probabilistic, the candidate(s) at maximum
+#'       likelihood ratio (or the k highest-LR). This filtering only
+#'       affects \code{matches}; \code{risk}, \code{cand_n}, and (for
+#'       probabilistic) the multinomial posterior always use the full
+#'       candidate block. With \code{matching = "bijective"}, \code{matches}
+#'       instead holds the Hungarian-algorithm assignment.}
 #'   }
 #'   When \code{direction = "original_to_anon"}, \code{per_record} has one row
 #'   per original record; when \code{"anon_to_original"}, one row per
@@ -311,15 +346,17 @@
 #' }
 #'
 #' @references
-#' Gower, J. C. (1971). A general coefficient of similarity and some of its
-#' properties. Biometrics, 27(4), 857-871.
+#' Domingo-Ferrer, J., & Torra, V. (2002). Validating distance-based record
+#' linkage with probabilistic record linkage. In M. T. Escrig, F. Toledo, &
+#' E. Golobardes (Eds.), Topics in Artificial Intelligence (5th Catalonian
+#' Conference on AI), Lecture Notes in Computer Science, Vol. 2504
+#' (pp. 207-215). Springer, Berlin, Heidelberg.
 #'
 #' Fellegi, I. P., & Sunter, A. B. (1969). A theory for record linkage.
 #' Journal of the American Statistical Association, 64(328), 1183-1210.
 #'
-#' Domingo-Ferrer, J., & Torra, V. (2002). Validating distance-based record
-#' linkage with probabilistic record linkage. Lecture Notes in Computer
-#' Science, 2504, 207-215. Springer.
+#' Gower, J. C. (1971). A general coefficient of similarity and some of its
+#' properties. Biometrics, 27(4), 857-871.
 #'
 #' Herranz, J., Nin, J., Rodriguez, P., & Tassa, T. (2015). Revisiting
 #' distance-based record linkage for privacy-preserving release of statistical
@@ -367,10 +404,13 @@ recordLinkage.synth_pair <- function(X, ...) {
 #'     weighting, no tuning parameter).}
 #'   \item{\code{kappa}}{Temperature for softmax weighting. If \code{NULL}
 #'     (default), auto-calibrated as \code{2 / range(distances)}.}
-#'   \item{\code{strategy}}{Adversary candidate-set strategy: \code{"nearest"}
-#'     (default) or \code{"topk"}.}
-#'   \item{\code{k}}{Candidate set size for \code{strategy = "topk"}.}
 #' }
+#'
+#' \code{strategy} and \code{k} (the adversary candidate-set strategy) are
+#' not part of this control object -- since they apply to \emph{both}
+#' methods (they shape the \code{matches} output for probabilistic too, not
+#' just distance-based \code{risk}/\code{cand_n}), they are top-level
+#' arguments of \code{\link{recordLinkage}()} instead. See its documentation.
 #'
 #' @section Probabilistic parameters:
 #' \describe{
@@ -402,19 +442,26 @@ recordLinkage.synth_pair <- function(X, ...) {
 #'     \eqn{\log((1-m)/(1-u))}).}
 #' }
 #'
-#' @param weights named numeric vector or NULL.
-#' @param type named character vector or NULL.
+#' @param weights named numeric vector or NULL; see 'Distance-based
+#'   parameters' section.
+#' @param type named character vector or NULL; see 'Distance-based
+#'   parameters' section.
 #' @param risk_weighting character, one of \code{"uniform"} (default),
-#'   \code{"softmax"}, \code{"harmonic"}.
-#' @param kappa numeric or NULL.
-#' @param strategy character, one of \code{"nearest"} (default), \code{"topk"}.
-#' @param k integer or NULL.
-#' @param m_probs named numeric vector or NULL.
-#' @param u_probs named numeric vector or NULL.
-#' @param breaks named list of numeric break vectors or NULL.
+#'   \code{"softmax"}, \code{"harmonic"}; see 'Distance-based parameters'
+#'   section.
+#' @param kappa numeric or NULL; see 'Distance-based parameters' section.
+#' @param m_probs named numeric vector or NULL; see 'Probabilistic
+#'   parameters' section.
+#' @param u_probs named numeric vector or NULL; see 'Probabilistic
+#'   parameters' section.
+#' @param breaks named list of numeric break vectors or NULL; see
+#'   'Probabilistic parameters' section.
 #' @param na_anon character, one of \code{"ignore"} (default), \code{"match"},
-#'   \code{"mismatch"}. Applies to both \code{method}s; see the
-#'   \emph{Shared parameters} section for the method-specific effect.
+#'   \code{"mismatch"}; see 'Shared parameters' section.
+#' @param ... not used. Any named argument here is rejected with an error --
+#'   a helpful one for the removed \code{strategy}/\code{k} (now top-level
+#'   arguments of \code{\link{recordLinkage}()}), otherwise a generic
+#'   "unused argument" error.
 #'
 #' @return An object of class \code{"rl_control"}.
 #' @seealso \code{\link{recordLinkage}}
@@ -423,19 +470,38 @@ rl_control <- function(weights = NULL,
                        type = NULL,
                        risk_weighting = c("uniform", "softmax", "harmonic"),
                        kappa = NULL,
-                       strategy = c("nearest", "topk"),
-                       k = NULL,
                        m_probs = NULL,
                        u_probs = NULL,
                        breaks = NULL,
-                       na_anon = c("ignore", "match", "mismatch")) {
+                       na_anon = c("ignore", "match", "mismatch"),
+                       ...) {
+    # 'k' partially matches 'kappa' via R's own argument matching, so a
+    # caller writing the now-removed rl_control(k = ...) would otherwise be
+    # silently (and wrongly) routed into 'kappa' instead of erroring.
+    # sys.call() preserves the tag as literally typed (unlike match.call(),
+    # which already normalizes partial matches), so check it explicitly.
+    # '...' catches 'strategy' (which has no formal to collide with, so it
+    # would otherwise hit R's generic "unused argument" error before this
+    # function body even runs) and any other unrecognized argument.
+    used_names <- names(as.list(sys.call())[-1])
+    moved <- intersect(used_names, c("strategy", "k"))
+    if (length(moved))
+        stop("'", paste(moved, collapse = "', '"), "' ",
+             if (length(moved) > 1L) "are" else "is",
+             " no longer part of rl_control() -- pass ",
+             if (length(moved) > 1L) "them" else "it",
+             " directly to recordLinkage() instead.", call. = FALSE)
+
+    dots <- list(...)
+    if (length(dots))
+        stop("unused argument(s): ", paste(names(dots), collapse = ", "),
+             call. = FALSE)
+
     risk_weighting <- match.arg(risk_weighting)
-    strategy       <- match.arg(strategy)
     na_anon        <- match.arg(na_anon)
     structure(
         list(weights = weights, type = type,
              risk_weighting = risk_weighting, kappa = kappa,
-             strategy = strategy, k = k,
              m_probs = m_probs, u_probs = u_probs,
              breaks = breaks, na_anon = na_anon),
         class = "rl_control"
@@ -455,6 +521,8 @@ recordLinkage.default <- function(X,
                                   id = NULL,
                                   block = NULL,
                                   return_matches = FALSE,
+                                  strategy = c("nearest", "topk"),
+                                  k = NULL,
                                   matching = c("independent", "bijective"),
                                   risk_threshold = 0.1,
                                   control = rl_control(),
@@ -466,6 +534,7 @@ recordLinkage.default <- function(X,
     method    <- match.arg(method)
     direction <- match.arg(direction)
     truth     <- match.arg(truth)
+    strategy  <- match.arg(strategy)
     matching  <- match.arg(matching)
 
     if (!inherits(control, "rl_control"))
@@ -476,8 +545,6 @@ recordLinkage.default <- function(X,
     type           <- control$type
     risk_weighting <- control$risk_weighting
     kappa          <- control$kappa
-    strategy       <- control$strategy
-    k              <- control$k
     m_probs        <- control$m_probs
     u_probs        <- control$u_probs
     breaks         <- control$breaks
@@ -491,10 +558,9 @@ recordLinkage.default <- function(X,
                     "normalized multinomial posterior over the candidate ",
                     "set; with matching = \"bijective\" risk is binary.",
                     call. = FALSE)
-        if (!is.null(weights) || !is.null(type) || !is.null(kappa) ||
-            strategy != "nearest" || !is.null(k))
-            warning("Distance-based control parameters (weights, type, kappa, ",
-                    "strategy, k) are ignored for method = \"probabilistic\".",
+        if (!is.null(weights) || !is.null(type) || !is.null(kappa))
+            warning("Distance-based control parameters (weights, type, ",
+                    "kappa) are ignored for method = \"probabilistic\".",
                     call. = FALSE)
         if (!is.null(breaks)) {
             if (!is.list(breaks) || is.null(names(breaks)))
@@ -719,7 +785,15 @@ recordLinkage.default <- function(X,
             cand_n[i] <- length(cand)
             true_in_set[i] <- !is.na(j_in)
 
-            if (isTRUE(return_matches)) matches[[i]] <- cand
+            if (isTRUE(return_matches)) {
+                # Attacker's guess set by likelihood ratio (mirrors the
+                # distance-based guess set); risk/cand_n above still use the
+                # full block, unaffected by 'strategy'/'k'.
+                matches[[i]] <- .choose_guess_set(
+                    d = lr, cand = cand, strategy = strategy, k = k,
+                    maximize = TRUE
+                )
+            }
             if (!is.null(score_cache))
                 score_cache[[i]] <- list(cand = cand, scores = lr,
                                           maximize = TRUE)
@@ -874,6 +948,8 @@ recordLinkage.default <- function(X,
             id = id,
             block = block,
             direction = direction,
+            strategy = strategy,
+            k = k,
             matching = matching,
             risk_threshold = risk_threshold,
             control = control
@@ -1269,7 +1345,8 @@ print.inspect_record <- function(x, ...) {
 }
 
 #' @keywords internal
-.choose_guess_set <- function(d, cand, strategy, k = NULL) {
+.choose_guess_set <- function(d, cand, strategy, k = NULL, maximize = FALSE) {
+    if (maximize) d <- -d
     if (strategy == "topk") {
         if (is.null(k)) stop("strategy 'topk' requires 'k'.", call. = FALSE)
         k <- as.integer(k)
@@ -1464,7 +1541,7 @@ print.recordLinkageRisk <- function(x, ...) {
         if (!is.null(s$id)) paste0(" (id: ", s$id, ")") else "", "\n", sep = "")
 
     if (meth == "distance-based") {
-        cat("Strategy:    ", s$control$strategy, "\n", sep = "")
+        cat("Strategy:    ", s$strategy, "\n", sep = "")
         if (!is.null(s$block))
             cat("Blocking:    ", paste(s$block, collapse = ", "), "\n", sep = "")
         cat("NA handling: ", s$control$na_anon, "\n", sep = "")

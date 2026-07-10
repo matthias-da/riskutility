@@ -94,7 +94,7 @@ test_that("topk strategy limits candidates", {
   x <- data.frame(a = c(1, 2, 3), b = factor(c("x", "x", "x")))
   x_anon <- data.frame(a = c(1, 2, 3), b = factor(c("x", "x", "x")))
   res <- recordLinkage(x, x_anon, key = c("a", "b"),
-                       control = rl_control(strategy = "topk", k = 1))
+                       strategy = "topk", k = 1)
   expect_true(all(res$per_record$cand_n >= 1))
 })
 
@@ -410,7 +410,7 @@ test_that("truth='id' mode works correctly", {
 test_that("topk strategy with k=3 returns valid results", {
   d <- .make_test_data(50)
   res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
-                       control = rl_control(strategy = "topk", k = 3))
+                       strategy = "topk", k = 3)
   expect_s3_class(res, "recordLinkageRisk")
   # cand_n >= k (ties can expand the set)
   expect_true(all(res$per_record$cand_n >= 1 | res$per_record$cand_n == 0))
@@ -657,6 +657,108 @@ test_that("lr_rank computed for probabilistic method (not d_rank)", {
   expect_false("d_rank" %in% names(res$per_record))
   expect_true("lr_rank" %in% names(res$per_record))
   expect_true(any(!is.na(res$per_record$lr_rank)))
+})
+
+test_that("probabilistic: matches filtered by top LR, not the full block", {
+  d <- .make_test_data(30)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "probabilistic", return_matches = TRUE)
+  expect_true(any(lengths(res$matches) < res$per_record$cand_n))
+})
+
+test_that("probabilistic: rank-1 (best LR) true match is included in matches", {
+  d <- .make_test_data(30)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "probabilistic", return_matches = TRUE)
+  idx <- which(res$per_record$true_in_set & res$per_record$lr_rank == 1L)
+  if (length(idx)) {
+    # truth = "row" (default): the true match for record i is row i
+    expect_true(all(vapply(idx, function(i) i %in% res$matches[[i]],
+                            logical(1))))
+  }
+})
+
+test_that("probabilistic: strategy = 'topk' returns at least k matches per record", {
+  d <- .make_test_data(30)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "probabilistic", return_matches = TRUE,
+                       strategy = "topk", k = 3)
+  lens <- lengths(res$matches)
+  has_enough <- res$per_record$cand_n >= 3
+  expect_true(all(lens[has_enough] >= 3))
+  expect_true(all(lens <= res$per_record$cand_n))
+})
+
+test_that("probabilistic: strategy/k filtering leaves risk untouched (full-block posterior)", {
+  d <- .make_test_data(30)
+  set.seed(1)
+  res_nearest <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                               method = "probabilistic", strategy = "nearest")
+  set.seed(1)
+  res_topk <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                            method = "probabilistic",
+                            strategy = "topk", k = 3)
+  expect_equal(res_nearest$per_record$risk, res_topk$per_record$risk)
+  expect_equal(res_nearest$per_record$cand_n, res_topk$per_record$cand_n)
+  expect_equal(res_nearest$per_record$lr_true, res_topk$per_record$lr_true)
+  expect_equal(res_nearest$per_record$lr_rank, res_topk$per_record$lr_rank)
+})
+
+test_that("probabilistic: strategy/k no longer trigger an 'ignored' warning", {
+  d <- .make_test_data(20)
+  expect_no_warning(
+    recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                 method = "probabilistic", strategy = "topk", k = 3)
+  )
+})
+
+test_that("bijective + probabilistic: matches reflect assignment, not LR-topk filtering", {
+  d <- .make_test_data(20)
+  res <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                       method = "probabilistic", matching = "bijective",
+                       return_matches = TRUE, strategy = "topk", k = 3)
+  # bijective assignment is one-to-one regardless of 'strategy'
+  expect_true(all(lengths(res$matches) <= 1L))
+})
+
+test_that("strategy defaults to 'nearest' when omitted", {
+  d <- .make_test_data(30)
+  res_default <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"))
+  res_explicit <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                                strategy = "nearest")
+  expect_identical(res_default$per_record, res_explicit$per_record)
+
+  set.seed(1)
+  res_default_prob <- recordLinkage(d$x, d$x_anon,
+                                    key = c("age", "sex", "region"),
+                                    method = "probabilistic",
+                                    return_matches = TRUE)
+  set.seed(1)
+  res_explicit_prob <- recordLinkage(d$x, d$x_anon,
+                                     key = c("age", "sex", "region"),
+                                     method = "probabilistic",
+                                     return_matches = TRUE,
+                                     strategy = "nearest")
+  expect_identical(res_default_prob$per_record, res_explicit_prob$per_record)
+  expect_identical(res_default_prob$matches, res_explicit_prob$matches)
+})
+
+test_that("probabilistic: strategy/k are inert when return_matches = FALSE", {
+  d <- .make_test_data(20)
+  set.seed(1)
+  res_default <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                               method = "probabilistic")
+  set.seed(1)
+  res_topk <- recordLinkage(d$x, d$x_anon, key = c("age", "sex", "region"),
+                            method = "probabilistic", strategy = "topk", k = 3)
+  expect_identical(res_default$per_record, res_topk$per_record)
+  expect_identical(res_default$overall, res_topk$overall)
+})
+
+test_that("rl_control() rejects the removed strategy/k arguments with a helpful message", {
+  expect_error(rl_control(strategy = "topk"), "no longer part of rl_control")
+  # 'k' must not silently fall through to 'kappa' via partial matching
+  expect_error(rl_control(k = 3), "no longer part of rl_control")
 })
 
 
@@ -1294,7 +1396,7 @@ test_that("distance-based:topk strategy excludes/includes candidates", {
   x <- data.frame(age = c(20, 80))
   xa <- data.frame(age = c(21, 79))
   # topk=1: each record's nearest is its true match
-  res1 <- recordLinkage(x, xa, key = "age", control = rl_control(strategy = "topk", k = 1))
+  res1 <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 1)
   expect_equal(res1$per_record$risk, c(1, 1))
   expect_equal(res1$per_record$cand_n, c(1L, 1L))
 })
@@ -1303,9 +1405,9 @@ test_that("distance-based:topk strategy controls candidate set size", {
   # rec1(30): d=[0.2, 0.12, 0.8]. True=a1. Nearest=a2(0.12).
   x <- data.frame(age = c(30, 30, 50))
   xa <- data.frame(age = c(25, 33, 50))
-  res1 <- recordLinkage(x, xa, key = "age", control = rl_control(strategy = "topk", k = 1))
+  res1 <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 1)
   expect_equal(res1$per_record$risk[1], 0)  # true not in top-1
-  res2 <- recordLinkage(x, xa, key = "age", control = rl_control(strategy = "topk", k = 2))
+  res2 <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 2)
   expect_equal(res2$per_record$risk[1], 0.5)  # true in top-2
 })
 
@@ -1313,7 +1415,7 @@ test_that("distance-based:topk with ties yields tie-inclusive set", {
   # Two candidates at equal distance from the query, topk k=1 should return both
   x <- data.frame(age = c(30, 10))
   xa <- data.frame(age = c(31, 31))
-  res <- recordLinkage(x, xa, key = "age", control = rl_control(strategy = "topk", k = 1))
+  res <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 1)
   # Record 1: both xa records are tied -> cand_n >= 1
   expect_true(res$per_record$cand_n[1] >= 1)
 })
@@ -1323,9 +1425,8 @@ test_that("distance-based:softmax weighting hand-computed", {
   # w_true = exp(-kappa*0.2) / (exp(-kappa*0.2) + exp(-kappa*0.32))
   x <- data.frame(age = c(25, 33, 50))
   xa <- data.frame(age = c(30, 33, 50))
-  res <- recordLinkage(x, xa, key = "age",
-                        control = rl_control(strategy = "topk", k = 2,
-                                             risk_weighting = "softmax"))
+  res <- recordLinkage(x, xa, key = "age", strategy = "topk", k = 2,
+                        control = rl_control(risk_weighting = "softmax"))
   kappa <- 2 / (8/25 - 5/25)
   neg_kd <- -kappa * c(5/25, 8/25)
   neg_kd <- neg_kd - max(neg_kd)

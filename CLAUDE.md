@@ -208,7 +208,7 @@ rumap(original, synthetic,
 `recordLinkage()` supports three matching modes via `matching = c("independent", "bijective", "ot")`:
 
 - **Independent** (default): Each record matched independently (many-to-one). Classical DBRL approach.
-- **Bijective**: Global one-to-one assignment via Hungarian algorithm (`clue::solve_LSAP()`). Models GDBRL attacker (Herranz, Nin, Rodriguez & Tassa, 2016). Yields binary risk (0 or 1) and typically higher risk than independent matching.
+- **Bijective**: Global one-to-one assignment via Hungarian algorithm (`clue::solve_LSAP()`). Models GDBRL attacker (Herranz, Nin, Rodriguez & Tassa, 2015). Yields binary risk (0 or 1) and typically higher risk than independent matching.
 - **OT** (optimal transport): Entropy-regularized soft global assignment via Sinkhorn-Knopp algorithm. Produces continuous risk in [0,1] that interpolates between independent (smooth) and bijective (hard). Controlled by `ot_epsilon` (regularization) and `ot_max_iter`.
 
 Cost direction per method (bijective/OT cost transform):
@@ -286,7 +286,7 @@ The RAPID implementation in riskutility is the canonical version, ported and imp
 - Yao, Z., Krco, N., Ganev, G., & de Montjoye, Y.-A. (2025). "The DCR Delusion: Measuring the Privacy Risk of Synthetic Data." arXiv:2505.01524.
 - Taub, J., et al. (2018). "Differential Correct Attribution Probability for Synthetic Data." Privacy in Statistical Databases.
 - RAPID implementation based on Thees, Müller & Templ (2026) - Risk of Attribute Prediction-Induced Disclosure
-- Herranz, J., Nin, J., Rodriguez, P., & Tassa, T. (2016). "Revisiting Distance-Based Record Linkage for Privacy-Preserving Release of Statistical Datasets." Data & Knowledge Engineering, 100, 78-93.
+- Herranz, J., Nin, J., Rodriguez, P., & Tassa, T. (2015). "Revisiting Distance-Based Record Linkage for Privacy-Preserving Release of Statistical Datasets." Data & Knowledge Engineering, 100, 78-93.
 - Guo, C., & Berkhahn, F. (2016). "Entity Embeddings of Categorical Variables." arXiv:1604.06737.
 - Karr, A. F., et al. (2006). "A Framework for Evaluating the Utility of Data Altered to Protect Confidentiality." The American Statistician, 60(3), 224-232.
 - Snoke, J., et al. (2018). "General and Specific Utility Measures for Synthetic Data." JRSS-A, 181(3), 663-688.

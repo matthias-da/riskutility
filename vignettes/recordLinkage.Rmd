@@ -103,7 +103,7 @@ The attacker scenario assumes:
 - **Exact QI knowledge**: the attacker knows the target's quasi-identifier
   values (e.g., age, sex, region) from an external source.
 - **Linking rule**: the attacker applies a strategy (nearest match,
-  threshold, top-$k$) to select candidates from the released data and
+  top-$k$) to select candidates from the released data and
   attributes re-identification risk accordingly.
 
 Ground truth for evaluation is taken from row alignment
@@ -148,17 +148,14 @@ Several R packages address record linkage or disclosure risk:
 These packages focus primarily on *linking* records (classification into
 match/non-match) rather than *quantifying re-identification risk* per
 record. The `recordLinkage()` function in **riskutility** fills this gap
-by combining six linkage methods with risk-focused output: per-record
+by combining two linkage methods with risk-focused output: per-record
 risk scores, candidate set diagnostics, and configurable risk weighting.
 
 | Feature | sdcMicro | RecordLinkage | fastLink | riskutility |
 |:--------|:--------:|:-------------:|:--------:|:-----------:|
 | Deterministic (distance) | Yes | -- | -- | Yes |
 | Probabilistic (Fellegi-Sunter) | -- | Yes | Yes | Yes |
-| Embedding (autoencoder) | -- | -- | -- | Yes |
-| RF proximity | -- | -- | -- | Yes |
-| Rank-based (RBRL) | -- | -- | -- | Yes |
-| Mahalanobis (robust) | Yes | -- | -- | Yes |
+| Mahalanobis (robust) | Yes | -- | -- | -- |
 | Per-record risk scores | Partial[^1] | -- | -- | Yes |
 | Risk weighting schemes | -- | -- | -- | Yes |
 | Blocking | -- | Yes | Yes | Yes |
@@ -247,8 +244,9 @@ records serve as query vs. search).
 ## Risk Weighting Schemes
 
 The choice of candidate weights $\pi_j$ controls how risk is attributed.
-Three schemes are available; their effect is demonstrated empirically in
-the method comparison section below.
+Three schemes are available (distance-based method only; the probabilistic
+method always uses the full-block multinomial posterior); their effect is
+demonstrated empirically in the method comparison section below.
 
 **Uniform** (`risk_weighting = "uniform"`): Each candidate receives
 equal weight:
@@ -268,30 +266,15 @@ both winner-take-all and near-uniform behavior. As $\kappa \to \infty$
 this approaches winner-take-all; as $\kappa \to 0$ it converges to
 uniform.
 
-**Kernel** (`risk_weighting = "kernel"`): Weights are proportional to a
-kernel function evaluated at the scaled distance:
-$$\pi_j = \frac{K(d_j / h)}{\sum_{k \in C_i} K(d_k / h)},$$
-where $h$ is the bandwidth and $K$ is a kernel function.
-If $h$ is not supplied, it is auto-selected via Silverman's rule of
-thumb (a standard bandwidth selector from kernel density estimation),
-applied heuristically to the candidate distances:
-$$h = 0.9 \cdot \min\!\left(\hat\sigma,\, \frac{\widehat{\text{IQR}}}{1.34}\right) \cdot |C_i|^{-1/5}.$$
-Note that this rule was designed for density estimation with larger
-samples; for small candidate sets (e.g., $|C_i| \le 5$), the bandwidth
-may be suboptimal. Users can supply a fixed $h$ via the `kernel_h`
-parameter to override auto-selection.
-The available kernels are:
-
-- *Gaussian*: $K(u) = \exp(-u^2/2)$
-- *Epanechnikov*: $K(u) = \max(0, 1 - u^2) \cdot 3/4$
-- *Tricube*: $K(u) = \max(0, (1 - |u|^3)^3) \cdot 70/81$
-
-With compact kernels (Epanechnikov, tricube), candidates beyond the
-bandwidth receive exactly zero weight and are effectively excluded.
-The effect of the bandwidth and kernel choice is demonstrated
-empirically in the Weighting Scheme Comparison subsection below; readers
-unfamiliar with kernel density estimation may skip these details on
-first reading.
+**Harmonic** (`risk_weighting = "harmonic"`): Weights are proportional to
+the reciprocal of each candidate's rank by ascending distance, with no
+tuning parameter:
+$$\pi_j = \frac{1/r_j}{\sum_{k \in C_i} 1/r_k},$$
+where $r_j$ is the rank of candidate $j$ within the candidate set
+(rank 1 = closest; tied distances share the minimum rank). Like softmax,
+this concentrates risk on the closest candidate(s), but does so through
+rank rather than the raw distance scale, so it is insensitive to the
+units or spread of the distance metric.
 
 
 # Deterministic Method (Gower Distance)
@@ -437,28 +420,23 @@ This illustrates why identity disclosure risk (measured by
 ## Attacker Strategies
 
 The `strategy` parameter controls how the attacker selects candidates.
-We compare three strategies on the same toy data:
+We compare the two available strategies on the same toy data:
 
 ```{r det-toy-strategies}
-res_nearest   <- recordLinkage(orig, anon, key = c("age", "sex", "city"),
-                               strategy = "nearest")
-res_threshold <- recordLinkage(orig, anon, key = c("age", "sex", "city"),
-                               strategy = "threshold", threshold = 0.2)
-res_topk      <- recordLinkage(orig, anon, key = c("age", "sex", "city"),
-                               strategy = "topk", k = 3)
+res_nearest <- recordLinkage(orig, anon, key = c("age", "sex", "city"),
+                             strategy = "nearest")
+res_topk    <- recordLinkage(orig, anon, key = c("age", "sex", "city"),
+                             strategy = "topk", k = 3)
 strat_df <- data.frame(
   Record = 1:6,
-  nearest   = round(res_nearest$per_record$risk, 4),
-  threshold = round(res_threshold$per_record$risk, 4),
-  topk_3    = round(res_topk$per_record$risk, 4)
+  nearest = round(res_nearest$per_record$risk, 4),
+  topk_3  = round(res_topk$per_record$risk, 4)
 )
 knitr::kable(strat_df, caption = "Risk under different attacker strategies")
 ```
 
-With `threshold = 0.2`, only exact or near-exact matches qualify, so
-records with moderate perturbation get zero risk. With `topk` and
-$k = 3$, the candidate set always includes at least 3 records, diluting
-risk for unique matches.
+With `topk` and $k = 3$, the candidate set always includes at least 3
+records, diluting risk for unique matches.
 
 ## Real-World Example (n = 500)
 
@@ -880,50 +858,36 @@ which the weighting can differentiate:
 qi <- c("age", "sex", "region", "educ")
 res_unif <- recordLinkage(census, census_anon, key = qi,
                           strategy = "topk", k = 5,
-                          risk_weighting = "uniform")
+                          control = rl_control(risk_weighting = "uniform"))
 res_soft <- recordLinkage(census, census_anon, key = qi,
                           strategy = "topk", k = 5,
-                          risk_weighting = "softmax")
-res_kern_gauss <- recordLinkage(census, census_anon, key = qi,
-                                strategy = "topk", k = 5,
-                                risk_weighting = "kernel",
-                                kernel = "gaussian")
-res_kern_epan <- recordLinkage(census, census_anon, key = qi,
-                               strategy = "topk", k = 5,
-                               risk_weighting = "kernel",
-                               kernel = "epanechnikov")
-res_kern_tri <- recordLinkage(census, census_anon, key = qi,
-                              strategy = "topk", k = 5,
-                              risk_weighting = "kernel",
-                              kernel = "tricube")
+                          control = rl_control(risk_weighting = "softmax"))
+res_harm <- recordLinkage(census, census_anon, key = qi,
+                          strategy = "topk", k = 5,
+                          control = rl_control(risk_weighting = "harmonic"))
 
 wt_df <- data.frame(
-  Weighting = c("Uniform", "Softmax", "Kernel (Gaussian)",
-                "Kernel (Epanechnikov)", "Kernel (Tricube)"),
+  Weighting = c("Uniform", "Softmax", "Harmonic"),
   Mean_risk = c(res_unif$overall$mean_risk,
                 res_soft$overall$mean_risk,
-                res_kern_gauss$overall$mean_risk,
-                res_kern_epan$overall$mean_risk,
-                res_kern_tri$overall$mean_risk),
+                res_harm$overall$mean_risk),
   Max_risk = c(res_unif$overall$max_risk,
                 res_soft$overall$max_risk,
-                res_kern_gauss$overall$max_risk,
-                res_kern_epan$overall$max_risk,
-                res_kern_tri$overall$max_risk),
+                res_harm$overall$max_risk),
   Pct_high = c(100 * res_unif$overall$pct_high_risk,
                100 * res_soft$overall$pct_high_risk,
-               100 * res_kern_gauss$overall$pct_high_risk,
-               100 * res_kern_epan$overall$pct_high_risk,
-               100 * res_kern_tri$overall$pct_high_risk)
+               100 * res_harm$overall$pct_high_risk)
 )
 knitr::kable(wt_df, digits = 4,
              caption = "Risk weighting schemes (distance-based method, top-5 strategy)")
 ```
 
 Uniform weighting is most conservative -- it distributes risk equally
-among all 5 candidates. Softmax and kernel weighting concentrate risk on
-the closest candidate, giving higher risk to easy-to-link records and
-lower risk to well-protected ones.
+among all 5 candidates. Softmax concentrates risk on the closest
+candidate via exponential distance-weighting, giving higher risk to
+easy-to-link records and lower risk to well-protected ones. Harmonic
+weighting does the same via rank-based reciprocal weighting, without
+a tuning parameter.
 
 ## Summary Table
 
@@ -1396,9 +1360,8 @@ the actual re-identification probability is approximately $f \cdot r_i$
    $r_i = 1$ whenever the true match is nearest (or $r_i = 0$ when
    it is not). This binary behavior masks the degree of protection.
    *Solution*: use `strategy = "topk"` with $k \ge 3$ to create
-   candidate sets where weighting can differentiate, or use
-   `strategy = "threshold"` to include all records within a distance,
-   or bin continuous variables before linkage.
+   candidate sets where weighting can differentiate, or bin continuous
+   variables before linkage.
 
 2. **No records flagged**: This happens with very few coarse categorical
    QIs (e.g., only sex and region). Many records share the same QI
@@ -1490,11 +1453,6 @@ the Hungarian algorithm assigns a record to its true match, 0 otherwise
 -- a simplification of the graded risk discussed in the original paper.
 The `clue` package is required.
 
-A third option, `matching = "ot"`, uses entropy-regularized optimal
-transport (Sinkhorn-Knopp algorithm) to produce continuous risk in
-$[0,1]$ that interpolates between independent (smooth) and
-bijective (hard) assignments, controlled by the `ot_epsilon` parameter.
-
 ## Comparison Example
 
 ```{r bijective-comparison}
@@ -1521,7 +1479,7 @@ rarely has the full membership knowledge and computational resources
 required for GDBRL. Nevertheless, reporting both independent and
 bijective risk provides a useful bracket on the true risk level.
 
-Bijective (and OT) matching works with all six methods and with blocking. When
+Bijective matching works with both methods and with blocking. When
 blocking is enabled, the Hungarian algorithm runs independently within
 each block:
 
@@ -1538,11 +1496,10 @@ cat("Bijective + blocking: mean risk =",
 # Discussion and Conclusion
 
 The `recordLinkage()` function provides a unified framework for
-assessing re-identification risk in perturbed microdata. The three
+assessing re-identification risk in perturbed microdata. The two
 methods covered in this paper span a range of scenarios: distance-based
-linkage for general-purpose assessment, probabilistic linkage for formal
-audits, and embedding-based linkage for capturing complex non-linear
-interactions via learned latent representations.
+linkage for general-purpose assessment, and probabilistic linkage for
+formal audits.
 
 ## Key Takeaways
 
@@ -1553,9 +1510,9 @@ is available (m/u probabilities for formal audits, or complex
 interaction patterns with high-cardinality categoricals), the
 specialized methods can refine the assessment. The choice
 of risk weighting scheme matters: uniform weighting is conservative
-(equal weight to all candidates), while softmax and kernel weighting
+(equal weight to all candidates), while softmax and harmonic weighting
 concentrate risk on the closest candidate, producing more nuanced risk
-profiles. In particular, the `topk` or `threshold` strategies are
+profiles. In particular, the `topk` strategy is
 needed to make weighting differences visible, since the default
 `nearest` strategy often yields singleton candidate sets. Both forward
 and reverse directions should be considered: forward risk assesses how
@@ -1587,26 +1544,21 @@ Several limitations should be noted:
    judgment calls about which variables an attacker might know, and
    should consider running the assessment with multiple QI sets to
    gauge sensitivity.
-5. **Embedding method**: The autoencoder-based embedding method requires
-   **torch** and sufficient training data (blocks with fewer than
-   $\max(30, 5d)$ rows fall back to distance-based matching). Training
-   is non-deterministic across platforms even with fixed seeds, and the
-   method adds computational overhead compared to distance-based methods.
-6. **Sample vs. census**: The current implementation computes
+5. **Sample vs. census**: The current implementation computes
    sample-level risk. For sample surveys where the attacker does not
    know whether the target is in the dataset, population-level
    adjustments [@franconi2004individual] are needed.
-7. **Realized vs. expected risk**: For perturbative mechanisms the reported
+6. **Realized vs. expected risk**: For perturbative mechanisms the reported
    risk reflects the single *realized* output. A mechanism-level expectation
    integrated over the perturbation distribution for arbitrary swapping
    schemes remains future work.
-8. **Naive vs. informed attacker**: The function models an attacker who matches
+7. **Naive vs. informed attacker**: The function models an attacker who matches
    on all quasi-identifiers. An *informed* attacker who knows which variables
    were perturbed and matches only on the unchanged ones is not yet supported.
-9. **Missing-value handling**: `na_anon` controls NA treatment uniformly across
-   all methods (`"ignore"`, `"match"`, `"mismatch"`). For the numeric part of
-   the Mahalanobis distance, `"ignore"` uses a zero-contribution approximation
-   rather than the exact conditional sub-Mahalanobis distance.
+8. **Missing-value handling**: `na_anon` controls NA treatment uniformly across
+   both methods (`"ignore"`, `"match"`, `"mismatch"`), with a method-specific
+   effect on the Gower distance or the log-likelihood ratio (see the
+   'Shared parameters' section of `rl_control()`).
 
 ## Future Directions
 
