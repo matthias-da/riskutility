@@ -333,7 +333,7 @@ tail_fidelity.default <- function(X, Y,
   # densitydiff_1d_num returns list with $jsd
   # Suppress NaN warnings from KDE on sparse tail data
   tryCatch({
-    dd <- suppressWarnings(densitydiff_1d_num(x_tail, y_tail))
+    dd <- suppressWarnings(densitydiff_1d_num(x_tail, y_tail, bayesspace = FALSE))
     dd$jsd
   }, error = function(e) {
     NA_real_

@@ -12,6 +12,11 @@
 #' @param method character, matching method: "exact" or "gower" (default: "exact")
 #' @param gower_threshold numeric, maximum Gower distance for a match when
 #'   method="gower" (default: 0.1)
+#' @param cont_bins integer, number of quantile bins used to discretise a
+#'   continuous target variable (default: 10). Matching \code{dcap()}, a
+#'   numeric target is binned before attribution is assessed; without
+#'   binning an exact match on a continuous value essentially never occurs
+#'   and every TCAP score collapses to zero.
 #' @param na.rm logical, remove records with NA in key or target (default: TRUE)
 #' @param ... additional arguments passed to methods (currently unused)
 #'
@@ -195,6 +200,7 @@ tcap.default <- function(X, Y,
                          target_var,
                          method = c("exact", "gower"),
                          gower_threshold = 0.1,
+                         cont_bins = 10,
                          na.rm = TRUE,
                          ...) {
 
@@ -236,6 +242,17 @@ tcap.default <- function(X, Y,
   # Get target values
   target_X <- X[[target_var]]
   target_Y <- Y[[target_var]]
+
+  # Bin a continuous target, exactly as dcap() does, so that the members of the
+  # CAP family are computed on the same discretisation of the target.
+  if (is.numeric(target_X) && !is.factor(target_X)) {
+    breaks <- quantile(c(target_X, target_Y),
+                       probs = seq(0, 1, length.out = cont_bins + 1),
+                       na.rm = TRUE)
+    breaks <- unique(breaks)
+    target_X <- cut(target_X, breaks = breaks, include.lowest = TRUE)
+    target_Y <- cut(target_Y, breaks = breaks, include.lowest = TRUE)
+  }
 
   # Compute baseline (modal target frequency in synthetic data)
   target_freq <- table(target_Y) / length(target_Y)

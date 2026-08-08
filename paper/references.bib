@@ -43,7 +43,9 @@
 
 @book{hundepool2012statistical,
   title={Statistical Disclosure Control},
-  author={Hundepool, Anco and Domingo-Ferrer, Josep and Bruin, Luisa and others},
+  author={Hundepool, Anco and Domingo-Ferrer, Josep and Franconi, Luisa and
+          Giessing, Sarah and Schulte Nordholt, Eric and Spicer, Keith and
+          de Wolf, Peter-Paul},
   year={2012},
   publisher={John Wiley \& Sons},
   doi={10.1002/9781118348239}
@@ -128,15 +130,33 @@
 }
 
 @article{thees2026beyond,
-  title={Beyond the Trade-off Curve: Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and Synthetic Data},
-  author={Thees, Oscar and M{\"u}ller, Fabian and Templ, Matthias},
+  title={Beyond the Trade-off Curve: Multivariate and Advanced Risk-Utility Maps
+         for Evaluating Anonymized Data},
+  author={Thees, Oscar and M{\"u}ller, Roman and Templ, Matthias},
   journal={Journal of Official Statistics},
   year={2026},
-  note={Forthcoming}
+  note={Under review},
+  url={https://arxiv.org/abs/2510.23500}
+}
+
+@article{templ2026rapid,
+  title={{RAPID}: Risk of Attribute Prediction-Induced Disclosure in Synthetic Microdata},
+  author={Templ, Matthias and Thees, Oscar and M{\"u}ller, Roman},
+  journal={arXiv preprint arXiv:2602.09235},
+  year={2026},
+  url={https://arxiv.org/abs/2602.09235}
+}
+
+@article{raab2024practical,
+  title={Practical Privacy Metrics for Synthetic Data},
+  author={Raab, Gillian M and Nowok, Beata and Dibben, Chris},
+  journal={arXiv preprint arXiv:2406.16826},
+  year={2024},
+  url={https://arxiv.org/abs/2406.16826}
 }
 
 @article{templ2015sdcmicro,
-  title={{sdcMicro}: Statistical Disclosure Control Methods for Anonymization of Data and Risk Estimation},
+  title={Statistical Disclosure Control for Micro-Data Using the {R} Package {sdcMicro}},
   author={Templ, Matthias and Kowarik, Alexander and Meindl, Bernhard},
   journal={Journal of Statistical Software},
   volume={67},
@@ -245,17 +265,21 @@
   booktitle={Privacy in Statistical Databases},
   series={Lecture Notes in Computer Science},
   volume={5262},
-  pages={113--126},
+  pages={177--189},
   year={2008},
   publisher={Springer},
   doi={10.1007/978-3-540-87471-3_15}
 }
 
-@article{yao2025dcr,
+@inproceedings{yao2025dcr,
   title={The {DCR} Delusion: Measuring the Privacy Risk of Synthetic Data},
   author={Yao, Zexi and Kr{\v{c}}o, Nata{\v{s}}a and Ganev, Georgi and de Montjoye, Yves-Alexandre},
-  journal={arXiv preprint arXiv:2505.01524},
-  year={2025}
+  booktitle={Computer Security -- {ESORICS} 2025},
+  series={Lecture Notes in Computer Science},
+  pages={469--487},
+  publisher={Springer},
+  year={2025},
+  doi={10.1007/978-3-032-07884-1_24}
 }
 
 @book{templ2017statistical,
@@ -266,13 +290,12 @@
   doi={10.1007/978-3-319-50272-4}
 }
 
-@article{samarati1998protecting,
-  title={Protecting Respondents' Identities in Microdata Release},
+@techreport{samarati1998protecting,
+  title={Protecting Privacy when Disclosing Information: {$k$}-Anonymity and
+         Its Enforcement through Generalization and Suppression},
   author={Samarati, Pierangela and Sweeney, Latanya},
-  journal={IEEE Transactions on Knowledge and Data Engineering},
-  volume={10},
-  number={6},
-  pages={1010--1027},
+  institution={SRI International},
+  number={SRI-CSL-98-04},
   year={1998}
 }
 
@@ -329,8 +352,8 @@
   journal={Data \& Knowledge Engineering},
   volume={100},
   pages={78--93},
-  year={2016},
-  doi={10.1016/j.datak.2015.06.007}
+  year={2015},
+  doi={10.1016/j.datak.2015.07.009}
 }
 
 @article{guo2016entity,
@@ -439,4 +462,86 @@
   number={1},
   year={2025},
   doi={10.1007/s10618-024-01081-4}
+}
+
+% ---------------------------------------------------------------------------
+% R packages used by riskutility (generated with utils::citation())
+% ---------------------------------------------------------------------------
+@Manual{pkg_datatable,
+  title = {data.table: Extension of `data.frame`},
+  author = {Tyson Barrett and Matt Dowle and Arun Srinivasan and Jan Gorecki and Michael Chirico and Toby Hocking and Benjamin Schwendinger and Ivan Krylov},
+  year = {2026},
+  note = {R package version 1.18.2.1},
+  url = {https://CRAN.R-project.org/package=data.table},
+  doi = {10.32614/CRAN.package.data.table},
+}
+
+@Book{pkg_ggplot2,
+  author = {Hadley Wickham},
+  title = {ggplot2: Elegant Graphics for Data Analysis},
+  publisher = {Springer-Verlag New York},
+  year = {2016},
+  isbn = {978-3-319-24277-4},
+  url = {https://ggplot2.tidyverse.org},
+}
+
+@Article{pkg_ranger,
+  title = {{ranger}: A Fast Implementation of Random Forests for High Dimensional Data in {C++} and {R}},
+  author = {Marvin N. Wright and Andreas Ziegler},
+  journal = {Journal of Statistical Software},
+  year = {2017},
+  volume = {77},
+  number = {1},
+  pages = {1--17},
+  doi = {10.18637/jss.v077.i01},
+}
+
+@Manual{pkg_rpart,
+  title = {rpart: Recursive Partitioning and Regression Trees},
+  author = {Terry Therneau and Beth Atkinson},
+  year = {2025},
+  note = {R package version 4.1.24},
+  url = {https://CRAN.R-project.org/package=rpart},
+  doi = {10.32614/CRAN.package.rpart},
+}
+
+@Manual{pkg_xgboost,
+  title = {xgboost: Extreme Gradient Boosting},
+  author = {Tianqi Chen and Tong He and Michael Benesty and Vadim Khotilovich and Yuan Tang and Hyunsu Cho and Kailong Chen and Rory Mitchell and Ignacio Cano and Tianyi Zhou and Mu Li and Junyuan Xie and Min Lin and Yifeng Geng and Yutian Li and Jiaming Yuan and David Cortes},
+  year = {2026},
+  note = {R package version 3.2.0.1},
+  url = {https://CRAN.R-project.org/package=xgboost},
+  doi = {10.32614/CRAN.package.xgboost},
+}
+
+@Article{pkg_caret,
+  title = {Building Predictive Models in R Using the caret Package},
+  volume = {28},
+  url = {https://www.jstatsoft.org/index.php/jss/article/view/v028i05},
+  doi = {10.18637/jss.v028.i05},
+  number = {5},
+  journal = {Journal of Statistical Software},
+  author = {{Kuhn} and {Max}},
+  year = {2008},
+  pages = {1–26},
+}
+
+@Manual{pkg_clue,
+  title = {clue: Cluster Ensembles},
+  author = {Kurt Hornik},
+  year = {2026},
+  note = {R package version 0.3-67},
+  url = {https://CRAN.R-project.org/package=clue},
+  doi = {10.32614/CRAN.package.clue},
+}
+
+@Article{pkg_vim,
+  title = {Imputation with the {R} Package {VIM}},
+  author = {Alexander Kowarik and Matthias Templ},
+  journal = {Journal of Statistical Software},
+  year = {2016},
+  volume = {74},
+  number = {7},
+  pages = {1--16},
+  doi = {10.18637/jss.v074.i07},
 }

@@ -260,6 +260,21 @@ dcr.default <- function(X, Y,
   dcr_ratio <- mean(dcr_train, na.rm = TRUE) / mean(dcr_holdout, na.rm = TRUE)
   dcr_share <- mean(dcr_train < dcr_holdout, na.rm = TRUE)
 
+  # The 0.5 reference value for dcr_share (and hence the 0.55 rule used by
+  # privacy_pass) assumes training and holdout sets of equal size: the minimum
+  # distance over a larger candidate set is stochastically smaller, so an
+  # unequal split shifts the share towards the larger set even with no
+  # memorisation whatsoever. Warn rather than silently report a biased share.
+  if (n_train != n_holdout) {
+    warning("dcr(): training (n = ", n_train, ") and holdout (n = ", n_holdout,
+            ") sets differ in size. The expected DCR share under no ",
+            "memorisation is then approximately ",
+            sprintf("%.2f", n_train / (n_train + n_holdout)),
+            ", not 0.5, so dcr_share and privacy_pass are biased. Use an ",
+            "equal split (holdout_fraction = 0.5) or judge the result against ",
+            "null_distribution / null_share_pvalue instead.", call. = FALSE)
+  }
+
   # Statistical test: Wilcoxon signed-rank test
   # H0: synthetic records are equally close to training and holdout
   # H1: synthetic records are systematically closer to training (privacy concern)

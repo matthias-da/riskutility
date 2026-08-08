@@ -17,6 +17,7 @@ tcap(X, ...)
   target_var,
   method = c("exact", "gower"),
   gower_threshold = 0.1,
+  cont_bins = 10,
   na.rm = TRUE,
   ...
 )
@@ -36,6 +37,12 @@ tcap(X, ...)
 
 \item{gower_threshold}{numeric, maximum Gower distance for a match when
 method="gower" (default: 0.1)}
+
+\item{cont_bins}{integer, number of quantile bins used to discretise a
+continuous target variable (default: 10). Matching \code{dcap()}, a
+numeric target is binned before attribution is assessed; without
+binning an exact match on a continuous value essentially never occurs
+and every TCAP score collapses to zero.}
 
 \item{na.rm}{logical, remove records with NA in key or target (default: TRUE)}
 }

@@ -271,9 +271,16 @@ tstr.default <- function(X, Y,
       target_var = tv, extra_args = extra_args
     )
 
-    # Compute ratio
-    if (abs(trtr_perf) < 1e-10) {
-      ratio <- if (abs(tstr_perf) < 1e-10) 1 else 0
+    # Compute ratio. If the train-on-real model itself has no predictive power
+    # there is no transferable structure, so the ratio is undefined rather than
+    # zero or one -- reporting a number here would credit (or blame) the
+    # synthesiser for a relationship that does not exist in the original data.
+    if (trtr_perf < 1e-10) {
+      warning("tstr(): the train-on-real model has no predictive power for '",
+              tv, "' (", metric_name, " = ", format(trtr_perf, digits = 3),
+              "); the TSTR ratio is undefined and reported as NA.",
+              call. = FALSE)
+      ratio <- NA_real_
     } else {
       ratio <- tstr_perf / trtr_perf
     }
@@ -293,12 +300,12 @@ tstr.default <- function(X, Y,
   trtr_perfs <- vapply(per_target, function(pt) pt$trtr_performance, numeric(1))
   metrics <- unname(vapply(per_target, function(pt) pt$metric, character(1)))
 
-  avg_ratio <- mean(ratios)
+  avg_ratio <- if (all(is.na(ratios))) NA_real_ else mean(ratios, na.rm = TRUE)
   avg_tstr <- mean(tstr_perfs)
   avg_trtr <- mean(trtr_perfs)
   metric_used <- if (length(unique(metrics)) == 1) metrics[1] else paste(unique(metrics), collapse = "/")
 
-  utility_score <- max(0, min(1, avg_ratio))
+  utility_score <- if (is.na(avg_ratio)) NA_real_ else max(0, min(1, avg_ratio))
 
   result <- list(
     tstr_ratio = avg_ratio,
@@ -473,8 +480,11 @@ tstr.default <- function(X, Y,
   ss_tot <- sum((truth - mean(truth))^2)
   if (ss_tot < 1e-10) return(1)  # constant target
   r2 <- 1 - ss_res / ss_tot
-  # Allow negative R2 to propagate through ratio (clamped later in utility_score)
-  return(r2)
+  # Clamp at 0. A negative R2 means the model predicts worse than the target
+  # mean; it carries no information about how much predictive structure was
+  # transferred, and letting it through makes the TSTR/TRTR ratio a quotient of
+  # two negative numbers (which can exceed 1 and read as high utility).
+  return(max(0, r2))
 }
 
 
@@ -516,7 +526,10 @@ print.tstr <- function(x, ...) {
   }
 
   cat("Interpretation:\n")
-  if (x$utility_score > 0.95) {
+  if (is.na(x$utility_score)) {
+    cat("  UNDEFINED: the train-on-real model has no predictive power, so there\n")
+    cat("  is no predictive structure whose transfer could be assessed.\n")
+  } else if (x$utility_score > 0.95) {
     cat("  EXCELLENT: Synthetic data preserves predictive structure very well.\n")
   } else if (x$utility_score > 0.80) {
     cat("  GOOD: Synthetic data preserves most predictive relationships.\n")

@@ -666,14 +666,10 @@ Domingo-Ferrer, J., & Torra, V. (2002). Validating distance-based record
 linkage with probabilistic record linkage. Lecture Notes in Computer
 Science, 2504, 207-215. Springer.
 
-Gaffert, P., Meinfelder, F., & Bosch, V. (2015). Towards an MI-proper
-Predictive Mean Matching. Discussion Paper, University of Bamberg.
+Gaffert, P., Meinfelder, F., & Bosch, V. (2018). Towards multiple-imputation-proper
+predictive mean matching. JSM Proceedings.
 
-Pagliuca, D., & Seri, G. (1999). Some results of individual ranking
-method on the system of enterprise accounts annual survey (Esprit SDC Project,
-Deliverable MI-3/D2). Unpublished technical report.
-
-Herranz, J., Nin, J., Rodriguez, P., & Tassa, T. (2016). Revisiting
+Herranz, J., Nin, J., Rodriguez, P., & Tassa, T. (2015). Revisiting
 distance-based record linkage for privacy-preserving release of statistical
 datasets. Data & Knowledge Engineering, 100, 78-93.
 

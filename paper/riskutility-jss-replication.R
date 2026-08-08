@@ -4,8 +4,8 @@ knitr::opts_chunk$set(
   prompt = TRUE,
   comment = NA,
   collapse = FALSE,
-  fig.width = 7,
-  fig.height = 5,
+  fig.width = 4.9,
+  fig.height = 3.675,
   fig.align = "center",
   warning = FALSE,
   message = FALSE
@@ -13,6 +13,23 @@ knitr::opts_chunk$set(
 options(prompt = "R> ", continue = "+  ", width = 76, digits = 4,
         knitr.table.format = "latex")
 library("riskutility")
+
+## Helper: format a regression coefficient for inline reporting (no sci. notation)
+fmt_coef <- function(x, term, which = c("orig", "synth")) {
+  which <- match.arg(which)
+  i <- grep(term, x$coefficients$term)[1]
+  v <- x$coefficients[[paste0("estimate_", which)]][i]
+  formatC(round(v), format = "d", big.mark = ",")
+}
+
+## Helper: render a Graphviz DOT specification to PDF for inclusion as a figure
+## (requires DiagrammeR, DiagrammeRsvg, and rsvg).
+render_dot <- function(dot) {
+  f <- tempfile(fileext = ".pdf")
+  svg <- DiagrammeRsvg::export_svg(DiagrammeR::grViz(dot))
+  rsvg::rsvg_pdf(charToRaw(svg), f)
+  knitr::include_graphics(f)
+}
 
 
 ## ----intro-hook, eval=FALSE---------------------------------------------------
@@ -33,80 +50,89 @@ scope <- data.frame(
   Paradigm = c("Equivalence class", "Matching", "Prediction",
                 "Nearest neighbor", "Linkage", "Attack simulation",
                 "Various", "Composite"),
-  `Applicable to` = c(rep("Both", 8)),
   check.names = FALSE
 )
-knitr::kable(scope, caption = "Package scope at a glance.
-             Both = applicable to traditionally anonymized and synthetic data.")
+knitr::kable(scope, caption = "Package scope at a glance. All families apply to both traditionally anonymized and synthetic data.\\label{tab:scope}")
+
+
+## ----fig-decision, echo=FALSE, out.width="95%", fig.cap="Decision guide: choosing a riskutility function by assessment goal and disclosure threat.\\label{fig:decision}"----
+render_dot('
+digraph decision {
+  graph [rankdir=LR, fontsize=11];
+  node [shape=box, style="rounded,filled", fillcolor="#EAF2F8", fontname="Helvetica", fontsize=9];
+  edge [fontname="Helvetica", fontsize=8];
+  Q  [label="What do you want\nto assess?", fillcolor="#D4E6F1"];
+  R  [label="Disclosure risk"];
+  U  [label="Data utility"];
+  M  [label="Compare multiple\nsynthesizers?", fillcolor="#D4E6F1"];
+  Q -> R; Q -> U; Q -> M;
+  R -> Tid [label="identity"];
+  R -> Tat [label="attribute"];
+  R -> Tme [label="membership"];
+  R -> Tmo [label="memorization"];
+  Tid [label="recordLinkage()\nkanonymity()\nindividual_risk()", fillcolor="#FDEDEC"];
+  Tat [label="dcap(), tcap()\nweap(), disco(), rapid()", fillcolor="#FDEDEC"];
+  Tme [label="domias(), nnaa()\nsingling_out(), linkability()", fillcolor="#FDEDEC"];
+  Tmo [label="dcr(), nndr(), ims()", fillcolor="#FDEDEC"];
+  U -> Ug [label="global"];
+  U -> Ud [label="distributional"];
+  U -> Us [label="structural"];
+  U -> Up [label="predictive"];
+  Ug [label="propscore()\nspecks()", fillcolor="#E8F8F5"];
+  Ud [label="hellinger()\nenergy_distance(), mmd()", fillcolor="#E8F8F5"];
+  Us [label="copula_fidelity()\ncontingency_fidelity()", fillcolor="#E8F8F5"];
+  Up [label="tstr()\nregression_fidelity()", fillcolor="#E8F8F5"];
+  M -> RU [label="yes"];
+  RU [label="rumap()", fillcolor="#FCF3CF"];
+}
+')
 
 
 ## ----table2-threats, echo=FALSE-----------------------------------------------
 threats <- data.frame(
   Threat = c("Identity", "Attribute", "Membership", "Memorization"),
   Definition = c(
-    "Attacker links record to individual",
-    "Attacker learns sensitive value via linkage",
-    "Attacker determines if individual is in dataset",
+    "Link a record to an individual",
+    "Learn a sensitive value via linkage",
+    "Determine whether an individual is in the data",
     "Generator reproduces training records"
   ),
   `Key measures` = c(
-    "recordLinkage, kanonymity, individual_risk",
+    "recordLinkage, kanonymity",
     "dcap, tcap, weap, disco, rapid",
-    "mia_classifier, domias, nnaa, singling_out",
+    "mia_classifier, domias, nnaa",
     "ims, dcr, nndr"
   ),
   check.names = FALSE
 )
-knitr::kable(threats, caption = "Disclosure threat taxonomy.")
+knitr::kable(threats, caption = "Disclosure threat taxonomy.\\label{tab:threats}")
 
 
 ## ----table3-comparison, echo=FALSE--------------------------------------------
 comp <- data.frame(
   Measure = c("k-Anonymity", "l-Diversity", "t-Closeness",
-              "DCAP/TCAP", "RAPID", "DCR/NNDR", "Record linkage",
-              "MIA / GDPR criteria", "pMSE / SPECKS",
+              "CAP family", "RAPID", "DCR / NNDR", "Record linkage",
+              "WP29 criteria / MIA", "pMSE / SPECKS",
               "R-U map"),
-  sdcMicro = c("freq()", "ldiversity()", "--",
-               "--", "--", "dRisk()", "--",
-               "--", "--", "--"),
+  sdcMicro = c("kAnon()", "ldiversity()", "--",
+               "--", "--", "dRisk()*", "recordLinkage()",
+               "--", "dUtility()", "--"),
   synthpop = c("--", "--", "--",
                "disclosure()", "--", "--", "--",
                "--", "utility.gen()", "--"),
-  `SDMetrics (Py)` = c("--", "--", "--",
-                        "--", "--", "Yes", "--",
-                        "--", "--", "--"),
-  `Anonymeter (Py)` = c("--", "--", "--",
-                         "--", "--", "--", "--",
-                         "Yes", "--", "--"),
+  Python = c("--", "--", "--",
+             "SDMetrics", "--", "SDMetrics", "--",
+             "Anonymeter", "--", "--"),
   riskutility = c("kanonymity()", "ldiversity()", "tcloseness()",
-                   "dcap(), tcap()", "rapid()", "dcr(), nndr()",
-                   "recordLinkage()",
-                   "mia_classifier(), singling_out()", "propscore(), specks()",
-                   "rumap()"),
+                  "dcap(), tcap()", "rapid()",
+                  "dcr(), nndr()", "recordLinkage()",
+                  "singling_out()",
+                  "propscore(), specks()",
+                  "rumap()"),
   check.names = FALSE
 )
 knitr::kable(comp,
-             caption = "Risk/utility measures across R and Python packages.")
-
-
-## ----synthpop-comparison, warning=FALSE---------------------------------------
-cmp <- tryCatch({
-  if (!requireNamespace("synthpop", quietly = TRUE))
-    stop("synthpop not available")
-  keys_cmp <- c("age", "sex", "region")
-  syn_sp <- synthpop::syn(original, seed = 2024, print.flag = FALSE)
-  pair_sp <- synth_pair(original, syn_sp$syn,
-                        key_vars = keys_cmp, target_var = "education")
-  cap_ru  <- 100 * dcap(pair_sp)$cap
-  disc_sp <- synthpop::disclosure(syn_sp, original, keys = keys_cmp,
-                                  target = "education", print.flag = FALSE)
-  cap_sp  <- as.numeric(disc_sp$allCAPs[["CAPd"]])
-  data.frame(Tool = c("riskutility::dcap()", "synthpop::disclosure()"),
-             `Mean CAP (%)` = round(c(cap_ru, cap_sp), 2), check.names = FALSE)
-}, error = function(e)
-  data.frame(Note = paste("Comparison skipped:", conditionMessage(e))))
-knitr::kable(cmp, row.names = FALSE,
-             caption = "Mean CAP from riskutility and synthpop on identical data.")
+             caption = "Risk and utility measures across the main R and Python tools. *sdcMicro's dRisk() is an interval/RMD risk for paired perturbed records, not a train-versus-holdout comparison.\\label{tab:software}")
 
 
 ## ----synth-pair-demo, eval=FALSE----------------------------------------------
@@ -140,6 +166,27 @@ knitr::kable(cmp, row.names = FALSE,
 # plot(result, which = 1:2)    # Multiple plot types
 
 
+## ----fig-integration, echo=FALSE, out.width="90%", fig.cap="Ecosystem integration: converters map synthpop, simPop, and sdcMicro objects (and plain data frames) into the paired-data container consumed by all measures.\\label{fig:integration}"----
+render_dot('
+digraph integration {
+  graph [rankdir=LR, fontsize=10];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=9];
+  edge [fontname="Helvetica", fontsize=8];
+  synthpop [label="synthpop\n(synds)", fillcolor="#FDEBD0"];
+  simPop   [label="simPop\n(simPopObj)", fillcolor="#FDEBD0"];
+  sdcMicro [label="sdcMicro\n(sdcMicroObj)", fillcolor="#FDEBD0"];
+  raw      [label="data frames\n(original, synthetic)", fillcolor="#FDEBD0"];
+  sp [label="synth_pair", fillcolor="#D4E6F1"];
+  ru [label="riskutility\nrisk + utility measures\ndisclosure_report(), rumap()", fillcolor="#D5F5E3"];
+  synthpop -> sp [label="from_synthpop()"];
+  simPop   -> sp [label="from_simPop()"];
+  sdcMicro -> sp [label="from_sdcMicro()"];
+  raw      -> sp [label="synth_pair()"];
+  sp -> ru;
+}
+')
+
+
 ## ----integration, eval=FALSE--------------------------------------------------
 # # From synthpop: pass synds object + original data
 # pair <- from_synthpop(synds_object, original_data,
@@ -158,24 +205,39 @@ knitr::kable(cmp, row.names = FALSE,
 ## ----running-data-------------------------------------------------------------
 set.seed(42)
 n <- 500
-original <- data.frame(
-  age = sample(18:85, n, replace = TRUE),
-  sex = factor(sample(c("M", "F"), n, replace = TRUE)),
-  education = factor(sample(c("Primary", "Secondary", "Tertiary"), n,
-                            replace = TRUE, prob = c(0.3, 0.5, 0.2))),
-  region = factor(sample(paste0("R", 1:5), n, replace = TRUE)),
-  income = round(rlnorm(n, log(40000), 0.5))
-)
+edu_levels <- c("Primary", "Secondary", "Tertiary")
+regions <- paste0("R", 1:5)
 
-# Synthetic: independent draws (low risk expected)
-synthetic <- data.frame(
-  age = sample(18:85, n, replace = TRUE),
-  sex = factor(sample(c("M", "F"), n, replace = TRUE)),
-  education = factor(sample(c("Primary", "Secondary", "Tertiary"), n,
-                            replace = TRUE, prob = c(0.3, 0.5, 0.2))),
-  region = factor(sample(paste0("R", 1:5), n, replace = TRUE)),
-  income = round(rlnorm(n, log(40000), 0.5))
-)
+age <- sample(25:75, n, replace = TRUE)
+sex <- factor(sample(c("M", "F"), n, replace = TRUE))
+
+# Education depends on age: younger cohorts are better educated.
+education <- factor(ifelse(runif(n) < 0.5 * plogis(-0.05 * (age - 45)),
+                           "Tertiary",
+                           sample(edu_levels[1:2], n, replace = TRUE,
+                                  prob = c(0.4, 0.6))),
+                    levels = edu_levels)
+
+# Region depends on education: R1 and R2 are urban and attract graduates.
+region <- factor(ifelse(education == "Tertiary",
+                        sample(regions, n, TRUE,
+                               prob = c(.35, .30, .15, .10, .10)),
+                        sample(regions, n, TRUE,
+                               prob = c(.10, .15, .25, .25, .25))),
+                 levels = regions)
+
+# Income depends on age, education and sex.
+edu_effect <- c(Primary = 0, Secondary = 0.35, Tertiary = 0.75)
+income <- round(exp(log(20000) + 0.020 * age +
+                      edu_effect[as.character(education)] -
+                      0.15 * (sex == "F") + rnorm(n, 0, 0.18)))
+
+original <- data.frame(age, sex, education, region, income)
+
+# Synthetic: every variable is resampled independently from its own marginal.
+# Marginal distributions are preserved; the joint structure is destroyed.
+synthetic <- as.data.frame(lapply(original, function(v)
+  sample(v, n, replace = TRUE)))
 
 key_vars <- c("age", "sex", "education", "region")
 target_var <- "income"
@@ -211,7 +273,7 @@ privacy <- data.frame(
   Function = c("kanonymity()", "ldiversity()", "tcloseness()",
                "suda()", "individual_risk()", "population_uniqueness()",
                "attacker_risk()", "epsilon_identifiability()"),
-  Input = rep("Single dataset", 8),
+  Input = c(rep("Single dataset", 7), "Both datasets"),
   `Key output` = c("Min EC size", "Min distinct values per EC",
                     "Max EMD across ECs", "SUDA scores",
                     "Per-record frequency risk", "Estimated pop. uniques",
@@ -221,7 +283,7 @@ privacy <- data.frame(
   check.names = FALSE
 )
 knitr::kable(privacy,
-             caption = "Privacy models overview.")
+             caption = "Privacy models overview.\\label{tab:privacy}")
 
 
 ## ----cap-demo, fig.cap="Per-record TCAP attribution-risk scores for the running example.\\label{fig:tcap}"----
@@ -240,18 +302,55 @@ cap <- data.frame(
                  "Individual attribution risk",
                  "Within-EC homogeneity",
                  "Correct + confident attribution"),
-  `Low risk` = c("ratio < 1.5", "< 0.1 per record",
-                 "< 0.1", "< 5%"),
+  `Low risk` = c("ratio <= 1.5", "ratio <= 1.5",
+                 "<= 5% disclosive", "ratio <= 1.5"),
   check.names = FALSE
 )
 knitr::kable(cap,
-             caption = "CAP family comparison with interpretation thresholds.")
+             caption = "CAP family comparison with interpretation thresholds.\\label{tab:cap}")
 
 
-## ----rapid-demo, warning=FALSE, fig.cap="RAPID risk histogram (left) and threshold-sensitivity diagnostic (right).\\label{fig:rapid}"----
+## ----synthpop-comparison, warning=FALSE, eval=requireNamespace("synthpop", quietly = TRUE)----
+keys_cmp <- c("sex", "region")
+syn_sp   <- synthpop::syn(original, seed = 2024, print.flag = FALSE)
+pair_sp  <- synth_pair(original, syn_sp$syn,
+                       key_vars = keys_cmp, target_var = "education")
+disc_sp  <- synthpop::disclosure(syn_sp, original, keys = keys_cmp,
+                                 target = "education", print.flag = FALSE)
+
+# from_synthpop() builds the paired container directly from a synds object,
+# which is Contribution 5 of Section 7.1 in one line:
+pair_conv <- from_synthpop(syn_sp, original,
+                           key_vars = keys_cmp, target_var = "education")
+stopifnot(identical(dcap(pair_conv)$cap, dcap(pair_sp)$cap))
+
+cmp <- data.frame(
+  Quantity = c("riskutility: dcap()$cap", "synthpop: DCAP", "synthpop: CAPd"),
+  Value = round(c(100 * dcap(pair_sp)$cap,
+                  as.numeric(disc_sp$allCAPs[["DCAP"]]),
+                  as.numeric(disc_sp$allCAPs[["CAPd"]])), 4)
+)
+
+
+## ----synthpop-comparison-tab, echo=FALSE--------------------------------------
+knitr::kable(cmp, row.names = FALSE, col.names = c("Quantity", "Value (%)"),
+             caption = "Mean CAP from riskutility and synthpop on identical data. The first two rows are the same estimand and agree to all printed digits.\\label{tab:synthpop}")
+
+
+## ----rapid-demo, warning=FALSE, fig.cap="RAPID threshold-sensitivity diagnostic for the running example.\\label{fig:rapid}"----
 rapid_res <- rapid(pair, model_type = "lm")
 summary(rapid_res)
-plot(rapid_res, which = c(1, 3))
+
+# The raw score is not interpretable on its own: a fixed error band captures a
+# non-zero share of records by chance. rapid_test() supplies the permutation
+# null against which the score must be read.
+rapid_null <- rapid_test(original, synthetic,
+                         quasi_identifiers = key_vars,
+                         sensitive_attribute = target_var,
+                         model_type = "lm", n_permutations = 199, seed = 42)
+print(rapid_null)
+
+plot(rapid_res, which = 3)
 
 
 ## ----rapid-models, echo=FALSE-------------------------------------------------
@@ -259,7 +358,7 @@ models <- data.frame(
   Model = c("lm", "rf", "cart", "gbm", "logit"),
   Package = c("stats", "ranger", "rpart", "xgboost", "stats"),
   Numeric = c("Yes", "Yes", "Yes", "Yes", "No"),
-  Categorical = c("No", "Yes", "Yes", "Yes", "Yes"),
+  Categorical = c("No", "Yes", "Yes", "Yes", "Binary only"),
   Interactions = c("Manual", "Automatic", "Automatic", "Automatic", "Manual"),
   check.names = FALSE
 )
@@ -267,7 +366,7 @@ knitr::kable(models, caption = "RAPID model backends.")
 
 
 ## ----distance-demo, warning=FALSE, fig.cap="Distance to closest record (DCR): synthetic-to-training versus synthetic-to-holdout distances.\\label{fig:dcr}"----
-dcr_res <- dcr(pair, holdout_fraction = 0.2)
+dcr_res <- dcr(pair, holdout_fraction = 0.5)
 summary(dcr_res)
 plot(dcr_res, which = 1)
 
@@ -280,17 +379,20 @@ dist <- data.frame(
   Detects = c("Memorization", "Memorization", "Exact copies",
               "Memorization (non-linear)", "Close records", "Close records",
               "Identifiability", "Membership bounds"),
-  `Low risk` = c("share < 0.55", "share < 0.55", "< 0.01",
+  `Low risk` = c("share < 0.55", "ratio >= 0.8", "< 0.01",
                  "ratio near 1", "< 0.05", "< 0.05",
-                 "< 0.01", "> 0.5"),
+                 "< 0.01", "delta_max well below 1"),
   check.names = FALSE
 )
 knitr::kable(dist,
-             caption = "Distance-based and proximity risk measures.")
+             caption = "Distance-based and proximity risk measures.\\label{tab:distance}")
 
 
 ## ----recordlinkage-demo-------------------------------------------------------
-rl_res <- recordLinkage(pair, method = "deterministic")
+# Namespace-qualified: sdcMicro (>= 5.8.2) exports an unrelated
+# recordLinkage() with a different signature, which masks this one whenever
+# sdcMicro is attached afterwards.
+rl_res <- riskutility::recordLinkage(pair, method = "deterministic")
 print(rl_res)
 
 
@@ -302,12 +404,10 @@ rl <- data.frame(
                "RF proximity", "Rank-based", "Mahalanobis", "Autoencoder"),
   `Mixed types` = c("Yes", "Yes", "Categorical", "Yes",
                      "Yes", "Yes", "Numeric", "Yes"),
-  Matching = c("All 3", "All 3", "All 3", "All 3",
-               "All 3", "Independent", "All 3", "All 3"),
   check.names = FALSE
 )
 knitr::kable(rl,
-             caption = "Record linkage methods. All 3 = independent, bijective, OT.")
+             caption = "Record linkage methods. All eight support all three matching modes (independent, bijective, optimal transport).\\label{tab:rl}")
 
 
 ## ----nnaa-demo----------------------------------------------------------------
@@ -342,7 +442,7 @@ mia <- data.frame(
   check.names = FALSE
 )
 knitr::kable(mia,
-             caption = "Membership inference and GDPR measures.")
+             caption = "Membership inference and GDPR measures.\\label{tab:membership}")
 
 
 ## ----rosetta------------------------------------------------------------------
@@ -368,10 +468,12 @@ comparison <- data.frame(
     ims(pair_risky)$ims
   )
 )
-comparison$Safe <- round(comparison$Safe, 4)
-comparison$Risky <- round(comparison$Risky, 4)
+comparison$Range <- c("(-1, 1), differential", "[0, 1]", "[0, 1]")
+comparison$Safe <- sprintf("%.3f", comparison$Safe)
+comparison$Risky <- sprintf("%.3f", comparison$Risky)
+comparison <- comparison[, c("Metric", "Range", "Safe", "Risky")]
 knitr::kable(comparison,
-             caption = "Cross-family comparison: safe vs. risky synthetic data.")
+             caption = "Cross-family comparison: safe versus risky synthetic data.")
 
 
 ## ----utility-quick, warning=FALSE---------------------------------------------
@@ -421,7 +523,7 @@ print(tstr_res)
 
 
 ## ----regression-demo, fig.cap="Regression-coefficient fidelity: original versus synthetic estimates with confidence intervals.\\label{fig:reg}"----
-reg_res <- regression_fidelity(original, synthetic,
+reg_res <- regression_fidelity(pair,
                                formula = income ~ age + sex + education)
 summary(reg_res)
 plot(reg_res, which = 1)
@@ -470,7 +572,28 @@ util <- data.frame(
   check.names = FALSE
 )
 knitr::kable(util,
-             caption = "Utility measures by use case.")
+             caption = "Utility measures by use case.\\label{tab:utility}")
+
+
+## ----fig-workflow, echo=FALSE, out.width="95%", fig.cap="The iterative risk-utility evaluation workflow.\\label{fig:workflow}"----
+render_dot('
+digraph workflow {
+  graph [rankdir=LR, fontsize=10];
+  node [shape=box, style="rounded,filled", fillcolor="#EAF2F8", fontname="Helvetica", fontsize=9];
+  edge [fontname="Helvetica", fontsize=8];
+  gen  [label="Generate /\nanonymize data"];
+  risk [label="Assess risk\n(disclosure_report())"];
+  util [label="Assess utility"];
+  dec  [label="Acceptable\ntrade-off?", shape=diamond, fillcolor="#D4E6F1"];
+  rel  [label="Release", fillcolor="#D5F5E3"];
+  ref  [label="Refine synthesis /\nprotection parameters", fillcolor="#FCF3CF"];
+  cmp  [label="Compare candidates\n(rumap())", fillcolor="#FCF3CF"];
+  gen -> risk -> util -> dec;
+  dec -> rel [label="yes"];
+  dec -> ref [label="no"];
+  ref -> cmp -> gen;
+}
+')
 
 
 ## ----case-data----------------------------------------------------------------
@@ -536,13 +659,20 @@ rep_B <- disclosure_report(pair_B, compute = c("attribution", "privacy"),
 rep_C <- disclosure_report(pair_C, compute = c("attribution", "privacy"),
                            seed = 42, verbose = FALSE)
 
+# The report's own print method is the practitioner-facing artefact:
+print(rep_A)
+
 verdicts <- data.frame(
   Method = c("A: Independent", "B: Bootstrap+noise", "C: Near-copy"),
   Overall = c(rep_A$overall_risk, rep_B$overall_risk, rep_C$overall_risk),
   Pass = c(rep_A$n_pass, rep_B$n_pass, rep_C$n_pass),
   Warn = c(rep_A$n_warn, rep_B$n_warn, rep_C$n_warn)
 )
-knitr::kable(verdicts, caption = "Quick risk screening across three methods.")
+
+
+## ----case-report-tab, echo=FALSE----------------------------------------------
+knitr::kable(verdicts,
+             caption = "Quick risk screening across the three methods.\\label{tab:verdicts}")
 
 
 ## ----case-rumap, warning=FALSE------------------------------------------------
@@ -558,12 +688,47 @@ ru <- rumap(orig,
 print(ru)
 
 
-## ----case-rumap-scatter, fig.width=8, fig.height=6, fig.cap="Risk-Utility map of the three synthesizers; the Pareto-optimal front is highlighted.\\label{fig:rumap-scatter}"----
+## ----case-rumap-scatter, fig.height=4.2, fig.cap="Risk-Utility map of the three synthesizers; the Pareto-optimal front is highlighted.\\label{fig:rumap-scatter}"----
 plot(ru, which = 1)  # R-U scatterplot with Pareto front
 
 
-## ----case-rumap-heatmap, fig.width=8, fig.height=5, fig.cap="Heatmap of normalized risk and utility measures across the three synthesizers.\\label{fig:rumap-heatmap}"----
+## ----case-rumap-heatmap, fig.height=3.6, fig.cap="Heatmap of normalized risk and utility measures across the three synthesizers.\\label{fig:rumap-heatmap}"----
 plot(ru, which = 2)  # Heatmap of individual measures
+
+
+## ----case-stability, warning=FALSE--------------------------------------------
+make_case <- function(seed_data, seed_syn, N = 1000) {
+  set.seed(seed_data)
+  d <- data.frame(
+    age_group = factor(sample(age_groups, N, replace = TRUE)),
+    sex       = factor(sample(c("M", "F"), N, replace = TRUE)),
+    education = factor(sample(edu_levels, N, replace = TRUE,
+                              prob = c(0.25, 0.50, 0.25))),
+    region    = factor(sample(paste0("R", 1:4), N, replace = TRUE)))
+  d$income <- round(exp(10 + age_effect[as.character(d$age_group)] +
+                          edu_effect[as.character(d$education)] +
+                          rnorm(N, 0, 0.4)))
+  set.seed(seed_syn)
+  a <- as.data.frame(lapply(d, function(v) sample(v, N, replace = TRUE)))
+  b <- d[sample(N, N, replace = TRUE), ]; rownames(b) <- NULL
+  b$income <- round(b$income * exp(rnorm(N, 0, 0.15)))
+  cc <- d; cc$income <- round(cc$income * exp(rnorm(N, 0, 0.03)))
+  list(orig = d, A = a, B = b, C = cc)
+}
+
+seed_pairs <- list(c(123, 456), c(1, 2), c(11, 22), c(7, 8), c(99, 100),
+                   c(2024, 2025), c(31, 41), c(5, 15), c(77, 88), c(300, 400))
+front <- t(vapply(seed_pairs, function(sp) {
+  cs <- make_case(sp[1], sp[2])
+  set.seed(42)
+  r <- rumap(cs$orig, list(A = cs$A, B = cs$B, C = cs$C),
+             risk_measures = c("dcap", "tcap", "ims"),
+             utility_measures = c("pmse", "wasserstein"),
+             key_vars = qi, target_var = sens, seed = 42)
+  r$pareto
+}, logical(3)))
+colnames(front) <- c("A", "B", "C")
+round(100 * colMeans(front))
 
 
 ## ----scalability-benchmark, echo=FALSE----------------------------------------
@@ -598,9 +763,19 @@ colnames(timing)[-1] <- paste0("n = ", format(sizes, big.mark = ","), " (s)")
 knitr::kable(timing, row.names = FALSE,
   caption = paste0("Median elapsed time over three runs, measured on ",
                    R.version$platform, " (R ", getRversion(),
-                   "). The attribution, frequency, and exact-match metrics scale near-linearly."))
+                   "). The attribution, frequency, and exact-match metrics scale near-linearly.\\label{tab:benchmark}"))
 
 
-## ----session-info-------------------------------------------------------------
-sessionInfo()
+## ----session-info, echo=FALSE, results="asis"---------------------------------
+si <- sessionInfo()
+cat(sprintf(paste0("All results were obtained using %s on %s, with the ",
+                   "\\pkg{riskutility} package version %s, ",
+                   "\\pkg{data.table} %s, \\pkg{ggplot2} %s, ",
+                   "\\pkg{ranger} %s and \\pkg{synthpop} %s. ",
+                   "\\proglang{R} and all packages used are available from ",
+                   "CRAN at https://CRAN.R-project.org/.\n"),
+            si$R.version$version.string, si$running,
+            packageVersion("riskutility"), packageVersion("data.table"),
+            packageVersion("ggplot2"), packageVersion("ranger"),
+            packageVersion("synthpop")))
 

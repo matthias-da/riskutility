@@ -72,3 +72,4 @@ paper/*.blg
 # Local working notes / scratch (not part of the package)
 TODO.md
 recordLinkage_discussion.*
+paper/riskutility-jss_files/

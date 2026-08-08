@@ -440,7 +440,7 @@ propscore.default <- function(X, Y,
 
     # Kernel Density Estimation, difference in distributions
     kde_x <- density(p$prediction[1:mi_x])
-    kde_y <- density(p$prediction[(mi_x+1):length(ps)])
+    kde_y <- density(p$prediction[(mi_x+1):nrow(p)])
     # Define a sequence of points where we want to compute the density ratio
     points <- seq(min(kde_x$x, kde_y$x), max(kde_x$x, kde_y$x), length.out = 1000)
     # Interpolate densities at the sequence of points
