@@ -1,6 +1,7 @@
 Package: riskutility
 Title: Disclosure Risk and Data Utility Metrics for Synthetic and Anonymized Data
-Version: 0.1.0
+Version: 0.2.0
+Date: 2026-08-08
 Authors@R: c(
     person("Matthias", "Templ", email = "matthias.templ@gmail.com",
            role = c("aut", "cre"),

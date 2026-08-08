@@ -1,3 +1,38 @@
+# riskutility 0.2.0
+
+Bug fixes and one API addition, all surfaced while preparing the JSS software
+paper. Three of these change reported values, so results produced with 0.1.0
+are not directly comparable.
+
+## New
+
+* `tcap()` gains `cont_bins` (default 10), matching `dcap()`. A continuous
+  target is now discretised into quantile bins before matching. Previously an
+  exact match on a continuous value essentially never occurred and every TCAP
+  score collapsed to zero.
+
+## Bug fixes (change reported values)
+
+* `propscore()`: the synthetic-side kernel density was indexed with
+  `length(ps)` -- a scalar -- rather than `nrow(p)`, so the index ran backwards
+  and every density diagnostic reported by `summary()` (`kl`, `density_ratio`,
+  `mean_ratio`, `sd_ratio` and their Bayes-space counterparts) was computed on
+  the wrong records.
+* `tstr()`: R-squared is now clamped at 0, and the TSTR/TRTR ratio is returned
+  as `NA` with a warning when the train-on-real model has no predictive power.
+  Previously two negative R-squared values could divide to a large positive
+  ratio and be reported as excellent utility.
+* `tail_fidelity()`: the Jensen-Shannon divergence is now computed in density
+  space. It previously used Bayes-space (clr) ordinates, which are
+  sign-indefinite, and could return values far outside `[0, log 2]`.
+
+## Other
+
+* `dcr()` now warns when the training and holdout sets differ in size. The
+  `dcr_share` reference value of 0.5 and the 0.55 rule used by `privacy_pass`
+  assume equal sizes; with an unequal split the expected share under no
+  memorisation is `n_train / (n_train + n_holdout)`.
+
 # riskutility 0.1.0
 
 Initial release: a comprehensive framework for measuring disclosure risk and
