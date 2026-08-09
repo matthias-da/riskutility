@@ -53,7 +53,7 @@
 #' @author Matthias Templ
 #' @export
 #' @importFrom graphics plot points lines polygon segments text legend axis mtext abline arrows
-#' @importFrom graphics par layout image
+#' @importFrom graphics par layout image strwidth
 #' @importFrom grDevices colorRampPalette adjustcolor
 #' @importFrom stats prcomp
 plot.rumap <- function(x, y = NULL, which = 1, ...,
@@ -190,6 +190,13 @@ plot_rumap_heatmap <- function(x, show_pareto, ...) {
   # Transpose for image (rows become columns)
   mat_t <- t(mat[nrow(mat):1, , drop = FALSE])
 
+  # Reserve a left margin wide enough for the longest SDG label, otherwise the
+  # row labels are silently clipped by the plotting region.
+  lab_width <- max(strwidth(rownames(mat), units = "inches", cex = 0.7)) /
+    par("cin")[1]
+  op <- par(mar = c(5.1, max(4.1, lab_width + 1.5), 4.1, 2.1))
+  on.exit(par(op), add = TRUE)
+
   # Plot
   image(1:ncol(mat), 1:nrow(mat), mat_t,
         col = col_palette,
@@ -204,8 +211,10 @@ plot_rumap_heatmap <- function(x, show_pareto, ...) {
   # Add values as text
   for (i in 1:nrow(mat)) {
     for (j in 1:ncol(mat)) {
+      # Switch to white type only once the fill is dark enough to carry it;
+      # the white-to-steelblue ramp is still pale at 0.5.
       text(j, nrow(mat) - i + 1, sprintf("%.2f", mat[i, j]),
-           cex = 0.6, col = ifelse(mat[i, j] > 0.5, "white", "black"))
+           cex = 0.6, col = ifelse(mat[i, j] > 0.7, "white", "black"))
     }
   }
 

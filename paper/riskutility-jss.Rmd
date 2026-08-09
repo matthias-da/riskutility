@@ -113,7 +113,7 @@ multiple synthesis approaches; the most comprehensive evaluation suites (the
 
 The **\pkg{riskutility}** package for R [@R2025] fills this gap. It implements
 over 30 risk measures spanning six paradigms --- frequency-based privacy
-models, attribution-based (CAP), ML-based (\pkg{RAPID}), distance-based, record
+models, attribution-based (CAP), ML-based (RAPID), distance-based, record
 linkage, and membership inference --- alongside more than a dozen utility
 functions covering global, distributional, structural, and predictive assessment. All functions
 share a consistent S3 API with `print()`, `summary()`, and `plot()` methods
@@ -132,7 +132,7 @@ regulatory frameworks. The European Article 29 Working Party
 [@wp29anonymisation] identifies three criteria for anonymization: singling out,
 linkability, and inference. **\pkg{riskutility}** measures the first two directly
 (`singling_out()`, `linkability()`); the inference criterion is approached
-through the attribution-based CAP and \pkg{RAPID} measures rather than a dedicated
+through the attribution-based CAP and RAPID measures rather than a dedicated
 inference-attack function.
 Importantly, synthetic data does not automatically satisfy these criteria
 [@stadler2022synthetic], making empirical assessment essential.
@@ -164,7 +164,7 @@ print(report)
 ```
 
 This single call computes attribution-based risk (DCAP, TCAP, WEAP, DiSCO,
-\pkg{RAPID}), distance-based risk (DCR, NNDR, IMS, dRisk, hitting rate), privacy
+RAPID), distance-based risk (DCR, NNDR, IMS, dRisk, hitting rate), privacy
 models ($k$-anonymity, $l$-diversity, $t$-closeness), and membership
 inference measures (singling out, linkability, NNAA) --- producing a
 pass/fail summary across all families. For comparing multiple synthesis
@@ -248,7 +248,7 @@ literature, @shokri2017membership) and *memorization* (relevant to generative
 models). We organize the measures around the four operational threats below.
 Inferential disclosure---learning a statistical property of a group rather than
 an exact record value---is, at the record level, the quantity the
-attribute-disclosure measures (CAP, \pkg{RAPID}) estimate; we therefore fold it into
+attribute-disclosure measures (CAP, RAPID) estimate; we therefore fold it into
 attribute disclosure rather than treating it as a separate operational category:
 
 - **Identity disclosure**: An attacker links a released record to a specific
@@ -308,9 +308,9 @@ sensitive attribute values by matching quasi-identifiers between original and
 released data. DCAP provides an aggregate measure; TCAP gives per-record
 risk scores. See Section \ref{sec-cap}.
 
-**ML-based (\pkg{RAPID}).** Risk of Attribute Prediction-Induced Disclosure
+**ML-based (RAPID).** Risk of Attribute Prediction-Induced Disclosure
 [@templ2026rapid] trains predictive models on the released data and evaluates
-them on the original. Accurate predictions indicate information leakage. \pkg{RAPID}
+them on the original. Accurate predictions indicate information leakage. RAPID
 captures complex non-linear relationships and variable interactions that the
 CAP matching approach may miss. See Section \ref{sec-rapid}.
 
@@ -366,7 +366,7 @@ attribute measures (DiSCO, DiSDiO) alongside CAP and TCAP
 cover distance-based memorization measures, ML-based attribute inference, or
 membership inference. \pkg{syntheval} (Urban Institute, not on CRAN) targets
 utility rather than risk. The authors' own \pkg{RAPID} package
-[@templ2026rapid] implements the \pkg{RAPID} measure alone; \pkg{riskutility} supersedes
+[@templ2026rapid] implements the RAPID measure alone; \pkg{riskutility} supersedes
 it and adds the inferential tools of Section \ref{sec-rapid}. What no \proglang{R} package offers is a single interface in
 which measures from all six risk paradigms and the utility families can be
 computed on one pair of datasets and compared.
@@ -824,15 +824,15 @@ different quantities. The frequency-based measures `kanonymity()` and
 
 ## ML-Based Risk: RAPID {#sec-rapid}
 
-Risk of Attribute Prediction-Induced Disclosure (\pkg{RAPID}) [@templ2026rapid] takes a
+Risk of Attribute Prediction-Induced Disclosure (RAPID) [@templ2026rapid] takes a
 fundamentally different approach to attribute disclosure. Instead of matching
-quasi-identifiers, \pkg{RAPID} trains a predictive model $\hat{f}$ on the released
+quasi-identifiers, RAPID trains a predictive model $\hat{f}$ on the released
 data $(Y_{\mathcal{K}}, Y_s)$ and evaluates its predictions on the original
 data: $\hat{s}_i = \hat{f}(X_{\mathcal{K},i})$. For numeric targets, a
 record is *at risk* when the prediction error falls below a threshold
 $\epsilon$: $e(s_i, \hat{s}_i) < \epsilon$, where $e(\cdot, \cdot)$ is
 a configurable error metric (symmetric percentage error by default). The
-\pkg{RAPID} score is the fraction of at-risk records:
+RAPID score is the fraction of at-risk records:
 $\text{RAPID} = n^{-1} \sum_i \mathbf{1}(e(s_i, \hat{s}_i) < \epsilon)$.
 For categorical targets, a different evaluation applies: a record is at risk
 when a gain or ratio score exceeds a threshold.
@@ -864,7 +864,7 @@ report the two together, and why the absolute bands below should be treated as
 rough conventions rather than decision rules. Figure \ref{fig:rapid} shows how
 the at-risk fraction changes across threshold values.
 
-\pkg{RAPID} complements the CAP family in two ways. First, it captures non-linear
+RAPID complements the CAP family in two ways. First, it captures non-linear
 relationships and variable interactions. Second, it provides inferential tools:
 `rapid_test()` computes a permutation-based $p$-value, `confint()` provides
 bootstrap confidence intervals, and `rapid_threshold_select()` optimizes the
@@ -882,7 +882,7 @@ models <- data.frame(
 knitr::kable(models, caption = "RAPID model backends.")
 ```
 
-| \pkg{RAPID} Score | Risk Level | Interpretation |
+| RAPID Score | Risk Level | Interpretation |
 |-------------|------------|----------------|
 | < 0.05 | Low | ML model cannot predict target much better than baseline |
 | 0.05--0.15 | Moderate | Some predictive signal from synthetic data |
@@ -986,6 +986,12 @@ independent (many-to-one), bijective (one-to-one via Hungarian algorithm,
 # sdcMicro is attached afterwards.
 rl_res <- riskutility::recordLinkage(pair, method = "deterministic")
 print(rl_res)
+
+# Bijective matching: one global one-to-one assignment via the Hungarian
+# algorithm, modelling the GDBRL attacker of Herranz et al. (2015).
+rl_bij <- riskutility::recordLinkage(pair, method = "deterministic",
+                                     matching = "bijective")
+print(rl_bij)
 ```
 
 The mean risk is the average probability mass the attacker places on the *true*
@@ -1041,9 +1047,19 @@ print(nnaa_res)
 | 0.01--0.05 | Minor leakage, likely acceptable |
 | > 0.10 | Significant memorization |
 
+**DOMIAS** [@hu2023domias] detects membership by comparing the local density of
+the synthetic data around each record against a reference density estimated
+from the holdout. Records the generator has overfitted sit where the synthetic
+density is disproportionately high relative to that reference:
+
+```{r domias-demo}
+dom_res <- domias(train_data, synthetic, holdout = holdout_data, seed = 42)
+print(dom_res)
+```
+
 **Singling out** and **linkability** operationalize two of the Article 29
 Working Party's three anonymization criteria (the third, inference, is
-addressed by the attribution-based CAP and \pkg{RAPID} measures):
+addressed by the attribution-based CAP and RAPID measures):
 
 ```{r membership-demo}
 so_res <- singling_out(original, synthetic,
@@ -1669,7 +1685,7 @@ statistical disclosure control:
 
 1. **Comprehensive coverage.** To our knowledge, it is the first \proglang{R} package to
    unify all six risk-assessment paradigms --- frequency-based privacy models,
-   attribution (CAP), ML-based (\pkg{RAPID}), distance-based, record linkage, and
+   attribution (CAP), ML-based (RAPID), distance-based, record linkage, and
    membership inference --- under a single API; the most comprehensive
    comparable evaluation suites (the \proglang{Python} libraries \pkg{synthcity} and \pkg{SynthEval})
    sit outside R.
@@ -1679,7 +1695,7 @@ statistical disclosure control:
    operationalizing two of the Article 29 Working Party anonymization criteria
    [@wp29anonymisation; @giomi2023anonymeter]; of $t$-closeness; of DOMIAS
    density-ratio membership inference [@hu2023domias]; and of eight-method
-   record linkage with bijective and optimal-transport matching. \pkg{RAPID} was
+   record linkage with bijective and optimal-transport matching. RAPID was
    first released in the authors' standalone \pkg{RAPID} package
    [@templ2026rapid]; \pkg{riskutility} supersedes it, adding the permutation test,
    confidence intervals and data-driven threshold selection used in
@@ -1708,7 +1724,7 @@ The privacy-utility evaluation differs depending on the synthesis approach
 - **Fully synthetic data**: All records are synthetic; all risk metrics are
   directly applicable.
 - **Partially synthetic data**: Only sensitive values are replaced.
-  Attribution metrics (DCAP, \pkg{RAPID}) are particularly relevant because original
+  Attribution metrics (DCAP, RAPID) are particularly relevant because original
   quasi-identifiers provide a direct matching key. Distance-based metrics
   should focus on the synthesized variables.
 - **Multiple synthetic datasets**: When $m > 1$ datasets are generated, evaluate

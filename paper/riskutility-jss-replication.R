@@ -395,6 +395,12 @@ knitr::kable(dist,
 rl_res <- riskutility::recordLinkage(pair, method = "deterministic")
 print(rl_res)
 
+# Bijective matching: one global one-to-one assignment via the Hungarian
+# algorithm, modelling the GDBRL attacker of Herranz et al. (2015).
+rl_bij <- riskutility::recordLinkage(pair, method = "deterministic",
+                                     matching = "bijective")
+print(rl_bij)
+
 
 ## ----recordlinkage-table, echo=FALSE------------------------------------------
 rl <- data.frame(
@@ -414,6 +420,11 @@ knitr::kable(rl,
 nnaa_res <- nnaa(train_data, synthetic, holdout = holdout_data,
                  method = "gower", seed = 42)
 print(nnaa_res)
+
+
+## ----domias-demo--------------------------------------------------------------
+dom_res <- domias(train_data, synthetic, holdout = holdout_data, seed = 42)
+print(dom_res)
 
 
 ## ----membership-demo----------------------------------------------------------
