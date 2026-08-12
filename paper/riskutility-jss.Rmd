@@ -10,13 +10,6 @@ author:
       | Northwestern Switzerland (FHNW)
       | Riggenbachstrasse 16, 4600 Olten, Switzerland
     email: \email{matthias.templ@fhnw.ch}
-  - name: Oscar Thees
-    orcid: 0009-0001-9378-4988
-    affiliation: University of Applied Sciences and Arts Northwestern Switzerland
-    address: |
-      | School of Business
-      | University of Applied Sciences and Arts
-      | Northwestern Switzerland (FHNW)
 title:
   formatted: "\\pkg{riskutility}: Disclosure Risk and Data Utility Assessment for Anonymized and Synthetic Data in \\proglang{R}"
   plain:     "riskutility: Disclosure Risk and Data Utility Assessment for Anonymized and Synthetic Data in R"
@@ -365,7 +358,7 @@ attribute measures (DiSCO, DiSDiO) alongside CAP and TCAP
 [@raab2024practical], together with propensity-score utility. It does not
 cover distance-based memorization measures, ML-based attribute inference, or
 membership inference. \pkg{syntheval} (Urban Institute, not on CRAN) targets
-utility rather than risk. The authors' own \pkg{RAPID} package
+utility rather than risk. The standalone \pkg{RAPID} package
 [@templ2026rapid] implements the RAPID measure alone; \pkg{riskutility} supersedes
 it and adds the inferential tools of Section \ref{sec-rapid}. What no \proglang{R} package offers is a single interface in
 which measures from all six risk paradigms and the utility families can be
@@ -1696,7 +1689,7 @@ statistical disclosure control:
    [@wp29anonymisation; @giomi2023anonymeter]; of $t$-closeness; of DOMIAS
    density-ratio membership inference [@hu2023domias]; and of eight-method
    record linkage with bijective and optimal-transport matching. RAPID was
-   first released in the authors' standalone \pkg{RAPID} package
+   first released in the standalone \pkg{RAPID} package
    [@templ2026rapid]; \pkg{riskutility} supersedes it, adding the permutation test,
    confidence intervals and data-driven threshold selection used in
    Section \ref{sec-rapid}.
@@ -1850,5 +1843,11 @@ cat(sprintf(paste0("All results were obtained using %s on %s, with the ",
             packageVersion("synthpop")))
 ```
 
+
+# Acknowledgments {-}
+
+The author thanks Oscar Thees for contributions to parts of the RAPID
+implementation, and Roman Müller for contributions to parts of the record
+linkage functionality.
 
 # References {-}
