@@ -2,17 +2,26 @@
 #
 # synthpop disclosure() output structure (from allCAPs):
 # - baseCAPd: baseline CAP (per-key equivalence class weighted)
-# - CAPd: mean CAP for matched original records
+# - CAPd: mean CAP computed within the original data alone
 # - CAPs: mean CAP for synthetic records
-# - DCAP: synthpop-specific differential metric
-# - TCAP: % of records at "certain" disclosure risk (key uniquely determines target)
+# - DCAP: mean correct-attribution probability of original records under the
+#   synthetic conditional distribution, with ALL original records in the
+#   denominator (unmatched records counting as zero). This is the dcap()
+#   estimand; tcap_mean is the same sum over matched records only.
+# - TCAP: redefined in synthpop 1.9-3. Up to 1.9-2 the denominator was all
+#   original records whose key occurs in the synthetic data (= riskutility's
+#   tcap_matched); from 1.9-3 synthpop follows Little et al. (2025) and
+#   divides by the records matched to a disclosive synthetic class only
+#   (= riskutility's tcap_conditional). See test-tcap-kind.R for the
+#   hand-traced definitions of all three riskutility variants.
 #
-# riskutility provides:
-# - tcap_mean = synthpop CAPd (mean CAP)
-# - tcap_max = maximum CAP (worst-case individual)
-# - tcap_certain = synthpop TCAP (% at certain disclosure)
+# All tests that call synthpop are skip_on_cran(): they validate riskutility
+# against another package's output, which can legitimately change with a
+# synthpop release (as TCAP did in 1.9-3) and must not turn into CRAN check
+# failures. They still run locally via devtools::test().
 
 test_that("riskutility mean CAP matches synthpop CAPd with controlled data", {
+  skip_on_cran()
   skip_if_not_installed("synthpop")
 
   library(synthpop)
@@ -56,9 +65,15 @@ test_that("riskutility mean CAP matches synthpop CAPd with controlled data", {
   expect_equal(tcap_ru$tcap_mean * 100, 75, tolerance = 0.01)
   expect_equal(disc_sp$allCAPs$CAPd, 75, tolerance = 0.01)
   expect_equal(tcap_ru$tcap_mean * 100, disc_sp$allCAPs$CAPd, tolerance = 0.01)
+
+  # DCAP is the estimand-exact comparison (all records matched here, so
+  # tcap_mean and DCAP share the same denominator)
+  expect_equal(tcap_ru$tcap_mean * 100, as.numeric(disc_sp$allCAPs$DCAP),
+               tolerance = 0.01)
 })
 
 test_that("riskutility computes valid CAP with SD2011 data (methodological note)", {
+  skip_on_cran()
   skip_if_not_installed("synthpop")
 
   library(synthpop)
@@ -113,6 +128,7 @@ test_that("riskutility computes valid CAP with SD2011 data (methodological note)
 })
 
 test_that("riskutility DCAP computes valid CAP with SD2011 data", {
+  skip_on_cran()
   skip_if_not_installed("synthpop")
 
   library(synthpop)
@@ -186,6 +202,7 @@ test_that("riskutility per-record CAP scores are correct", {
 })
 
 test_that("TCAP and DCAP consistency check - both give same mean CAP", {
+  skip_on_cran()
   skip_if_not_installed("synthpop")
 
   library(synthpop)
@@ -387,6 +404,7 @@ test_that("documentation note: baseline differs between packages", {
   # riskutility: max target frequency in SYNTHETIC data
   # synthpop: equivalence-class weighted baseline (more complex)
 
+  skip_on_cran()
   skip_if_not_installed("synthpop")
 
   library(synthpop)
@@ -447,12 +465,13 @@ test_that("tcap_max returns maximum CAP value", {
   expect_equal(tcap_ru$tcap_mean, 0.75)
 })
 
-test_that("tcap_certain matches synthpop TCAP with controlled data", {
+test_that("tcap kinds match synthpop TCAP across synthpop versions", {
+  skip_on_cran()
   skip_if_not_installed("synthpop")
 
   library(synthpop)
 
-  # Data where key B uniquely determines target in both datasets
+  # Data where keys B and C uniquely determine the target in both datasets
   original <- data.frame(
     key = c("A", "A", "B", "B", "C"),
     sensitive = c("T1", "T2", "T1", "T1", "T1")
@@ -467,30 +486,38 @@ test_that("tcap_certain matches synthpop TCAP with controlled data", {
                   key_vars = "key",
                   target_var = "sensitive")
 
+  # Self-contained, hand-verified values (see test-tcap-kind.R):
+  # certain: records 3,4,5 (keys B, C unique in both) / 5 matched = 60%
+  # matched: 3 CAP=1 records / 5 matched = 60% (synthpop <= 1.9-2 TCAP)
+  # conditional: 3 / 3 records matched to disclosive classes B, C = 100%
+  #   (Little et al. 2025 = synthpop >= 1.9-3 TCAP)
+  expect_equal(tcap_ru$n_certain, 3)
+  expect_equal(tcap_ru$tcap_certain, 60, tolerance = 0.01)
+  expect_equal(tcap_ru$tcap_matched, 60, tolerance = 0.01)
+  expect_equal(tcap_ru$tcap_conditional, 100, tolerance = 0.01)
+
   synth_obj <- list(syn = synthetic, m = 1)
   class(synth_obj) <- "synds"
   disc_sp <- disclosure(synth_obj, original,
                         keys = "key", target = "sensitive",
                         print.flag = FALSE)
 
-  cat("\n=== Certain Disclosure Comparison ===\n")
-  cat("riskutility tcap_certain:", round(tcap_ru$tcap_certain, 2), "%\n")
+  cat("\n=== TCAP Comparison (synthpop", as.character(utils::packageVersion("synthpop")), ") ===\n")
+  cat("riskutility tcap_matched:", round(tcap_ru$tcap_matched, 2), "%\n")
+  cat("riskutility tcap_conditional:", round(tcap_ru$tcap_conditional, 2), "%\n")
   cat("synthpop TCAP:", round(disc_sp$allCAPs$TCAP, 2), "%\n")
 
-  # Analysis:
-  # Key A: in original has T1, T2 (NOT unique) -> not certain
-  # Key B: in original has T1 only (unique), in synthetic has T1 only -> CERTAIN
-  # Key C: in original has T1 only (unique), in synthetic has T1 only -> CERTAIN
-  #
-  # Certain records: B (records 3,4) and C (record 5) = 3 records
-  # Total matched: 5 records
-  # tcap_certain = 3/5 = 60%
-
-  expect_equal(tcap_ru$n_certain, 3)
-  expect_equal(tcap_ru$tcap_certain, 60, tolerance = 0.01)
-
-  # Should match synthpop TCAP
-  expect_equal(tcap_ru$tcap_certain, disc_sp$allCAPs$TCAP, tolerance = 0.01)
+  # synthpop redefined TCAP in version 1.9-3 (Little et al. 2025 denominator),
+  # so compare against the riskutility variant matching the installed version.
+  # This dataset is chosen so that original-side and synthetic-side counting
+  # of the conditional denominator coincide (every disclosive class is fully
+  # correct), keeping the check robust to that implementation detail.
+  sp_tcap <- as.numeric(disc_sp$allCAPs$TCAP)
+  if (utils::packageVersion("synthpop") < "1.9.3") {
+    expect_equal(tcap_ru$tcap_matched, sp_tcap, tolerance = 0.01)
+  } else {
+    expect_equal(tcap_ru$tcap_conditional, sp_tcap, tolerance = 0.01)
+  }
 })
 
 test_that("tcap_certain is 0 when no unique key-target mappings", {
@@ -512,6 +539,11 @@ test_that("tcap_certain is 0 when no unique key-target mappings", {
   # No key uniquely determines target -> tcap_certain = 0
   expect_equal(tcap_ru$n_certain, 0)
   expect_equal(tcap_ru$tcap_certain, 0)
+
+  # No disclosive synthetic class either -> all variants are 0
+  expect_equal(tcap_ru$n_disclosive, 0)
+  expect_equal(tcap_ru$tcap_matched, 0)
+  expect_equal(tcap_ru$tcap_conditional, 0)
 })
 
 test_that("tcap_certain is 100 when all keys uniquely determine target", {
@@ -535,6 +567,8 @@ test_that("tcap_certain is 100 when all keys uniquely determine target", {
   expect_equal(tcap_ru$tcap_certain, 100)
   expect_equal(tcap_ru$tcap_max, 1.0)
   expect_equal(tcap_ru$tcap_mean, 1.0)
+  expect_equal(tcap_ru$tcap_matched, 100)
+  expect_equal(tcap_ru$tcap_conditional, 100)
 })
 
 test_that("new metrics are included in tcap output", {
@@ -556,19 +590,27 @@ test_that("new metrics are included in tcap output", {
                  target_var = "sensitive")
 
   # Check all expected fields exist
-expect_true("tcap_scores" %in% names(result))
+  expect_true("tcap_scores" %in% names(result))
   expect_true("tcap_mean" %in% names(result))
   expect_true("tcap_max" %in% names(result))
   expect_true("tcap_median" %in% names(result))
   expect_true("tcap_certain" %in% names(result))
+  expect_true("tcap_matched" %in% names(result))
+  expect_true("tcap_conditional" %in% names(result))
   expect_true("n_certain" %in% names(result))
+  expect_true("n_disclosive" %in% names(result))
+  expect_true("n_disclosive_correct" %in% names(result))
   expect_true("is_certain" %in% names(result))
+  expect_true("is_disclosive" %in% names(result))
+  expect_true("kind" %in% names(result))
   expect_true("baseline" %in% names(result))
 
   # Verify relationships
   expect_true(result$tcap_max >= result$tcap_mean)
   expect_true(result$tcap_certain >= 0 && result$tcap_certain <= 100)
   expect_equal(result$n_certain, sum(result$is_certain))
+  expect_equal(result$n_disclosive, sum(result$is_disclosive))
+  expect_true(result$tcap_certain <= result$tcap_matched + 1e-9)
 })
 
 test_that("print and summary show new metrics", {

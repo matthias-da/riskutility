@@ -749,7 +749,11 @@ risk ratio of `r round(tcap_res$tcap_mean / tcap_res$baseline, 2)`. Values at or
 baseline are the signature of no attribution leakage. Note that `tcap()`, like
 `dcap()`, discretises a continuous target into `cont_bins` quantile bins
 before matching; without that step an exact match on a continuous income value
-essentially never occurs and every TCAP score would collapse to zero.
+essentially never occurs and every TCAP score would collapse to zero. The
+three TCAP variants reported in the summary block (certain, matched,
+conditional) differ only in numerator and denominator; Section
+\ref{sec-validation} defines them and maps them to the \pkg{synthpop}
+versions that implement each.
 
 ```{r cap-table, echo=FALSE}
 cap <- data.frame(
@@ -811,8 +815,33 @@ The first two rows agree to every printed digit, as they must: the two packages
 implement the same estimand. `CAPd` differs because it measures attribution
 *within* the original data rather than attribution of original records from the
 synthetic distribution; reporting it alongside `dcap()` would compare two
-different quantities. The frequency-based measures `kanonymity()` and
-`ldiversity()` are defined identically to their \pkg{sdcMicro} counterparts.
+different quantities.
+
+TCAP illustrates the same point from the other side: the literature has never
+settled on a single denominator for it. \pkg{synthpop} up to version 1.9-2
+divided the number of correctly and certainly attributed records by all
+original records whose key occurs in the synthetic data; from version 1.9-3 it
+adopts the definition of @little2025synthetic, which divides by only the
+records matched to a *disclosive* synthetic key group, i.e., one whose
+synthetic records all share a single target value [@raab2024practical].
+`tcap()` therefore reports the variants side by side rather than privileging
+one: `tcap_matched` reproduces the former, `tcap_conditional` the latter, and
+`tcap_certain` --- the package default --- is the strictest variant, which
+additionally requires the key to determine the target uniquely in the original
+data. On any data the three order as certain $\le$ matched $\le$ conditional,
+and a `kind` argument selects which of them `print()` and `summary()`
+headline. On the running example of Section \ref{sec-risk}:
+
+```{r tcap-kinds}
+round(c(certain     = tcap_res$tcap_certain,
+        matched     = tcap_res$tcap_matched,
+        conditional = tcap_res$tcap_conditional), 2)
+```
+
+A comparison that pins its estimand this precisely survives upstream
+redefinitions; one that compares "TCAP to TCAP" does not. The frequency-based
+measures `kanonymity()` and `ldiversity()` are defined identically to their
+\pkg{sdcMicro} counterparts.
 
 
 ## ML-Based Risk: RAPID {#sec-rapid}

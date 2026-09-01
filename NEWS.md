@@ -10,6 +10,18 @@ are not directly comparable.
   target is now discretised into quantile bins before matching. Previously an
   exact match on a continuous value essentially never occurred and every TCAP
   score collapsed to zero.
+* `tcap()` now reports all three TCAP variants in use in the literature and
+  gains a `kind` argument (`"certain"`, the default; `"matched"`;
+  `"conditional"`) that selects which one `print()`/`summary()` highlight --
+  reported values are unchanged. `tcap_certain` keeps riskutility's strict
+  definition (the key uniquely determines the target in both the original and
+  the synthetic data). The new `tcap_matched` reproduces synthpop's TCAP as
+  defined up to synthpop 1.9-2; the new `tcap_conditional` implements the
+  definition of Little, Allmendinger & Elliot (2025, Journal of Official
+  Statistics 41(1), 255-308), which synthpop adopts from version 1.9-3. The
+  previous documentation claim that `tcap_certain` equals synthpop's TCAP held
+  only on data where every disclosive synthetic key class is also unambiguous
+  in the original data; the documentation now states the exact mapping.
 
 ## Bug fixes (change reported values)
 
@@ -32,6 +44,11 @@ are not directly comparable.
   `dcr_share` reference value of 0.5 and the 0.55 rule used by `privacy_pass`
   assume equal sizes; with an unequal split the expected share under no
   memorisation is `n_train / (n_train + n_holdout)`.
+* Tests that compare riskutility against synthpop output are now version-aware
+  (synthpop 1.9-3 redefines its TCAP measure) and are skipped on CRAN, as
+  requested by the synthpop maintainers and the CRAN team. They continue to
+  run in local `devtools::test()` runs.
+* `print.tcap()` no longer errors on a result with zero matched records.
 
 # riskutility 0.1.0
 

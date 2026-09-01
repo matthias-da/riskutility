@@ -1,11 +1,17 @@
 ## Submission
 
-This is the initial CRAN submission of riskutility (version 0.1.0).
+This is a maintenance and feature release of riskutility (version 0.2.0;
+first release 0.1.0 published 2026-06-22).
 
-The package provides disclosure-risk and data-utility metrics for anonymized
-and synthetic data (attribution-based CAP/TCAP/WEAP/DiSCO and RAPID risk
-measures, distance-based DCR/NNDR/IMS, classical SDC privacy models, and a
-range of utility measures), together with a multivariate Risk-Utility map.
+It contains bug fixes surfaced while preparing a software paper (see NEWS.md;
+three fixes change reported values), one API addition to `tcap()`, and one
+change made in coordination with the synthpop maintainers and the CRAN team:
+the forthcoming synthpop 1.9-3 redefines its TCAP disclosure measure, which a
+riskutility test compared against. `tcap()` now implements both definitions
+explicitly (`tcap_matched` for synthpop <= 1.9-2, `tcap_conditional` for the
+Little et al. 2025 definition used from synthpop 1.9-3), and all tests that
+compare against synthpop output are version-aware and skipped on CRAN, so a
+future synthpop release cannot be blocked by riskutility's checks again.
 
 ## R CMD check results
 
@@ -27,4 +33,4 @@ range of utility measures), together with a multivariate Risk-Utility map.
 
 ## Downstream dependencies
 
-There are currently no reverse dependencies (new package).
+There are currently no reverse dependencies.

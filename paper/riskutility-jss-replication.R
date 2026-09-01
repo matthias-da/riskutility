@@ -337,6 +337,12 @@ knitr::kable(cmp, row.names = FALSE, col.names = c("Quantity", "Value (%)"),
              caption = "Mean CAP from riskutility and synthpop on identical data. The first two rows are the same estimand and agree to all printed digits.\\label{tab:synthpop}")
 
 
+## ----tcap-kinds---------------------------------------------------------------
+round(c(certain     = tcap_res$tcap_certain,
+        matched     = tcap_res$tcap_matched,
+        conditional = tcap_res$tcap_conditional), 2)
+
+
 ## ----rapid-demo, warning=FALSE, fig.cap="RAPID threshold-sensitivity diagnostic for the running example.\\label{fig:rapid}"----
 rapid_res <- rapid(pair, model_type = "lm")
 summary(rapid_res)

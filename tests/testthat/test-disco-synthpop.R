@@ -125,6 +125,7 @@ test_that("disco returns zero when no matches exist", {
 })
 
 test_that("disco matches synthpop when using certain disclosure", {
+  skip_on_cran()
   skip_if_not_installed("synthpop")
 
   library(synthpop)
@@ -163,6 +164,7 @@ test_that("disco matches synthpop when using certain disclosure", {
 })
 
 test_that("disco certain disclosure matches synthpop when keys don't uniquely determine target", {
+  skip_on_cran()
   skip_if_not_installed("synthpop")
 
   library(synthpop)
@@ -229,6 +231,7 @@ test_that("disco computes baseline correctly", {
 })
 
 test_that("disco with larger realistic dataset", {
+  skip_on_cran()
   skip_if_not_installed("synthpop")
 
   library(synthpop)

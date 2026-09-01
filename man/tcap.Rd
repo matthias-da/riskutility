@@ -19,13 +19,14 @@ tcap(X, ...)
   gower_threshold = 0.1,
   cont_bins = 10,
   na.rm = TRUE,
+  kind = c("certain", "matched", "conditional"),
   ...
 )
 }
 \arguments{
 \item{X}{data frame of original data}
 
-\item{...}{additional arguments passed to methods (currently unused)}
+\item{...}{additional arguments passed to methods}
 
 \item{Y}{data frame of synthetic data}
 
@@ -45,18 +46,42 @@ binning an exact match on a continuous value essentially never occurs
 and every TCAP score collapses to zero.}
 
 \item{na.rm}{logical, remove records with NA in key or target (default: TRUE)}
+
+\item{kind}{character, which TCAP variant \code{print()} and
+\code{summary()} highlight as the selected headline: \code{"certain"}
+(default), \code{"matched"}, or \code{"conditional"}. All three variants
+are always computed and returned regardless of \code{kind}; see Details
+for their definitions and the mapping to synthpop versions.}
 }
 \value{
 An object of class "tcap" containing:
 \itemize{
 \item tcap_scores: numeric vector of per-record CAP values
-\item tcap_mean: mean CAP across all matched records (equivalent to synthpop's CAPd)
+\item tcap_mean: mean CAP across matched records. synthpop's DCAP is the
+same sum divided by the number of all original records (unmatched
+records counting as zero), so the two coincide exactly when every
+original record has a key match; see \code{\link{dcap}} for the
+synthpop-DCAP estimand itself.
 \item tcap_max: maximum CAP (worst-case individual risk)
 \item tcap_median: median CAP
-\item tcap_certain: percentage of matched records at "certain" disclosure risk
-(key uniquely determines target in both original and synthetic data,
-equivalent to synthpop's TCAP)
+\item tcap_certain: percentage of matched records at "certain" disclosure
+risk: the key uniquely determines the target in both the original and
+the synthetic data, and the attribution is correct
+\item tcap_matched: percentage of matched records that are disclosive in
+the synthetic data and correctly attributed (CAP = 1). Reproduces
+synthpop's TCAP as defined up to synthpop 1.9-2.
+\item tcap_conditional: the same numerator divided by the number of
+records matched to a disclosive synthetic key class only
+(Little et al., 2025). This is the TCAP definition synthpop adopts
+from version 1.9-3. Following the reference implementation, 0 when no
+record is matched to a disclosive class.
 \item n_certain: count of records at certain disclosure risk
+\item n_disclosive_correct: count of matched records with CAP = 1 (the
+shared numerator of tcap_matched and tcap_conditional)
+\item n_disclosive: count of records matched to a disclosive synthetic
+key class (the denominator of tcap_conditional)
+\item is_certain, is_disclosive: per-record logical flags
+\item kind: the selected headline variant
 \item n_matches: number of synthetic matches per original record
 \item n_matched: number of original records with at least one match
 \item n_unmatched: number of original records with no matches
@@ -78,18 +103,43 @@ in synthetic data.
 For each original record i with key values k_i and target value t_i:
 \deqn{CAP_i = \frac{|\{j \in Y : keys_j = k_i \land target_j = t_i\}|}{|\{j \in Y : keys_j = k_i\}|}}
 
-The function returns three summary metrics:
+The literature has never used a single denominator for the "targeted" CAP,
+so \code{tcap()} computes the common variants side by side. Call a
+synthetic key class \emph{disclosive} when all its synthetic records share
+one target value; a matched original record has CAP = 1 exactly when its
+class is disclosive and the attribution is correct.
 \itemize{
-\item \strong{tcap_mean}: Mean CAP across all matched records. Equivalent to
-synthpop's CAPd. This is the standard measure for overall disclosure risk.
-\item \strong{tcap_max}: Maximum CAP value (worst-case individual risk).
-A value of 1 means at least one record has all its synthetic matches
-with the correct target value.
-\item \strong{tcap_certain}: Percentage of matched records where the key
-uniquely determines the target in BOTH the original AND synthetic data.
-Equivalent to synthpop's TCAP. These records are at "certain" disclosure
-risk because the synthetic data perfectly reveals their target value.
+\item \strong{tcap_certain} (default headline): percentage of matched
+records whose key uniquely determines the target in BOTH the original
+AND the synthetic data, with correct attribution. The strictest
+variant: the intruder's inference is unambiguous in both datasets.
+\item \strong{tcap_matched}: percentage of matched records with CAP = 1.
+Reproduces synthpop's TCAP as defined up to synthpop 1.9-2 (DiSCO-type
+numerator over all original records whose key occurs in the synthetic
+data).
+\item \strong{tcap_conditional}: the same numerator divided by the
+number of original records matched to a disclosive synthetic key
+class, following Little et al. (2025); synthpop adopts this
+definition from version 1.9-3 (Raab et al., 2024). Records without
+such a match are excluded, and the value is 0 when no record is
+matched to a disclosive class (as in the reference implementation).
 }
+
+On any data the variants order as
+\code{tcap_certain <= tcap_matched <= tcap_conditional}: from
+\code{tcap_matched} to \code{tcap_certain} the numerator shrinks (records
+whose key is ambiguous in the original data drop out), and from
+\code{tcap_matched} to \code{tcap_conditional} the denominator shrinks.
+
+For \code{method = "gower"}, equivalence classes are replaced by fuzzy
+match sets: \code{is_certain} simplifies to CAP = 1 (so
+\code{tcap_certain} equals \code{tcap_matched}), and a match set counts
+as disclosive when all matched synthetic records share one target value.
+
+In addition, \strong{tcap_mean} gives the mean CAP across matched records
+(the standard aggregate disclosure-risk measure) and \strong{tcap_max}
+the maximum CAP (worst-case individual risk): a value of 1 means at least
+one record has all its synthetic matches with the correct target value.
 
 Interpretation:
 \itemize{
@@ -134,6 +184,12 @@ result <- tcap(X, Y,
 print(result)
 summary(result)
 plot(result)
+
+# The three TCAP variants (always returned; `kind` picks the headline
+# reported by print()/summary()); certain <= matched <= conditional
+c(certain = result$tcap_certain,
+  matched = result$tcap_matched,          # synthpop <= 1.9-2 TCAP
+  conditional = result$tcap_conditional)  # Little et al. 2025; synthpop >= 1.9-3
 
 \donttest{
 # Example 2: Using SD2011 dataset with synthpop-generated synthetic data
@@ -197,6 +253,15 @@ Synthetic Data Produced by the SYLLS Team. Report 2015-2.
 Taub, J., Elliot, M., Pampaka, M., & Smith, D. (2018). Differential Correct
 Attribution Probability for Synthetic Data: An Exploration.
 \emph{Privacy in Statistical Databases}, 122-137.
+
+Little, C., Allmendinger, R., & Elliot, M. (2025). Synthetic Census
+Microdata Generation: A Comparative Study of Synthesis Methods Examining
+the Trade-Off Between Disclosure Risk and Utility.
+\emph{Journal of Official Statistics}, 41(1), 255-308.
+\doi{10.1177/0282423X241266523}
+
+Raab, G. M., Nowok, B., & Dibben, C. (2024). Practical Privacy Metrics for
+Synthetic Data. arXiv:2406.16826.
 }
 \seealso{
 \code{\link{dcap}} for the differential measure comparing to baseline,
