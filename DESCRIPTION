@@ -41,7 +41,6 @@ Suggests:
     uwot,
     Rtsne,
     dbscan,
-    vip,
     rpart,
     xgboost,
     partykit,

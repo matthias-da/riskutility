@@ -52,8 +52,13 @@ For regression tasks, you can use:
 \item \code{"R-squared"}
 \item \code{"MAPE"} (Mean Absolute Percentage Error)
 }
+Metric names are matched case-insensitively. Error metrics (RMSE, MAE,
+MAPE) are sign-flipped so that a larger importance always indicates a
+more influential feature. For \code{"ROC AUC"} the positive class is the
+second factor level and \code{pred_wrapper} must return probabilities.
 Additionally, a custom metric function can be supplied that takes the observed values and predictions as inputs and
-returns a single numeric performance value.}
+returns a single numeric performance value; it is assumed to be
+larger-is-better.}
 
 \item{nsim}{Number of simulations used by permutation importance.}
 }
@@ -70,7 +75,10 @@ Compares feature importance rankings from models trained on real (X) and synthet
 This function supports three types of feature importance measures:
 \itemize{
 \item \strong{Model-based:} Uses \code{caret::varImp}.
-\item \strong{Permutation-based:} Uses \code{vip::vi_permute}. A prediction wrapper is required.
+\item \strong{Permutation-based:} Permutes each feature \code{nsim} times
+and measures the resulting drop in model performance (computed
+internally, no additional packages required). A prediction wrapper is
+required.
 \item \strong{SHAP-based:} Computes mean absolute Shapley values using the \code{kernelshap} package.
 }
 
@@ -98,8 +106,8 @@ res_tree <- compare_feature_importance(X, Y, outcome ~ .,
                                        importance_type = "model")
 
 \donttest{
-# Permutation importance (requires vip package)
-if (requireNamespace("vip", quietly = TRUE)) {
+# Permutation importance
+if (requireNamespace("caret", quietly = TRUE)) {
   pred_fn <- function(object, newdata) predict(object, newdata, type = "raw")
   res_perm <- compare_feature_importance(
     X, Y, outcome ~ ., method = "rf",

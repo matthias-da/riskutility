@@ -5,7 +5,10 @@
 #' This function supports three types of feature importance measures:
 #' \itemize{
 #'   \item \strong{Model-based:} Uses \code{caret::varImp}.
-#'   \item \strong{Permutation-based:} Uses \code{vip::vi_permute}. A prediction wrapper is required.
+#'   \item \strong{Permutation-based:} Permutes each feature \code{nsim} times
+#'     and measures the resulting drop in model performance (computed
+#'     internally, no additional packages required). A prediction wrapper is
+#'     required.
 #'   \item \strong{SHAP-based:} Computes mean absolute Shapley values using the \code{kernelshap} package.
 #' }
 #'
@@ -30,8 +33,13 @@
 #'     \item \code{"R-squared"}
 #'     \item \code{"MAPE"} (Mean Absolute Percentage Error)
 #'   }
+#'   Metric names are matched case-insensitively. Error metrics (RMSE, MAE,
+#'   MAPE) are sign-flipped so that a larger importance always indicates a
+#'   more influential feature. For \code{"ROC AUC"} the positive class is the
+#'   second factor level and \code{pred_wrapper} must return probabilities.
 #'   Additionally, a custom metric function can be supplied that takes the observed values and predictions as inputs and
-#'   returns a single numeric performance value.
+#'   returns a single numeric performance value; it is assumed to be
+#'   larger-is-better.
 #' @param nsim Number of simulations used by permutation importance.
 #'
 #' @param ... additional arguments passed to methods
@@ -66,8 +74,8 @@
 #'                                        importance_type = "model")
 #'
 #' \donttest{
-#' # Permutation importance (requires vip package)
-#' if (requireNamespace("vip", quietly = TRUE)) {
+#' # Permutation importance
+#' if (requireNamespace("caret", quietly = TRUE)) {
 #'   pred_fn <- function(object, newdata) predict(object, newdata, type = "raw")
 #'   res_perm <- compare_feature_importance(
 #'     X, Y, outcome ~ ., method = "rf",
@@ -100,6 +108,10 @@ compare_feature_importance.default <- function(X, Y, formula, method,
     stop("Package 'caret' is required for compare_feature_importance(). Please install it.")
   }
   importance_type <- match.arg(importance_type)
+  if (importance_type == "permutation") {
+    if (is.null(pred_wrapper)) stop("pred_wrapper must be provided for permutation importance.")
+    .permutation_metric(metric)  # validate the metric before fitting models
+  }
   target_var <- all.vars(formula)[1]
 
   # Ensure consistent target variable type between X and Y.
@@ -135,16 +147,10 @@ compare_feature_importance.default <- function(X, Y, formula, method,
     importance_X <- extract_importance(vi_X, features)
     importance_Y <- extract_importance(vi_Y, features)
   } else if (importance_type == "permutation") {
-    if (is.null(pred_wrapper)) stop("pred_wrapper must be provided for permutation importance.")
-    if (!requireNamespace("vip", quietly = TRUE)) {
-      stop("Package 'vip' is required for this function. Please install it.")
-    }
-    imp_X <- vip::vi_permute(model_X, train = X, target = target_var, metric = metric,
-                             pred_wrapper = pred_wrapper, nsim = nsim)
-    importance_X <- setNames(imp_X$Importance, imp_X$Variable)
-    imp_Y <- vip::vi_permute(model_Y, train = Y, target = target_var, metric = metric,
-                             pred_wrapper = pred_wrapper, nsim = nsim)
-    importance_Y <- setNames(imp_Y$Importance, imp_Y$Variable)
+    importance_X <- .permutation_importance(model_X, X, target_var, features,
+                                            metric, pred_wrapper, nsim)
+    importance_Y <- .permutation_importance(model_Y, Y, target_var, features,
+                                            metric, pred_wrapper, nsim)
   } else if (importance_type == "shap") {
     if (!requireNamespace("kernelshap", quietly = TRUE)) {
       stop("Package 'kernelshap' is required for SHAP importance. Please install it.")
@@ -311,4 +317,75 @@ plot.compare_feature_importance <- function(x, y = NULL, which = 1, ...) {
          fill = c("steelblue", "coral"))
 
   invisible(x)
+}
+
+
+# ------------------------------------------------------------------------------
+# Internal permutation importance (replaces vip::vi_permute; vip was archived
+# from CRAN on 2026-07-08). Resolves a caret-style metric name, or a custom
+# metric function(obs, pred), to a scoring function plus its direction.
+.permutation_metric <- function(metric) {
+  if (is.function(metric)) {
+    return(list(fun = metric, smaller_is_better = FALSE))
+  }
+  key <- gsub("[^a-z]", "", tolower(metric))
+  fun <- switch(key,
+    accuracy = function(obs, pred) mean(pred == obs),
+    kappa = function(obs, pred) {
+      obs <- factor(obs)
+      tab <- table(factor(pred, levels = levels(obs)), obs)
+      po <- sum(diag(tab)) / sum(tab)
+      pe <- sum(rowSums(tab) * colSums(tab)) / sum(tab)^2
+      if (pe >= 1) return(NA_real_)
+      (po - pe) / (1 - pe)
+    },
+    rocauc = ,
+    auc = function(obs, pred) {
+      obs <- as.integer(factor(obs)) - 1L
+      if (length(unique(obs)) != 2L) {
+        stop("metric 'ROC AUC' requires a binary target.")
+      }
+      # Mann-Whitney formulation; positive class = second factor level
+      r <- rank(as.numeric(pred))
+      n1 <- sum(obs == 1L)
+      n0 <- sum(obs == 0L)
+      (sum(r[obs == 1L]) - n1 * (n1 + 1) / 2) / (n1 * n0)
+    },
+    rmse = function(obs, pred) sqrt(mean((as.numeric(pred) - as.numeric(obs))^2)),
+    mae = function(obs, pred) mean(abs(as.numeric(pred) - as.numeric(obs))),
+    mape = function(obs, pred) {
+      obs <- as.numeric(obs)
+      mean(abs((obs - as.numeric(pred)) / obs)) * 100
+    },
+    rsquared = ,
+    rsq = function(obs, pred) {
+      obs <- as.numeric(obs)
+      pred <- as.numeric(pred)
+      1 - sum((obs - pred)^2) / sum((obs - mean(obs))^2)
+    },
+    stop("Unknown metric '", metric, "'. Supported metric names: 'Accuracy', ",
+         "'Kappa', 'ROC AUC', 'RMSE', 'MAE', 'MAPE', 'R-squared'; ",
+         "alternatively supply a custom metric function(obs, pred).")
+  )
+  list(fun = fun, smaller_is_better = key %in% c("rmse", "mae", "mape"))
+}
+
+# For each feature: permute the column nsim times, score predictions through
+# pred_wrapper, and report the mean performance degradation relative to the
+# unpermuted baseline. Error metrics are sign-flipped so that a larger
+# importance always means a more influential feature.
+.permutation_importance <- function(model, data, target_var, features,
+                                    metric, pred_wrapper, nsim) {
+  m <- .permutation_metric(metric)
+  data <- as.data.frame(data)
+  obs <- data[[target_var]]
+  baseline <- m$fun(obs, pred_wrapper(model, data))
+  vapply(features, function(f) {
+    permuted <- vapply(seq_len(nsim), function(i) {
+      perm <- data
+      perm[[f]] <- sample(perm[[f]])
+      m$fun(obs, pred_wrapper(model, perm))
+    }, numeric(1))
+    if (m$smaller_is_better) mean(permuted) - baseline else baseline - mean(permuted)
+  }, numeric(1))
 }

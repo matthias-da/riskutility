@@ -49,6 +49,14 @@ are not directly comparable.
   requested by the synthpop maintainers and the CRAN team. They continue to
   run in local `devtools::test()` runs.
 * `print.tcap()` no longer errors on a result with zero matched records.
+* `compare_feature_importance(importance_type = "permutation")` no longer
+  requires the vip package (archived from CRAN on 2026-07-08 and therefore
+  flagged by the CRAN incoming checks): permutation importance is computed
+  internally, and the documented caret-style metric names (`"Accuracy"`,
+  `"Kappa"`, `"ROC AUC"`, `"RMSE"`, `"MAE"`, `"MAPE"`, `"R-squared"`) as well
+  as custom metric functions are handled directly, with error metrics
+  sign-flipped so that larger importance always means a more influential
+  feature. vip was removed from `Suggests`.
 
 # riskutility 0.1.0
 
