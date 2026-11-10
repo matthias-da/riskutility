@@ -93,6 +93,7 @@ Statistical Inference. \emph{Journal of the American Statistical Association},
 
 Other rapid: 
 \code{\link{rapid}()},
+\code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_synthesizer_cv}()},
 \code{\link{rapid_test}()},
 \code{\link{rapid_threshold_select}()}

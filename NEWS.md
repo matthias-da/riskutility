@@ -1,3 +1,15 @@
+# riskutility (development version)
+
+## New
+
+* `rapid_qi_contribution()` measures the risk contribution of each
+  quasi-identifier under a declared attack scenario. Each quasi-identifier (or
+  a named group of substitutes, via `groups`) is removed from the attacker's
+  knowledge, the attacker model is refitted, and the drop in RAPID is
+  reported, together with the drop in the excess over the fixed-model
+  permutation null of `rapid_test()`. Comes with `print()`, `summary()` and a
+  `plot()` dot plot.
+
 # riskutility 0.2.0
 
 Bug fixes and one API addition, all surfaced while preparing the JSS software
