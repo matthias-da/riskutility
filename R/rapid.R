@@ -302,19 +302,17 @@ rapid.default <- function(X, Y,
   na_strategy <- match.arg(na_strategy)
   cat_eval_method <- match.arg(cat_eval_method)
 
-  # Input validation
-  if (!is.data.frame(X)) stop("X must be a data frame.")
-  if (!is.data.frame(Y)) stop("Y must be a data frame.")
-
-  all_vars <- c(key_vars, target_var)
-  missing_X <- setdiff(all_vars, names(X))
-  missing_Y <- setdiff(all_vars, names(Y))
-  if (length(missing_X) > 0) {
-    stop(paste("Variables missing in X:", paste(missing_X, collapse = ", ")))
-  }
-  if (length(missing_Y) > 0) {
-    stop(paste("Variables missing in Y:", paste(missing_Y, collapse = ", ")))
-  }
+  # Data arguments (aliases, synth_pair) and arguments for the model
+  inputs <- .rapid_inputs(
+    if (missing(X)) NULL else X, if (missing(Y)) NULL else Y,
+    if (missing(key_vars)) NULL else key_vars,
+    if (missing(target_var)) NULL else target_var,
+    list(...)
+  )
+  X <- inputs$X
+  Y <- inputs$Y
+  key_vars <- inputs$key_vars
+  target_var <- inputs$target_var
 
   # Check model dependencies
   .check_rapid_deps(model_type)
@@ -339,28 +337,20 @@ rapid.default <- function(X, Y,
 
   if (verbose) message("RAPID: Running disclosure risk assessment...")
 
-  # Subset to needed variables
-  X_sub <- X[, c(target_var, key_vars), drop = FALSE]
-  Y_sub <- Y[, c(target_var, key_vars), drop = FALSE]
-
-  # Handle NA in sensitive variable
-  na_result <- .handle_sensitive_na(X_sub, Y_sub, target_var, na_strategy, na_constant_value)
-  X_sub <- na_result$original
-  Y_sub <- na_result$synthetic
-
-  # Handle NA in quasi-identifiers
-  X_sub <- .handle_qi_na(X_sub, key_vars)
-  Y_sub <- .handle_qi_na(Y_sub, key_vars)
-
-  # Ensure factor levels are consistent
-  Y_sub <- .ensure_levels(Y_sub, X_sub, target_var, key_vars, verbose)
+  # Common column types, missing values and factor levels in both data sets
+  prepared <- .rapid_prepare_data(X, Y, key_vars, target_var, na_strategy,
+                                  na_constant_value)
+  X_sub <- prepared$X
+  Y_sub <- prepared$Y
+  if (model_type %in% c("lm", "logit")) .rapid_check_levels(prepared$unseen, model_type)
 
   # Build formula
   formula <- as.formula(paste(target_var, "~", paste(key_vars, collapse = "+")))
 
   # Fit model on synthetic data
   if (verbose) message("  Fitting ", model_type, " model on synthetic data...")
-  fit <- .fit_rapid_model(model_type, formula, Y_sub, X_sub, target_var, ...)
+  fit <- do.call(.fit_rapid_model,
+                 c(list(model_type, formula, Y_sub, X_sub, target_var), inputs$dots))
 
   # Predict on original data
   if (verbose) message("  Predicting on original data...")
@@ -438,108 +428,6 @@ rapid.default <- function(X, Y,
   if (model_type == "gbm" && !requireNamespace("xgboost", quietly = TRUE)) {
     stop("Package 'xgboost' required for model_type='gbm'. Install with: install.packages('xgboost')")
   }
-}
-
-#' Handle NA in sensitive attribute
-#' @noRd
-.handle_sensitive_na <- function(original, synthetic, target_var, strategy, constant_value) {
-  orig_target <- original[[target_var]]
-  synth_target <- synthetic[[target_var]]
-
-  has_na_orig <- anyNA(orig_target)
-  has_na_synth <- anyNA(synth_target)
-
-  if (!has_na_orig && !has_na_synth) {
-    return(list(original = original, synthetic = synthetic))
-  }
-
-  if (is.factor(orig_target)) {
-    # For factors: add "missing" level
-    if (has_na_orig) {
-      original[[target_var]] <- addNA(original[[target_var]])
-      levels(original[[target_var]])[is.na(levels(original[[target_var]]))] <- "missing"
-    }
-    if (has_na_synth) {
-      synthetic[[target_var]] <- addNA(synthetic[[target_var]])
-      levels(synthetic[[target_var]])[is.na(levels(synthetic[[target_var]]))] <- "missing"
-    }
-  } else if (is.numeric(orig_target)) {
-    # For numeric: apply strategy
-    if (strategy == "drop") {
-      keep_orig <- !is.na(original[[target_var]])
-      keep_synth <- !is.na(synthetic[[target_var]])
-      original <- original[keep_orig, , drop = FALSE]
-      synthetic <- synthetic[keep_synth, , drop = FALSE]
-    } else if (strategy == "constant") {
-      original[[target_var]][is.na(original[[target_var]])] <- constant_value
-      synthetic[[target_var]][is.na(synthetic[[target_var]])] <- constant_value
-    } else if (strategy == "median") {
-      orig_med <- median(original[[target_var]], na.rm = TRUE)
-      synth_med <- median(synthetic[[target_var]], na.rm = TRUE)
-      original[[target_var]][is.na(original[[target_var]])] <- orig_med
-      synthetic[[target_var]][is.na(synthetic[[target_var]])] <- synth_med
-    }
-  }
-
-  list(original = original, synthetic = synthetic)
-}
-
-#' Handle NA in quasi-identifiers
-#' @noRd
-.handle_qi_na <- function(data, qi_vars) {
-  for (var in qi_vars) {
-    if (!var %in% names(data)) next
-
-    if (is.factor(data[[var]]) && anyNA(data[[var]])) {
-      data[[var]] <- addNA(data[[var]])
-      levels(data[[var]])[is.na(levels(data[[var]]))] <- "missing"
-    } else if (is.numeric(data[[var]]) && anyNA(data[[var]])) {
-      stop(sprintf("Variable '%s' is numeric and contains NA. Please handle missing values before using RAPID.", var))
-    }
-  }
-  data
-}
-
-#' Ensure factor levels are consistent between datasets
-#' @noRd
-.ensure_levels <- function(synthetic, original, target_var, key_vars, verbose = FALSE) {
-  # Convert character to factor if needed
-  if (is.character(synthetic[[target_var]])) {
-    synthetic[[target_var]] <- factor(synthetic[[target_var]])
-  }
-  if (is.character(original[[target_var]])) {
-    original[[target_var]] <- factor(original[[target_var]])
-  }
-
-  # For categorical target, ensure all original levels exist in synthetic
-
-  if (is.factor(original[[target_var]])) {
-    orig_levels <- levels(original[[target_var]])
-    synth_levels <- levels(synthetic[[target_var]])
-
-    missing_levels <- setdiff(orig_levels, synth_levels)
-    if (length(missing_levels) > 0) {
-      # Add missing levels to synthetic
-      levels(synthetic[[target_var]]) <- c(synth_levels, missing_levels)
-    }
-
-    # Also ensure synthetic levels match original order
-    synthetic[[target_var]] <- factor(synthetic[[target_var]], levels = orig_levels)
-  }
-
-  # Do the same for categorical key variables
-  for (var in key_vars) {
-    if (is.factor(original[[var]])) {
-      orig_levels <- levels(original[[var]])
-      if (is.factor(synthetic[[var]])) {
-        synth_levels <- levels(synthetic[[var]])
-        all_levels <- union(orig_levels, synth_levels)
-        synthetic[[var]] <- factor(synthetic[[var]], levels = all_levels)
-      }
-    }
-  }
-
-  synthetic
 }
 
 #' Fit predictive model for RAPID
