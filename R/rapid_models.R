@@ -282,9 +282,12 @@
                                           num_dist = "auto", num_scale = "auto",
                                           metric = "symmetric") {
   y <- data[[target_var]]
-  fit_on <- function(log_scale) {
-    d <- data
-    if (log_scale) d[[target_var]] <- log(y)
+  # Imputed target values (marked by the data preparation) do not decide the scale
+  observed <- attr(data, "rapid_observed_target")
+  if (is.null(observed)) observed <- rep(TRUE, length(y))
+  fit_on <- function(log_scale, rows = rep(TRUE, length(y))) {
+    d <- data[rows, , drop = FALSE]
+    if (log_scale) d[[target_var]] <- log(d[[target_var]])
     do.call(stats::lm, utils::modifyList(list(formula = formula, data = d), learner$args))
   }
   n_nonpositive <- sum(y <= 0, na.rm = TRUE)
@@ -301,13 +304,15 @@
     fit <- fit_on(FALSE)
     scale <- "identity"
     if (num_scale == "auto" && metric %in% c("symmetric", "stabilised_relative") &&
-        n_nonpositive == 0) {
+        all(y[observed] > 0)) {
       # Compare the Gaussian likelihoods on the original scale: the log model
       # pays the Jacobian sum(log(y)).
-      fit_log <- fit_on(TRUE)
+      fit_id <- if (all(observed)) fit else fit_on(FALSE, observed)
+      fit_log <- fit_on(TRUE, observed)
       jacobian <- sum(stats::model.response(stats::model.frame(fit_log)))
-      if (as.numeric(stats::logLik(fit_log)) - jacobian > as.numeric(stats::logLik(fit))) {
-        fit <- fit_log
+      if (as.numeric(stats::logLik(fit_log)) - jacobian > as.numeric(stats::logLik(fit_id))) {
+        # The log model is fitted on every positive value (imputed ones included)
+        fit <- if (all(observed)) fit_log else fit_on(TRUE, y > 0)
         scale <- "log"
       }
     }

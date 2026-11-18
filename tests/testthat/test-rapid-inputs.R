@@ -182,22 +182,69 @@ test_that("incompatible column types are a classed error naming the variable", {
 test_that("missing target values follow the NA strategy", {
   o <- data.frame(x1 = 1:6, y = c(1, NA, 3, 4, NA, 6))
   s <- data.frame(x1 = 1:6, y = c(2, 3, NA, 5, 6, 7))
-  drop <- .rapid_prepare_data(o, s, "x1", "y", "drop", 0)
+  expect_warning(drop <- .rapid_prepare_data(o, s, "x1", "y", "drop", 0),
+                 class = "rapid_warning_missing_target")
   expect_identical(drop$dropped, c(2L, 5L))
   expect_equal(drop$X$y, c(1, 3, 4, 6))
   expect_equal(nrow(drop$Y), 5)
-  const <- .rapid_prepare_data(o, s, "x1", "y", "constant", -1)
+  expect_warning(const <- .rapid_prepare_data(o, s, "x1", "y", "constant", -1),
+                 class = "rapid_warning_missing_target")
   expect_identical(const$dropped, integer(0))
   expect_equal(const$X$y, c(1, -1, 3, 4, -1, 6))
-  med <- .rapid_prepare_data(o, s, "x1", "y", "median", 0)
+  expect_warning(med <- .rapid_prepare_data(o, s, "x1", "y", "median", 0),
+                 class = "rapid_warning_missing_target")
   expect_equal(med$X$y, c(1, 3.5, 3, 4, 3.5, 6))
 
   oc <- data.frame(x1 = 1:4, y = c("a", NA, "b", "a"), stringsAsFactors = FALSE)
   sc <- data.frame(x1 = 1:4, y = c("a", "b", "b", "a"), stringsAsFactors = FALSE)
-  pc <- .rapid_prepare_data(oc, sc, "x1", "y", "drop", 0)
+  expect_warning(pc <- .rapid_prepare_data(oc, sc, "x1", "y", "drop", 0),
+                 class = "rapid_warning_missing_target")
   expect_identical(as.character(pc$X$y), c("a", "missing", "b", "a"))
   expect_identical(levels(pc$X$y), levels(pc$Y$y))
   expect_identical(pc$dropped, integer(0))
+})
+
+test_that("missing target values give a classed warning with counts and treatment", {
+  qi <- c("x1", "x2")
+  o <- sim_numeric(80)
+  s <- noisy_copy(o, seed = 2)
+  o$y[1:3] <- NA
+  s$y[5] <- NA
+  w <- expect_warning(rapid(o, s, qi, "y", model_type = "lm", n_perm = 0),
+                      class = "rapid_warning_missing_target")
+  msg <- conditionMessage(w)
+  expect_match(msg, "3 in X", fixed = TRUE)
+  expect_match(msg, "1 in Y", fixed = TRUE)
+  expect_match(msg, "na_constant_value = 0", fixed = TRUE)
+  expect_match(msg, "denominator", fixed = TRUE)
+  w <- expect_warning(rapid(o, s, qi, "y", model_type = "lm", na_strategy = "median",
+                            n_perm = 0),
+                      class = "rapid_warning_missing_target")
+  expect_match(conditionMessage(w), "median", fixed = TRUE)
+  w <- expect_warning(rapid(o, s, qi, "y", model_type = "lm", na_strategy = "drop",
+                            n_perm = 0),
+                      class = "rapid_warning_missing_target")
+  expect_match(conditionMessage(w), "removed", fixed = TRUE)
+  expect_no_match(conditionMessage(w), "stay in the denominator", fixed = TRUE)
+
+  # Missing values in Y only
+  w <- expect_warning(rapid(sim_numeric(80), s, qi, "y", model_type = "lm", n_perm = 0),
+                      class = "rapid_warning_missing_target")
+  expect_match(conditionMessage(w), "1 in Y", fixed = TRUE)
+  expect_no_match(conditionMessage(w), "in X", fixed = TRUE)
+
+  # Categorical target: the level "missing"
+  oc <- sim_categorical(80)
+  sc <- noisy_copy(oc, seed = 2)
+  oc$y[1:2] <- NA
+  w <- expect_warning(rapid(oc, sc, qi, "y", model_type = "rf", n_perm = 0),
+                      class = "rapid_warning_missing_target")
+  expect_match(conditionMessage(w), "2 in X", fixed = TRUE)
+  expect_match(conditionMessage(w), "\"missing\"", fixed = TRUE)
+
+  # Without missing target values there is no warning
+  expect_no_warning(rapid(sim_numeric(80), noisy_copy(sim_numeric(80), seed = 2), qi, "y",
+                          model_type = "lm", n_perm = 0))
 })
 
 test_that("numeric NA in a quasi-identifier is a classed error", {

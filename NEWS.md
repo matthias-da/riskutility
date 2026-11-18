@@ -26,8 +26,8 @@ Several defaults change reported values. Each item below gives the call that rep
   `max(res$results$threshold[res$results$significant])`.
 * The linear model chooses its working scale (`num_scale = "auto"`). It takes the log scale when
   the error metric is relative, all synthetic target values are positive and the log model has
-  the higher likelihood on the original scale. The 0.2.0 model is
-  `model_type = "lm", num_scale = "identity"`.
+  the higher likelihood on the original scale. Imputed synthetic values take no part in this
+  choice. The 0.2.0 model is `model_type = "lm", num_scale = "identity"`.
 * The tree of `model_type = "cart"` is grown with `cp = 0`, `minbucket = 5`, `xval = 10` and
   pruned at the complexity with the smallest cross-validated error. The 0.2.0 tree, with the
   rpart defaults, is
@@ -115,6 +115,12 @@ Several defaults change reported values. Each item below gives the call that rep
   as aliases. An argument whose name is a near miss of a `rapid()` argument is an error.
 * Errors and warnings of the RAPID functions carry classes (`rapid_error_input`,
   `rapid_warning_deprecated` and others), so that they can be caught by class.
+* Missing values of the target in `X`, `Y`, the holdout or the `newdata` of `predict()` give a
+  warning of class `rapid_warning_missing_target` with their number per data set and their
+  treatment. 0.2.0 replaced them without a message. Under the default `na_strategy =
+  "constant"` the records of `X` stay in the denominator of RAPID and are scored against
+  `na_constant_value`, so RAPID tends to be lower than on the observed records. Use
+  `na_strategy = "drop"` to compute RAPID on the records with an observed target.
 * `plot()` of a `rapid` object draws the gain rules (band, `RCS_marginal`) with ggplot2. Type 1
   is the histogram of the gains with the permutation null as an outline, type 2 the confidence
   `g` against the baseline `b`, and type 3 RAPID against the threshold with the chance level as

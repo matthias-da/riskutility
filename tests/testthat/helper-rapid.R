@@ -52,3 +52,17 @@ brute_error <- function(y, v, metric, delta = 0.01) {
 rapid_fixture <- function() {
   readRDS(testthat::test_path("fixtures", "rapid_ot_fixture.rds"))
 }
+
+# Evaluates `expr` and expects exactly `n` warnings of class
+# "rapid_warning_missing_target", which it muffles; other warnings pass. For
+# data with missing target values in more than one data set (X and a holdout),
+# where one call warns once per data set.
+expect_missing_target <- function(expr, n = 1) {
+  count <- 0
+  value <- withCallingHandlers(expr, rapid_warning_missing_target = function(w) {
+    count <<- count + 1
+    invokeRestart("muffleWarning")
+  })
+  testthat::expect_equal(count, n)
+  invisible(value)
+}

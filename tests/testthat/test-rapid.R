@@ -395,7 +395,7 @@ test_that("rapid() handles NA values in sensitive attribute", {
   )
 
   # With drop strategy
-  result <- rapid(
+  expect_warning(result <- rapid(
     X = original,
     Y = synthetic,
     key_vars = "x",
@@ -403,7 +403,7 @@ test_that("rapid() handles NA values in sensitive attribute", {
     model_type = "lm",
     na_strategy = "drop",
     verbose = FALSE
-  )
+  ), class = "rapid_warning_missing_target")
 
   expect_s3_class(result, "rapid")
   expect_equal(result$n_total, n - 5)
@@ -411,7 +411,7 @@ test_that("rapid() handles NA values in sensitive attribute", {
   expect_identical(result$na$strategy, "drop")
 
   # With constant strategy
-  result2 <- rapid(
+  expect_warning(result2 <- rapid(
     X = original,
     Y = synthetic,
     key_vars = "x",
@@ -420,7 +420,7 @@ test_that("rapid() handles NA values in sensitive attribute", {
     na_strategy = "constant",
     na_constant_value = 0,
     verbose = FALSE
-  )
+  ), class = "rapid_warning_missing_target")
 
   expect_s3_class(result2, "rapid")
   expect_equal(result2$n_total, n)

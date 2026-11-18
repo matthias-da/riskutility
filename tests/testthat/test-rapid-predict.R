@@ -119,18 +119,22 @@ test_that("holdout and newdata are prepared like X", {
   s <- noisy_copy(o, seed = 2)
   h <- sim_numeric(30, seed = 3)
   h$y[1:3] <- NA
-  r <- rapid(o, s, qi, "y", model_type = "lm", holdout = h, na_strategy = "drop",
-             n_perm = 0)
+  expect_warning(r <- rapid(o, s, qi, "y", model_type = "lm", holdout = h,
+                            na_strategy = "drop", n_perm = 0),
+                 class = "rapid_warning_missing_target")
   expect_identical(r$holdout$n, 27L)
-  r <- rapid(o, s, qi, "y", model_type = "lm", holdout = h, na_strategy = "constant",
-             na_constant_value = 0, n_perm = 0)
+  expect_warning(r <- rapid(o, s, qi, "y", model_type = "lm", holdout = h,
+                            na_strategy = "constant", na_constant_value = 0, n_perm = 0),
+                 class = "rapid_warning_missing_target")
   expect_identical(r$holdout$n, 30L)
   expect_equal(r$holdout$records$y[1:3], c(0, 0, 0))
-  r <- rapid(o, s, qi, "y", model_type = "lm", holdout = h, na_strategy = "median",
-             n_perm = 0, store_model = TRUE)
+  expect_warning(r <- rapid(o, s, qi, "y", model_type = "lm", holdout = h,
+                            na_strategy = "median", n_perm = 0, store_model = TRUE),
+                 class = "rapid_warning_missing_target")
   # Imputed with the median of the original values, as X
   expect_equal(r$holdout$records$y[1:3], rep(stats::median(o$y), 3))
-  expect_identical(nrow(predict(r, h)), 30L)
+  expect_warning(p <- predict(r, h), class = "rapid_warning_missing_target")
+  expect_identical(nrow(p), 30L)
   # Categorical quasi-identifier: a level unknown to the attacker is refused
   oc <- o
   oc$x2 <- factor(ifelse(o$x2 > 0, "hi", "lo"))
@@ -142,6 +146,22 @@ test_that("holdout and newdata are prepared like X", {
   rc <- rapid(oc, sc, qi, "y", model_type = "rf", store_model = TRUE, n_perm = 0)
   expect_error(predict(rc, hc), regexp = "mid", class = "rapid_error_levels")
   expect_identical(nrow(predict(rc, hc[c(1, 2, 4), ])), 3L)
+})
+
+test_that("missing target values of the holdout and of newdata give a classed warning", {
+  o <- sim_numeric(120)
+  s <- noisy_copy(o, seed = 2)
+  h <- sim_numeric(30, seed = 3)
+  h$y[1:3] <- NA
+  w <- expect_warning(rapid(o, s, qi, "y", model_type = "lm", holdout = h, n_perm = 0),
+                      class = "rapid_warning_missing_target")
+  expect_match(conditionMessage(w), "3 in the holdout", fixed = TRUE)
+  expect_match(conditionMessage(w), "denominator", fixed = TRUE)
+  r <- rapid(o, s, qi, "y", model_type = "lm", n_perm = 0, store_model = TRUE)
+  w <- expect_warning(predict(r, h), class = "rapid_warning_missing_target")
+  expect_match(conditionMessage(w), "3 in newdata", fixed = TRUE)
+  # Without the target, newdata has nothing to warn about
+  expect_no_warning(predict(r, h[, qi]))
 })
 
 test_that("update() with a new threshold on an object with a holdout equals a fresh call", {
@@ -184,30 +204,36 @@ test_that("a missing target of one new record is handled as in X or refused", {
   o$y[1:2] <- NA
   s <- noisy_copy(sim_numeric(120), seed = 2)
   h <- data.frame(x1 = 0, x2 = 0, y = NA_real_)
+  # X and the holdout have missing target values: one warning for each
   fit <- function(strategy, ...) {
     rapid(o, s, qi, "y", model_type = "lm", holdout = h, na_strategy = strategy,
           n_perm = 2, seed = 1, store_model = TRUE, ...)
   }
+  missing_class <- "rapid_warning_missing_target"
   # median: the median of the original values, for the holdout and predict()
-  r <- fit("median")
+  r <- expect_missing_target(fit("median"), 2)
   med <- stats::median(o$y, na.rm = TRUE)
   expect_identical(r$holdout$n, 1L)
   expect_equal(r$holdout$records$y, med)
   expect_false(anyNA(r$holdout$records$r))
-  expect_equal(predict(r, h)$y, med)
-  expect_false(anyNA(predict(r, h)$r))
+  p <- expect_missing_target(predict(r, h), 1)
+  expect_equal(p$y, med)
+  expect_false(anyNA(p$r))
   # constant: the constant
-  r <- fit("constant", na_constant_value = 70)
+  r <- expect_missing_target(fit("constant", na_constant_value = 70), 2)
   expect_equal(r$holdout$records$y, 70)
-  expect_equal(predict(r, h)$y, 70)
-  # drop: nothing is left, which is an error
-  expect_error(fit("drop"), regexp = "no records left", class = "rapid_error_input")
-  r <- rapid(o, s, qi, "y", model_type = "lm", na_strategy = "drop", n_perm = 0,
-             store_model = TRUE)
+  expect_equal(expect_missing_target(predict(r, h), 1)$y, 70)
+  # drop: nothing is left, which is an error (after the warning about X)
+  expect_warning(expect_error(fit("drop"), regexp = "no records left",
+                              class = "rapid_error_input"),
+                 class = missing_class)
+  r <- expect_missing_target(rapid(o, s, qi, "y", model_type = "lm", na_strategy = "drop",
+                                   n_perm = 0, store_model = TRUE), 1)
   expect_error(predict(r, h), regexp = "no records left", class = "rapid_error_input")
   # no imputation value: refused
-  expect_error(fit("constant", na_constant_value = NA), regexp = "cannot be imputed",
-               class = "rapid_error_input")
+  expect_warning(expect_error(fit("constant", na_constant_value = NA),
+                              regexp = "cannot be imputed", class = "rapid_error_input"),
+                 class = missing_class)
 
   # Categorical target: the level "missing", known only if X or Y had it
   oc <- sim_categorical(120)
@@ -218,9 +244,9 @@ test_that("a missing target of one new record is handled as in X or refused", {
   rc <- rapid(oc, sc, qi, "y", model_type = "rf", n_perm = 0, store_model = TRUE)
   expect_error(predict(rc, hc), regexp = "missing", class = "rapid_error_levels")
   oc$y[1:5] <- NA
-  rc <- rapid(oc, sc, qi, "y", model_type = "rf", holdout = hc, n_perm = 0, seed = 1,
-              store_model = TRUE)
+  rc <- expect_missing_target(rapid(oc, sc, qi, "y", model_type = "rf", holdout = hc,
+                                    n_perm = 0, seed = 1, store_model = TRUE), 2)
   expect_identical(as.character(rc$holdout$records$y), "missing")
   expect_equal(rc$holdout$records$b, 5 / 120)
-  expect_identical(as.character(predict(rc, hc)$y), "missing")
+  expect_identical(as.character(expect_missing_target(predict(rc, hc), 1)$y), "missing")
 })

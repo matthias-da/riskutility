@@ -199,14 +199,17 @@ test_that("NA strategy is the same in rapid() and rapid_test()", {
   s <- noisy_copy(o, seed = 2)
   o$y[c(3, 10, 20, 44)] <- NA
   for (st in c("constant", "drop", "median")) {
-    r <- rapid(o, s, qi, "y", model_type = "lm", na_strategy = st, seed = 1)
-    t <- rapid_test(o, s, qi, "y", model_type = "lm", na_strategy = st,
-                    n_permutations = 9, seed = 1)
+    expect_warning(r <- rapid(o, s, qi, "y", model_type = "lm", na_strategy = st, seed = 1),
+                   class = "rapid_warning_missing_target")
+    expect_warning(t <- rapid_test(o, s, qi, "y", model_type = "lm", na_strategy = st,
+                                   n_permutations = 9, seed = 1),
+                   class = "rapid_warning_missing_target")
     expect_identical(t$statistic, r$rapid, info = st)
     expect_identical(t$observed_rapid$n_total, r$n_total, info = st)
   }
-  expect_identical(nobs(rapid(o, s, qi, "y", model_type = "lm", na_strategy = "drop")),
-                   146L)
+  expect_warning(r <- rapid(o, s, qi, "y", model_type = "lm", na_strategy = "drop"),
+                 class = "rapid_warning_missing_target")
+  expect_identical(nobs(r), 146L)
 })
 
 test_that("format, print and summary of a rapid_test", {

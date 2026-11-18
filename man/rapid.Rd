@@ -105,10 +105,12 @@ target is represented: \code{"auto"} (default), \code{"grid"} or
 \item{num_scale}{character, working scale of the linear model for a
 continuous target: \code{"auto"} (default), \code{"identity"} or
 \code{"log"}. \code{"auto"} takes the log scale when three conditions hold:
-the error metric is relative, all synthetic target values are positive, and
-the log model has the higher Gaussian log-likelihood on the original scale
-(the log model pays the Jacobian, the sum of the logged target values).
-Otherwise it takes the identity. \code{"log"} with a zero or negative
+the error metric is relative, all observed synthetic target values are
+positive, and the log model has the higher Gaussian log-likelihood on the
+original scale (the log model pays the Jacobian, the sum of the logged
+target values). Otherwise it takes the identity. Imputed missing values
+take no part in this choice, and the log model leaves out imputed values
+that are not positive. \code{"log"} with a zero or negative
 synthetic value is an error. On the log scale the point prediction is the
 predictive median. Other attackers ignore \code{num_scale}, with a warning
 when it is given.}
@@ -130,7 +132,17 @@ target: \code{"constant"} (default, replaced by \code{na_constant_value}),
 median of the original values in \code{X} and of the synthetic values in
 \code{Y}). A missing value of a categorical target or a categorical
 quasi-identifier becomes the level \code{"missing"}. A numeric
-quasi-identifier with missing values is an error.}
+quasi-identifier with missing values is an error. When the target of
+\code{X}, \code{Y}, the holdout or the \code{newdata} of \code{predict()}
+has missing values, a warning of class
+\code{"rapid_warning_missing_target"} gives their number per data set and
+their treatment. Under \code{"constant"} and \code{"median"}, and for a
+categorical target, the records of \code{X} stay in the denominator of
+RAPID. They are scored against the replaced value, so they are rarely
+flagged and RAPID tends to be lower than on the observed records. Under
+\code{"drop"} RAPID is the share among the records with an observed target.
+The linear model chooses its scale under \code{num_scale = "auto"} on the
+observed synthetic values.}
 
 \item{na_constant_value}{numeric, the value of \code{na_strategy =
 "constant"} (default 0)}

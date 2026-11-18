@@ -243,6 +243,8 @@
     Y[[v]] <- h$y
   }
   is_categorical <- is.factor(X[[target_var]])
+  n_missing <- c(X = sum(is.na(X[[target_var]])), Y = sum(is.na(Y[[target_var]])))
+  observed_y <- !is.na(Y[[target_var]])
 
   # Missing values (a factor gets the level "missing")
   dropped <- if (!is_categorical && na_strategy == "drop") {
@@ -270,9 +272,50 @@
     X[[v]] <- factor(X[[v]], levels = lev, ordered = is.ordered(X[[v]]))
   }
   Y <- .ensure_levels(Y, X, target_var, key_vars)
+  # Imputed synthetic values are marked, so that a learner can make choices
+  # (such as the scale of lm) on the observed values only
+  if (!is_categorical && na_strategy != "drop" && !all(observed_y)) {
+    attr(Y, "rapid_observed_target") <- observed_y
+  }
+
+  if (any(n_missing > 0)) {
+    .rapid_warn_missing_target(target_var, n_missing, c(
+      .rapid_na_treatment(is_categorical, na_strategy, na_constant_value),
+      if (n_missing[["X"]] > 0) {
+        if (!is_categorical && na_strategy == "drop") {
+          " RAPID is computed on the remaining records of X."
+        } else {
+          " The records of X with a missing value stay in the denominator of RAPID."
+        }
+      }))
+  }
 
   list(X = X, Y = Y, is_categorical = is_categorical, dropped = dropped, unseen = unseen,
        na_value = na_value)
+}
+
+#' Warn about missing values of the target
+#'
+#' @param counts Named integer vector: the number of missing target values per
+#'   data set, named as in the message (`"X"`, `"the holdout"`, ...).
+#' @param treatment What happens to them, as one or more sentences.
+#' @noRd
+.rapid_warn_missing_target <- function(target_var, counts, treatment) {
+  counts <- counts[counts > 0]
+  .rapid_warn(c("The target '", target_var, "' has missing values: ",
+                paste(counts, "in", names(counts), collapse = ", "), ". ", treatment),
+              "missing_target")
+}
+
+# The sentence that says how missing target values are treated
+.rapid_na_treatment <- function(is_categorical, strategy, constant) {
+  if (is_categorical) return("They get the level \"missing\".")
+  switch(strategy,
+    drop = "Under na_strategy = \"drop\" these records are removed.",
+    constant = c("Under na_strategy = \"constant\" they are set to na_constant_value = ",
+                 format(constant), "."),
+    median = c("Under na_strategy = \"median\" they are set to the median of the observed ",
+               "values of their data set."))
 }
 
 #' Prepare new records (a holdout, the newdata of predict()) like the original data
@@ -321,6 +364,7 @@
   # the new records). A categorical target gets the level "missing", which the
   # level check below refuses unless X or Y had it.
   y <- if (has_target) data[[target_var]]
+  n_missing <- sum(is.na(y))
   if (anyNA(y)) {
     if (is.factor(y)) {
       data <- .handle_sensitive_na(data, train, target_var, na$strategy,
@@ -366,6 +410,26 @@
   }
   if (!learner$unseen_levels) {
     .rapid_check_levels(unseen, learner$name, paste0("records of '", name, "'"))
+  }
+
+  # Warned once the records are prepared, so that a refusal comes alone
+  if (n_missing > 0) {
+    is_holdout <- identical(name, "holdout")
+    categorical <- is.factor(y)
+    kept <- categorical || na$strategy != "drop"
+    .rapid_warn_missing_target(
+      target_var, stats::setNames(n_missing, if (is_holdout) "the holdout" else name),
+      c(if (categorical || na$strategy == "drop") {
+          .rapid_na_treatment(categorical, na$strategy, na$constant)
+        } else {
+          c("They get the value a missing target of X gets under na_strategy = \"",
+            na$strategy, "\", ", format(na$value), ".")
+        },
+        if (kept && is_holdout) {
+          " These records stay in the denominator of the holdout RAPID."
+        } else if (kept) {
+          " These records are scored with it."
+        }))
   }
 
   list(data = data, has_target = has_target)

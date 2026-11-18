@@ -242,6 +242,23 @@ test_that("zeros and negative values: auto falls back, log is refused", {
   expect_match(conditionMessage(err), "3")
 })
 
+test_that("auto chooses the lm scale on the observed target values", {
+  ln <- sim_lognormal(300, 0.9, 5)
+  ref <- rapid(ln, ln, qi, "y", model_type = "lm", n_perm = 0)
+  expect_match(ref$attacker, "log scale", fixed = TRUE)
+  s1 <- ln
+  s1$y[1] <- NA
+  expect_warning(r <- rapid(ln, s1, qi, "y", model_type = "lm", n_perm = 0),
+                 class = "rapid_warning_missing_target")
+  expect_match(r$attacker, "log scale", fixed = TRUE)
+  expect_equal(r$rapid, ref$rapid, tolerance = 0.02)
+  # A positive imputed value stays in the log fit
+  expect_warning(rm <- rapid(ln, s1, qi, "y", model_type = "lm", na_strategy = "median",
+                             n_perm = 0),
+                 class = "rapid_warning_missing_target")
+  expect_match(rm$attacker, "log scale", fixed = TRUE)
+})
+
 test_that("the log scale recovers what the raw scale misses", {
   o <- sim_lognormal(500, 0.99, 5)
   s <- sim_lognormal(500, 0.99, 6)
