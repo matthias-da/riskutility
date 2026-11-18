@@ -83,12 +83,13 @@
 #' every changed argument only affects how the attack is scored
 #' (\code{num_eval_method}, \code{num_error_metric}, \code{num_epsilon},
 #' \code{num_delta}, \code{num_tau}, \code{cat_eval_method}, \code{cat_tau},
-#' \code{n_perm}, \code{threshold_rule}, \code{perm_level}, \code{seed}) and the
-#' object holds the attacker's predictions, the stored attack is scored again
-#' under the new rule and the model is not fitted again. The permutations then
-#' start from the seed, as in a fresh call with the same seed. Any other
-#' argument, among them the model arguments, \code{model_type},
-#' \code{num_scale}, \code{num_dist} and \code{prune}, refits: the changed call
+#' \code{n_perm}, \code{threshold_rule}, \code{perm_level}) and the object
+#' holds the attacker's predictions, the stored attack is scored again under the
+#' new rule and the model is not fitted again. The permutations then start from
+#' the seed of the object, as in a fresh call with that seed. Any other
+#' argument, among them \code{seed} (which also seeds the fit), the model
+#' arguments, \code{model_type}, \code{num_scale}, \code{num_dist} and
+#' \code{prune}, refits: the changed call
 #' is evaluated in the caller's frame, as \code{\link[stats]{update}()} does, so
 #' the data must still be there under their names. A changed
 #' \code{num_error_metric} also refits when the linear model chose its scale

@@ -160,6 +160,19 @@ test_that("update() switches between band and point without refit", {
   expect_identical(back$rapid, r$rapid)
 })
 
+test_that("update() with a new seed refits and equals a fresh call", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "rf", seed = 1, num.trees = 50)
+  u <- update(r, seed = 2)
+  fresh <- rapid(o, s, qi, "y", model_type = "rf", seed = 2, num.trees = 50)
+  expect_identical(u$score, fresh$score)
+  expect_identical(u$chance_rates, fresh$chance_rates)
+  expect_identical(u$rapid, fresh$rapid)
+  # The stored call reproduces the object
+  expect_identical(eval(u$call)$score, u$score)
+})
+
 test_that("update() with a model argument refits", {
   skip_if_not_installed("rpart")
   o <- sim_numeric(150)

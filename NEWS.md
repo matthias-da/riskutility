@@ -103,7 +103,8 @@ Several defaults change reported values. Each item below gives the call that rep
   for the release with the same attacker and rule. The result holds their RAPID, chance level
   and excess (`holdout`) and `release_specific`, RAPID minus holdout RAPID.
 * `update()` changes arguments of a `rapid` object. It rescores the stored predictions without a
-  refit when only the rule changes, and refits otherwise.
+  refit when only the rule changes, and refits otherwise. A new `seed` refits, because the seed
+  also seeds the fit.
 * `predict()` applies the attacker of a `rapid` object fitted with `store_model = TRUE` to new
   records, and scores them when they hold the target.
 * `as.data.frame()` for `rapid` objects (the record table, `at_risk_only = TRUE` for the flagged

@@ -298,8 +298,9 @@ nrow(as.data.frame(r_inc, at_risk_only = TRUE))
 ```
 
 `update()` changes arguments. Where only the rule changes, the stored predictions are rescored
-without fitting the model again. Where the attacker changes, the model is refitted. Both give the
-same result as a fresh call with the changed arguments.
+without fitting the model again. Where the attacker or the `seed` changes, the model is refitted,
+since the seed also seeds the fit. Both give the same result as a fresh call with the changed
+arguments.
 
 ```{r update}
 r_strict <- update(r_inc, num_tau = 0.4)

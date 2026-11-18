@@ -702,10 +702,11 @@ rapid.default <- function(X, Y,
 }
 
 # Arguments of rapid() that change only how the attack is scored. update()
-# rescores the stored attack when it is given nothing else.
+# rescores the stored attack when it is given nothing else. `seed` is not one of
+# them: it seeds the fit as well.
 .rapid_scoring_args <- c("num_eval_method", "num_error_metric", "num_epsilon", "num_delta",
                          "num_tau", "cat_eval_method", "cat_tau", "n_perm", "threshold_rule",
-                         "perm_level", "seed")
+                         "perm_level")
 
 #' Scoring rule and permutation settings from the arguments of rapid()
 #'
