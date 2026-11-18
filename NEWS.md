@@ -43,8 +43,15 @@ Several defaults change reported values. Each item below gives the call that rep
   num_epsilon = 0.1)$rapid`.
 * `disclosure_report()` passes RAPID when the p-value of `rapid_test()` (199 permutations) is
   above the new argument `rapid_alpha` (default 0.05). Its row reports the chance level and the
-  excess. 0.2.0 passed RAPID when it was below 0.15, which is now
-  `report$results$rapid$rapid < 0.15`.
+  excess. 0.2.0 passed RAPID when it was below 0.15 under the 0.2.0 rule. With the default
+  attacker `rapid_model = "rf"` that verdict is now
+  `rapid(X, Y, kv, tv, model_type = "rf", num_eval_method = "point",
+  num_epsilon = 0.1)$rapid < 0.15`
+  for a continuous target and
+  `rapid(X, Y, kv, tv, model_type = "rf", cat_eval_method = "RCS_conditional")$rapid < 0.15`
+  for a categorical one. For `rapid_model = "lm"` or `"cart"` add the settings of the
+  attacker items above (`num_scale = "identity"`, or `prune = FALSE, cp = 0.01, minsplit = 20,
+  minbucket = 7`).
 * `summary()` of a `rapid` object no longer labels the result LOW, MEDIUM or HIGH (cut-offs 0.05
   and 0.15). Read the excess over the chance level and `rapid_test()` instead.
 * `rapid_synthesizer_cv()` has no default seed and is silent by default. The 0.2.0 call is

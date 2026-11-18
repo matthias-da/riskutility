@@ -418,18 +418,44 @@ copy_table <- data.frame(
   attacker = vapply(fits, function(x) x$attacker, ""),
   rapid = vapply(fits, function(x) x$rapid, 0),
   chance = vapply(fits, function(x) x$chance, 0),
-  excess = vapply(fits, function(x) x$excess, 0)
+  excess = vapply(fits, function(x) x$excess, 0),
+  holdout = vapply(fits, function(x) x$holdout$rapid, 0),
+  release_specific = vapply(fits, function(x) x$release_specific, 0)
 )
-knitr::kable(copy_table, digits = 3, caption = "RAPID on a copied release.")
+# standard error of the difference of two independent shares (300 and 100 records)
+se_diff <- function(x) {
+  sqrt(x$rapid * (1 - x$rapid) / x$n_total +
+       x$holdout$rapid * (1 - x$holdout$rapid) / x$holdout$n)
+}
+copy_table$se_diff <- vapply(fits, se_diff, 0)
+knitr::kable(copy_table, digits = 3,
+             caption = "RAPID on a copied release (records 1 to 300) and on the holdout.")
+cart_text <- if (has_rpart) {
+  sprintf(paste("It flags %s of the copied records and %s of the holdout records. The",
+                "difference, %s, is %.1f standard errors, so this example does not settle",
+                "whether the pruned tree also picks up the copied records."),
+          f3(fits$cart$rapid), f3(fits$cart$holdout$rapid),
+          f3(fits$cart$release_specific),
+          fits$cart$release_specific / se_diff(fits$cart))
+} else {
+  "The package rpart is not installed, so the tree was not fitted here."
+}
 ```
 
-*Generalising attackers* learn how the target depends on the quasi-identifiers. The linear model
-has a handful of parameters and cannot reproduce single records. It flags `r f3(fits$lm$rapid)` of
-the copied records and `r f3(fits$lm$holdout$rapid)` of the holdout records, so it cannot tell the
-copied records from the others. The tree of `model_type = "cart"` is pruned by cross-validation,
-so that its leaves describe groups of records. These attackers measure inference from the
-quasi-identifiers, which any release that keeps the dependence allows, for the persons in the
-original data and for others alike. For a continuous target, the linear model works on the scale
+The columns `holdout` and `release_specific` hold RAPID on the 100 records not used for the
+release and the difference RAPID minus holdout RAPID. The column `se_diff` is the standard error
+of that difference when the flags are treated as independent, as `confint()` does.
+
+*Generalising attackers* learn how the target depends on the quasi-identifiers. Their RAPID
+measures inference from the quasi-identifiers, which any release that keeps the dependence
+allows, for the persons in the original data and for others alike. The linear model is one of
+them. It has a handful of parameters and cannot reproduce single records. It flags
+`r f3(fits$lm$rapid)` of the copied records and `r f3(fits$lm$holdout$rapid)` of the holdout
+records. The difference, `r f3(fits$lm$release_specific)`, is
+`r sprintf("%.1f", abs(fits$lm$release_specific) / se_diff(fits$lm))` standard errors from zero,
+so the linear model does not tell the copied records from the others. The tree of
+`model_type = "cart"` is pruned by cross-validation, which moves it towards the generalising
+end. `r cart_text` For a continuous target, the linear model works on the scale
 that `num_scale = "auto"` chooses. On the income of this example the identity scale fits worse and
 flags fewer records:
 
@@ -439,20 +465,28 @@ update(r_inc, num_scale = "identity")$rapid
 
 The *lookup attacker* (`model_type = "lookup"`) is one fully grown tree that reads off the
 released records with the same key values. It measures whether the release reproduces the values
-of the records. On the copy it flags `r f3(fits$lookup$rapid)` of the records. Its predictions are
+of the records. On the copy it flags `r f3(fits$lookup$rapid)` of the records and on the holdout
+`r f3(fits$lookup$holdout$rapid)`, a difference of
+`r sprintf("%.0f", fits$lookup$release_specific / se_diff(fits$lookup))` standard errors. Its
+predictions are
 concentrated, so its chance level is high (`r f3(fits$lookup$chance)`), and only its excess can be
 read. The print adds a line that says so.
 
 The *random forest* lies between the two, and where it lies depends on ranger's minimum node size
 `min.node.size`, which `rapid()` leaves at ranger's default and reports in the attacker line.
-With node size 1 it flags `r f3(fits$rf_node_1$rapid)` of the copied records, with node size 20
-it flags `r f3(fits$rf_node_20$rapid)`. `?rapid` has a table of the same comparison for a target
+With node size 1 it flags `r f3(fits$rf_node_1$rapid)` of the copied records and
+`r f3(fits$rf_node_1$holdout$rapid)` of the holdout records. With node size 20 it flags
+`r f3(fits$rf_node_20$rapid)` and `r f3(fits$rf_node_20$holdout$rapid)`. The release-specific
+part shrinks with the node size, from `r f3(fits$rf_node_1$release_specific)` to
+`r f3(fits$rf_node_20$release_specific)`. `?rapid` has a table of the same comparison for a target
 that does not depend on the quasi-identifiers, where every flag beyond chance comes from a
 reproduced record.
 
 A small RAPID or a small excess under one attacker does not show that the release is safe. It
 shows that this attacker, with these quasi-identifiers and this rule, infers little. A copied
-release looks harmless to the linear model, as the table shows.
+release looks no riskier to the linear model than an independent release. On the copy it flags
+`r f3(fits$lm$rapid)` of the records, on the independent release of the running example
+`r f3(r_inc$rapid)`.
 
 # Model suite and worst case {#sec-suite}
 
