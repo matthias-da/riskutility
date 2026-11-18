@@ -224,3 +224,27 @@ test_that("rumap errors on invalid input", {
   d <- make_test_data()
   expect_error(rumap(d$original, list()), "non-empty")
 })
+
+test_that("rumap computes rapid for a categorical target", {
+  skip_if_not_installed("ranger")
+  orig <- sim_categorical(n = 120, seed = 3)
+  syn <- noisy_copy(orig, seed = 4)
+  result <- rumap(orig, syn, risk_measures = "rapid", utility_measures = "pmse",
+                  key_vars = c("x1", "x2"), target_var = "y", seed = 1)
+
+  expect_false(is.na(result$risk[1, "rapid"]))
+})
+
+test_that("rumap rapid is the non-negative excess", {
+  skip_if_not_installed("ranger")
+  orig <- sim_numeric(n = 120, seed = 5)
+  syn <- noisy_copy(orig, seed = 6, shuffle_target = TRUE)
+  result <- rumap(orig, syn, risk_measures = "rapid", utility_measures = "pmse",
+                  key_vars = c("x1", "x2"), target_var = "y", seed = 1)
+
+  set.seed(1)
+  fit <- rapid(orig, syn, key_vars = c("x1", "x2"), target_var = "y", model_type = "rf",
+               store_predictions = FALSE, verbose = FALSE)
+  expect_gte(result$risk[1, "rapid"], 0)
+  expect_equal(unname(result$risk[1, "rapid"]), max(0, fit$excess), tolerance = 0.1)
+})

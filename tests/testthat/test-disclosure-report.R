@@ -239,3 +239,27 @@ test_that("disclosure_report counts pass/warn correctly", {
   expect_equal(report$n_pass + report$n_warn + report$n_error + report$n_na,
                report$n_total)
 })
+
+test_that("disclosure_report RAPID status follows the permutation test", {
+  skip_if_not_installed("ranger")
+  orig <- sim_numeric(n = 120, seed = 7)
+  keys <- c("x1", "x2")
+  run <- function(syn) {
+    disclosure_report(orig, syn, key_vars = keys, target_var = "y",
+                      compute = "rapid", seed = 11, verbose = FALSE)
+  }
+  row <- function(rep) rep$summary[rep$summary$metric == "RAPID", ]
+
+  uninf <- run(noisy_copy(orig, seed = 8, shuffle_target = TRUE))
+  expect_s3_class(uninf$results$rapid_test, "rapid_test")
+  expect_gt(uninf$results$rapid_test$p_value, 0.05)
+  expect_equal(row(uninf)$status, "PASS")
+
+  inf <- run(noisy_copy(orig, sd = 1, seed = 9))
+  expect_lte(inf$results$rapid_test$p_value, 0.05)
+  expect_equal(row(inf)$status, "WARNING")
+  expect_equal(row(inf)$ratio, round(inf$results$rapid_test$excess, 4))
+  expect_match(row(inf)$reference, "^chance ")
+  expect_true(all(c("chance", "excess", "p_value") %in%
+                    names(summary(inf)$attribution_results$rapid)))
+})
