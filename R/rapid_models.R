@@ -177,6 +177,14 @@
   (seq_len(n_quantiles) - 0.5) / n_quantiles
 }
 
+# Calls the function named by `fun` (a symbol or `pkg::name`) with `args` in the
+# caller's frame. Unlike do.call(), the call of the fit then holds the name of
+# the function and, where `args` give them as symbols, the names of the data,
+# not their values, so that a stored model stays small.
+.learner_call <- function(fun, args, env = parent.frame()) {
+  eval(as.call(c(fun, args)), env)
+}
+
 # Stores the class levels of the target with the fit
 .learner_tag <- function(fit, y) {
   attr(fit, "y_levels") <- if (is.factor(y)) levels(y) else NULL
@@ -248,11 +256,11 @@
                                           metric = "symmetric") {
   y <- data[[target_var]]
   data <- .learner_drop_unused(data, target_var)
-  defaults <- list(formula = formula, data = data, probability = is.factor(y),
+  defaults <- list(formula = formula, data = quote(data), probability = is.factor(y),
                    importance = "impurity")
   # The grid of a numeric target comes from a quantile regression forest
   if (!is.factor(y) && num_dist %in% c("auto", "grid")) defaults$quantreg <- TRUE
-  fit <- do.call(ranger::ranger, utils::modifyList(defaults, learner$args))
+  fit <- .learner_call(quote(ranger::ranger), utils::modifyList(defaults, learner$args))
   .learner_tag(fit, y)
 }
 
@@ -304,7 +312,8 @@
   fit_on <- function(log_scale, rows = rep(TRUE, length(y))) {
     d <- data[rows, , drop = FALSE]
     if (log_scale) d[[target_var]] <- log(d[[target_var]])
-    do.call(stats::lm, utils::modifyList(list(formula = formula, data = d), learner$args))
+    .learner_call(quote(stats::lm),
+                  utils::modifyList(list(formula = formula, data = quote(d)), learner$args))
   }
   n_nonpositive <- sum(y <= 0, na.rm = TRUE)
 
@@ -385,14 +394,14 @@
     .rapid_abort("model_type = \"cart\" needs a target with at least two classes.", "model")
   }
   data <- .learner_drop_unused(data, target_var)
-  defaults <- list(formula = formula, data = data,
+  defaults <- list(formula = formula, data = quote(data),
                    method = if (is.factor(y)) "class" else "anova")
   # Grown large and pruned by cross-validation; a control object of the user
   # replaces these three values altogether.
   if (is.null(learner$args$control)) {
     defaults <- c(defaults, list(cp = 0, minbucket = 5, xval = 10))
   }
-  fit <- do.call(rpart::rpart, utils::modifyList(defaults, learner$args))
+  fit <- .learner_call(quote(rpart::rpart), utils::modifyList(defaults, learner$args))
 
   pruned <- isTRUE(learner$prune)
   if (pruned) {
@@ -580,8 +589,9 @@
                    .rapid_learners_for("categorical", exclude = "logit"), "."), "model")
   }
   .learner_check_single_level(learner, formula, data)
-  fit <- do.call(stats::glm, utils::modifyList(
-    list(formula = formula, data = data, family = stats::binomial()), learner$args))
+  fit <- .learner_call(quote(stats::glm), utils::modifyList(
+    list(formula = formula, data = quote(data), family = quote(stats::binomial())),
+    learner$args))
   .learner_tag(fit, y)
 }
 
@@ -707,10 +717,10 @@
   y <- data[[target_var]]
   data <- .learner_drop_unused(data, target_var)
   n_keys <- length(attr(stats::terms(formula, data = data), "term.labels"))
-  defaults <- list(formula = formula, data = data, probability = is.factor(y),
+  defaults <- list(formula = formula, data = quote(data), probability = is.factor(y),
                    num.trees = 1, replace = FALSE, sample.fraction = 1, min.node.size = 1,
                    mtry = n_keys)
-  fit <- do.call(ranger::ranger, utils::modifyList(defaults, learner$args))
+  fit <- .learner_call(quote(ranger::ranger), utils::modifyList(defaults, learner$args))
   .learner_tag(fit, y)
 }
 
@@ -938,7 +948,8 @@ print.rapid_learner <- function(x, ...) {
                                               metric = "symmetric") {
   y <- data[[target_var]]
   data <- .learner_drop_unused(data, target_var)
-  fit <- do.call(learner$fit, c(list(formula, data), learner$args))
+  fit_fun <- learner$fit
+  fit <- .learner_call(quote(fit_fun), c(list(formula, quote(data)), learner$args))
   if (is.null(fit)) .learner_bad_output(learner, "fit", "returned NULL")
   .learner_tag(fit, y)
 }

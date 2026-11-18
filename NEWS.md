@@ -195,6 +195,8 @@ Several defaults change reported values. Each item below gives the call that rep
   for `"lm"`, `"logit"` and `"gbm"`, and an unknown `num_epsilon_type`.
 * `rapid_synthesizer_cv(seed = )` failed with a synthesizer that has no `seed` argument. Such a
   synthesizer now draws from the random stream the seed started.
+* The fitted model kept with `store_model = TRUE` held the synthetic data and the fitting
+  function in its call, so that `print(x$model)` printed the data. The call now names them.
 * The references of `?rapid` cited the R-U map paper. They now cite the RAPID paper and
   Meinshausen (2006).
 

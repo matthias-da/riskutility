@@ -569,3 +569,23 @@ test_that("print() tells the user to read the excess", {
               n_perm = 3, seed = 1)
   expect_false(any(grepl("Lookup attacker", format(r2))))
 })
+
+test_that("fitted models do not carry the data in their call", {
+  skip_if_not_installed("rpart")
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  call_size <- function(fit) sum(nchar(deparse(fit$model$call)))
+  for (m in c("lm", "rf", "cart", "lookup")) {
+    r <- rapid(o, s, qi, "y", model_type = m, store_model = TRUE, n_perm = 0, seed = 1)
+    expect_lt(call_size(r), 300, label = m)
+  }
+  oc <- sim_categorical(150)
+  oc$y <- factor(ifelse(oc$y == "a", "a", "b"))
+  r <- rapid(oc, oc, qi, "y", model_type = "logit", store_model = TRUE, n_perm = 0)
+  expect_lt(call_size(r), 300, label = "logit")
+  my_lm <- rapid_learner("my_lm", fit = stats::lm,
+                         predict_point = function(fit, newdata) predict(fit, newdata))
+  r <- rapid(o, s, qi, "y", model_type = my_lm, num_eval_method = "point",
+             store_model = TRUE, n_perm = 0)
+  expect_lt(call_size(r), 300, label = "custom")
+})
