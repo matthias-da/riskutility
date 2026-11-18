@@ -46,8 +46,8 @@
 #' @param num_tau numeric, threshold \eqn{\tau}{tau} on the normalized gain of a
 #'   continuous target under the band rule (default 0.3), at least 0 and below
 #'   1. A value outside this range is an error of class
-#'   \code{"rapid_error_input"}. The point rule ignores it: there the tolerance is
-#'   the threshold.
+#'   \code{"rapid_error_input"}. The point rule ignores it, with a warning when
+#'   it is given: there the tolerance is the threshold.
 #' @param num_dist character, how the predictive distribution of a continuous
 #'   target is represented: \code{"auto"} (default), \code{"grid"} or
 #'   \code{"exact"}. See the section "Predictive distribution per attacker".
@@ -101,7 +101,9 @@
 #'   1} and a rule with a gain over a baseline (\code{"band"},
 #'   \code{"RCS_marginal"}).
 #' @param perm_level numeric between 0 and 1, the quantile of the permuted scores
-#'   used as threshold under \code{threshold_rule = "permutation"} (default 0.95)
+#'   used as threshold under \code{threshold_rule = "permutation"} (default
+#'   0.95). Under a fixed threshold it is ignored, with a warning when it is
+#'   given.
 #' @param holdout data frame of original records that were not used to generate
 #'   the release (default \code{NULL}, the holdout of a \code{synth_pair} is used
 #'   when there is one). They are prepared like \code{X} and scored with the
@@ -227,7 +229,8 @@
 #'     \code{verbose}, and the deprecated \code{return_all_records}.}
 #' }
 #' Arguments of the other type of target are ignored with a warning of class
-#' \code{"rapid_warning_ignored_argument"}.
+#' \code{"rapid_warning_ignored_argument"}, and so are \code{num_tau} under the
+#' point rule and \code{perm_level} under a fixed threshold.
 #'
 #' @section The measure:
 #' Record \eqn{i} of the original data has the true value \eqn{y_i} and the
@@ -739,6 +742,20 @@ rapid.default <- function(X, Y,
     cat = list(method = cat_eval_method, tau = cat_tau)
   )
   .rapid_check_perm(n_perm, threshold_rule, perm_level, rule)
+
+  # Arguments that the rule or the threshold rule does not use
+  tau_name <- if (is_categorical) "cat_tau" else "num_tau"
+  used <- .rapid_rule_spec(rule$method)$threshold_arg
+  if (tau_name %in% given && !identical(used, tau_name)) {
+    .rapid_warn(c("Argument '", tau_name, "' is ignored: the rule \"", rule$method,
+                  "\" has no gain threshold, its threshold is '", used, "'."),
+                "ignored_argument")
+  }
+  if ("perm_level" %in% given && threshold_rule == "fixed") {
+    .rapid_warn(c("Argument 'perm_level' is ignored: it sets the threshold under ",
+                  "threshold_rule = \"permutation\" only, and the threshold here is fixed."),
+                "ignored_argument")
+  }
   list(rule = rule, n_perm = n_perm, threshold_rule = threshold_rule, perm_level = perm_level)
 }
 

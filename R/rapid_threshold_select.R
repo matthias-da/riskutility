@@ -18,7 +18,10 @@
 #'
 #' On the data, \code{rapid_threshold_select()} first calls \code{rapid()} with
 #' the arguments in \code{...} and \code{n_perm = 0}, as \code{\link{rapid_test}}
-#' does.
+#' does. The grid that the rule does not use (\code{epsilon_range} for a rule
+#' that flags scores above the threshold, \code{tau_range} for the point rule)
+#' is ignored with a warning of class \code{"rapid_warning_ignored_argument"}
+#' when it is given.
 #'
 #' A threshold counts as significant when the observed RAPID is above the
 #' \code{1 - alpha} quantile (type 7 of \code{\link[stats]{quantile}()}) of the
@@ -127,6 +130,13 @@ rapid_threshold_select.rapid <- function(X, tau_range = seq(0.05, 0.95, by = 0.0
   .rapid_check_test_args(n_permutations, alpha)
   rule <- X$rule
   above <- rule$direction == "above"
+  used <- if (above) "tau_range" else "epsilon_range"
+  unused <- if (above) "epsilon_range" else "tau_range"
+  if (if (above) !missing(epsilon_range) else !missing(tau_range)) {
+    .rapid_warn(c("Argument '", unused, "' is ignored: the rule \"", rule$method,
+                  "\" flags scores ", if (above) "above" else "below", " the threshold, ",
+                  "so the grid is '", used, "'."), "ignored_argument")
+  }
   thresholds <- if (above) tau_range else epsilon_range
   if (!is.numeric(thresholds) || length(thresholds) == 0 || anyNA(thresholds)) {
     .rapid_abort(c("'", if (above) "tau_range" else "epsilon_range",
@@ -187,8 +197,12 @@ rapid_threshold_select.default <- function(X, Y, key_vars, target_var, ...,
                                            n_permutations = 199, alpha = 0.05,
                                            seed = NULL) {
   fit <- .rapid_fit_for(match.call(), parent.frame())
-  rapid_threshold_select(fit, tau_range = tau_range, epsilon_range = epsilon_range,
-                         n_permutations = n_permutations, alpha = alpha, seed = seed)
+  # Only the grids that were given, so that the object method can warn about one
+  # the rule does not use
+  args <- list(fit, n_permutations = n_permutations, alpha = alpha, seed = seed)
+  if (!missing(tau_range)) args$tau_range <- tau_range
+  if (!missing(epsilon_range)) args$epsilon_range <- epsilon_range
+  do.call(rapid_threshold_select, args)
 }
 
 #' The object rescored at a threshold, with the threshold in its call

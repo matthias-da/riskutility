@@ -9,7 +9,9 @@
 #'
 #' \code{rapid_test()} works on a fitted \code{\link{rapid}} object or on the
 #' data. On the data it first calls \code{rapid()} with the arguments in
-#' \code{...} and \code{n_perm = 0}, then tests that object. The scoring rule is
+#' \code{...} and \code{n_perm = 0}, then tests that object. A given
+#' \code{n_perm} or \code{threshold_rule} is passed on instead, so that
+#' \code{threshold_rule = "permutation"} works on the data as well. The scoring rule is
 #' part of the object: change it with \code{\link[=update.rapid]{update}()}.
 #' \code{rapid_test(rapid(X, Y, ..., seed = s, n_perm = 0), seed = s)} equals
 #' \code{rapid_test(X, Y, ..., seed = s)}.
@@ -324,15 +326,17 @@ as.data.frame.rapid_test <- function(x, row.names = NULL, optional = FALSE, ...)
 #' Fit the rapid object for a data method of rapid_test() or rapid_threshold_select()
 #'
 #' Turns the matched call of the data method into a call of `rapid()` with the
-#' caller's expressions and `n_perm = 0`, so that the object stores a call that
-#' can be evaluated again. `seed` stays in the call and seeds the fit.
+#' caller's expressions, so that the object stores a call that can be evaluated
+#' again. `seed` stays in the call and seeds the fit. The fit skips its own
+#' permutations (`n_perm = 0`) unless the call gives `n_perm` or
+#' `threshold_rule`.
 #' @param call `match.call()` of the data method.
 #' @param env The caller's frame.
 #' @noRd
 .rapid_fit_for <- function(call, env) {
   call <- call[!names(call) %in% c("n_permutations", "alpha", "tau_range", "epsilon_range")]
   call[[1L]] <- rapid
-  call$n_perm <- 0
+  if (!any(c("n_perm", "threshold_rule") %in% names(call))) call$n_perm <- 0
   eval(call, env)
 }
 

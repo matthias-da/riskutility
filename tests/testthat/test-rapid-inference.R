@@ -212,6 +212,24 @@ test_that("NA strategy is the same in rapid() and rapid_test()", {
   expect_identical(nobs(r), 146L)
 })
 
+test_that("the data interface of rapid_test() keeps a given n_perm", {
+  o <- sim_numeric(100)
+  s <- noisy_copy(o, seed = 2)
+  t <- rapid_test(o, s, qi, "y", model_type = "lm", n_perm = 5, n_permutations = 9, seed = 1)
+  expect_identical(t$observed_rapid$n_perm, 5)
+  expect_false(is.na(t$observed_rapid$chance))
+  # A permutation threshold works through the data interface
+  tp <- rapid_test(o, s, qi, "y", model_type = "lm", threshold_rule = "permutation",
+                   n_permutations = 9, seed = 1)
+  expect_identical(tp$observed_rapid$threshold_rule, "permutation")
+  expect_identical(tp$statistic,
+                   rapid(o, s, qi, "y", model_type = "lm", threshold_rule = "permutation",
+                         seed = 1)$rapid)
+  # Without n_perm the fit skips the permutations, as documented
+  t0 <- rapid_test(o, s, qi, "y", model_type = "lm", n_permutations = 9, seed = 1)
+  expect_identical(t0$observed_rapid$n_perm, 0)
+})
+
 test_that("format, print and summary of a rapid_test", {
   t <- rapid_test(lm_fit(), n_permutations = 19, seed = 1)
   out <- utils::capture.output(res <- withVisible(print(t)))
@@ -276,6 +294,28 @@ test_that("point rule selects the smallest significant epsilon", {
   expect_identical(sel$observed_rapid$rule$threshold, sel$threshold_star)
   expect_identical(sel$observed_rapid$rule$epsilon, sel$threshold_star)
   expect_identical(sel$rapid, sel$observed_rapid$rapid)
+})
+
+test_that("threshold selection warns about the grid the rule does not use", {
+  w <- expect_warning(rapid_threshold_select(lm_fit(), epsilon_range = c(0.05, 0.1),
+                                             n_permutations = 9, seed = 1),
+                      class = "rapid_warning_ignored_argument")
+  expect_match(conditionMessage(w), "'epsilon_range'", fixed = TRUE)
+  expect_match(conditionMessage(w), "tau_range", fixed = TRUE)
+  w <- expect_warning(rapid_threshold_select(lm_fit(num_eval_method = "point"),
+                                             tau_range = c(0.2, 0.4), n_permutations = 9,
+                                             seed = 1),
+                      class = "rapid_warning_ignored_argument")
+  expect_match(conditionMessage(w), "'tau_range'", fixed = TRUE)
+  # The data interface passes on only the grid that was given
+  o <- sim_numeric(100)
+  s <- noisy_copy(o, seed = 2)
+  expect_no_warning(rapid_threshold_select(o, s, qi, "y", model_type = "lm",
+                                           tau_range = c(0.2, 0.4), n_permutations = 9,
+                                           seed = 1))
+  expect_warning(rapid_threshold_select(o, s, qi, "y", model_type = "lm",
+                                        epsilon_range = 0.1, n_permutations = 9, seed = 1),
+                 regexp = "'epsilon_range'", class = "rapid_warning_ignored_argument")
 })
 
 test_that("threshold_star is NA when nothing is significant", {

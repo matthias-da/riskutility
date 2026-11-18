@@ -115,7 +115,9 @@ the test needs no refit.
 \details{
 \code{rapid_test()} works on a fitted \code{\link{rapid}} object or on the
 data. On the data it first calls \code{rapid()} with the arguments in
-\code{...} and \code{n_perm = 0}, then tests that object. The scoring rule is
+\code{...} and \code{n_perm = 0}, then tests that object. A given
+\code{n_perm} or \code{threshold_rule} is passed on instead, so that
+\code{threshold_rule = "permutation"} works on the data as well. The scoring rule is
 part of the object: change it with \code{\link[=update.rapid]{update}()}.
 \code{rapid_test(rapid(X, Y, ..., seed = s, n_perm = 0), seed = s)} equals
 \code{rapid_test(X, Y, ..., seed = s)}.

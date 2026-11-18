@@ -98,8 +98,8 @@ relative metrics (default 0.01)}
 continuous target under the band rule (default 0.3), at least 0 and below
 \enumerate{
 \item A value outside this range is an error of class
-\code{"rapid_error_input"}. The point rule ignores it: there the tolerance is
-the threshold.
+\code{"rapid_error_input"}. The point rule ignores it, with a warning when
+it is given: there the tolerance is the threshold.
 }}
 
 \item{num_dist}{character, how the predictive distribution of a continuous
@@ -164,7 +164,9 @@ threshold of the rule. \code{"permutation"} replaces it by the
 \code{"RCS_marginal"}).}
 
 \item{perm_level}{numeric between 0 and 1, the quantile of the permuted scores
-used as threshold under \code{threshold_rule = "permutation"} (default 0.95)}
+used as threshold under \code{threshold_rule = "permutation"} (default
+0.95). Under a fixed threshold it is ignored, with a warning when it is
+given.}
 
 \item{holdout}{data frame of original records that were not used to generate
 the release (default \code{NULL}, the holdout of a \code{synth_pair} is used
@@ -301,7 +303,8 @@ randomly reassigned true values, and the excess of RAPID over it.
 \code{verbose}, and the deprecated \code{return_all_records}.}
 }
 Arguments of the other type of target are ignored with a warning of class
-\code{"rapid_warning_ignored_argument"}.
+\code{"rapid_warning_ignored_argument"}, and so are \code{num_tau} under the
+point rule and \code{perm_level} under a fixed threshold.
 }
 
 \section{The measure}{

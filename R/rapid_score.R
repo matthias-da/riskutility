@@ -114,24 +114,29 @@
 # ---- Rules -------------------------------------------------------------------
 
 # Properties of each rule. This table and the `.rule_score()` methods are the
-# only places that know the rules by name.
+# only places that know the rules by name. `threshold_arg` is the argument of
+# rapid() that sets the threshold.
 .rapid_rule_spec <- function(method) {
   switch(as.character(method)[1],
     band = list(score_var = "r", direction = "above", gain = TRUE, numeric = TRUE,
-                score_label = "Normalized Gain", default = 0.3, tau_arg = "num_tau"),
+                score_label = "Normalized Gain", default = 0.3,
+                threshold_arg = "num_tau"),
     point = list(score_var = "error", direction = "below", gain = FALSE, numeric = TRUE,
-                 score_label = "Prediction Error", default = NULL),
+                 score_label = "Prediction Error", default = NULL,
+                 threshold_arg = "num_epsilon"),
     RCS_marginal = list(score_var = "r", direction = "above", gain = TRUE, numeric = FALSE,
-                        score_label = "Normalized Gain", default = 0.3, tau_arg = "cat_tau",
+                        score_label = "Normalized Gain", default = 0.3,
+                        threshold_arg = "cat_tau",
                         # A threshold of 1 or more belongs to the rule of 0.2.0
                         above_one = c(" cat_tau = 1 was the default of cat_eval_method = ",
                                       "\"RCS_conditional\", the rule of riskutility 0.2.0. ",
                                       "Add cat_eval_method = \"RCS_conditional\" for that ",
                                       "rule.")),
     RCS_conditional = list(score_var = "ratio", direction = "above", gain = FALSE,
-                           numeric = FALSE, score_label = "Relative Score", default = 1),
+                           numeric = FALSE, score_label = "Relative Score", default = 1,
+                           threshold_arg = "cat_tau"),
     NCE = list(score_var = "nce", direction = "above", gain = FALSE, numeric = FALSE,
-               score_label = "Risk Score", default = 0.5),
+               score_label = "Risk Score", default = 0.5, threshold_arg = "cat_tau"),
     .rapid_abort(c("Unknown evaluation method '", method, "'. Use \"band\" or \"point\" ",
                    "for a numeric target and \"RCS_marginal\", \"RCS_conditional\" or ",
                    "\"NCE\" for a categorical one."), "input")
@@ -169,7 +174,7 @@
   # A gain is at most 1, so a threshold of 1 or more flags nothing, and a
   # negative one flags records on which the attacker does worse than the baseline
   if (spec$gain && (threshold < 0 || threshold >= 1)) {
-    .rapid_abort(c("'", spec$tau_arg, "' is a threshold on a gain between 0 and 1 and must ",
+    .rapid_abort(c("'", spec$threshold_arg, "' is a threshold on a gain between 0 and 1 and must ",
                    "be at least 0 and below 1, not ", format(threshold), ".",
                    if (threshold >= 1) spec$above_one), "input")
   }

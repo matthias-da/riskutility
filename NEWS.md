@@ -121,6 +121,14 @@ Several defaults change reported values. Each item below gives the call that rep
   as aliases. An argument whose name is a near miss of a `rapid()` argument is an error.
 * Errors and warnings of the RAPID functions carry classes (`rapid_error_input`,
   `rapid_warning_deprecated` and others), so that they can be caught by class.
+* An argument that does not apply is ignored with a warning of class
+  `rapid_warning_ignored_argument` that names it and says why: arguments of the other type of
+  target, `num_tau` under the point rule, `perm_level` under a fixed threshold, `num_scale` and
+  `prune` for an attacker without them, and the grid of `rapid_threshold_select()` that the rule
+  does not use (`epsilon_range` for a gain rule, `tau_range` for the point rule).
+* `rapid_test()` and `rapid_threshold_select()` on the data pass a given `n_perm` or
+  `threshold_rule` on to `rapid()`, so that `threshold_rule = "permutation"` works there as well.
+  Without them the fit skips its own permutations, as before.
 * Missing values of the target in `X`, `Y`, the holdout or the `newdata` of `predict()` give a
   warning of class `rapid_warning_missing_target` with their number per data set and their
   treatment. 0.2.0 replaced them without a message. Under the default `na_strategy =

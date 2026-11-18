@@ -576,6 +576,31 @@ test_that("cat_tau with a numeric target warns", {
                  regexp = "num_scale", class = "rapid_warning_ignored_argument")
 })
 
+test_that("num_tau under the point rule and perm_level under a fixed threshold warn", {
+  o <- sim_numeric(80)
+  s <- noisy_copy(o)
+  w <- expect_warning(rapid(o, s, qi, "y", model_type = "lm", num_eval_method = "point",
+                            num_tau = 0.9, n_perm = 0),
+                      class = "rapid_warning_ignored_argument")
+  expect_match(conditionMessage(w), "'num_tau'", fixed = TRUE)
+  expect_match(conditionMessage(w), "num_epsilon", fixed = TRUE)
+  w <- expect_warning(rapid(o, s, qi, "y", model_type = "lm", perm_level = 0.9, n_perm = 2),
+                      class = "rapid_warning_ignored_argument")
+  expect_match(conditionMessage(w), "'perm_level'", fixed = TRUE)
+  expect_match(conditionMessage(w), "threshold_rule = \"permutation\"", fixed = TRUE)
+  # update() gives the warning of a fresh call
+  r <- rapid(o, s, qi, "y", model_type = "lm", num_tau = 0.4, n_perm = 0)
+  expect_warning(update(r, num_eval_method = "point"), regexp = "'num_tau'",
+                 class = "rapid_warning_ignored_argument")
+  # No warning where the arguments are used
+  expect_no_warning(rapid(o, s, qi, "y", model_type = "lm", num_tau = 0.4, n_perm = 0))
+  expect_no_warning(rapid(o, s, qi, "y", model_type = "lm", threshold_rule = "permutation",
+                          perm_level = 0.9, n_perm = 3))
+  oc <- sim_categorical(80)
+  expect_no_warning(rapid(oc, oc, qi, "y", model_type = "rf", cat_tau = 1.2,
+                          cat_eval_method = "RCS_conditional", n_perm = 0))
+})
+
 test_that("return_all_records is deprecated and ignored", {
   o <- sim_numeric(80)
   expect_warning(x <- rapid(o, noisy_copy(o), qi, "y", model_type = "lm",

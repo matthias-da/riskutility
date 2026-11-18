@@ -136,7 +136,10 @@ that of the object and the grid runs over the gain threshold \code{num_tau}.
 
 On the data, \code{rapid_threshold_select()} first calls \code{rapid()} with
 the arguments in \code{...} and \code{n_perm = 0}, as \code{\link{rapid_test}}
-does.
+does. The grid that the rule does not use (\code{epsilon_range} for a rule
+that flags scores above the threshold, \code{tau_range} for the point rule)
+is ignored with a warning of class \code{"rapid_warning_ignored_argument"}
+when it is given.
 
 A threshold counts as significant when the observed RAPID is above the
 \code{1 - alpha} quantile (type 7 of \code{\link[stats]{quantile}()}) of the
