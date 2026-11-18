@@ -332,12 +332,12 @@
         all(y[observed] > 0)) {
       # Compare the Gaussian likelihoods on the original scale: the log model
       # pays the Jacobian sum(log(y)).
-      fit_id <- if (all(observed)) fit else fit_on(FALSE, observed)
-      fit_log <- fit_on(TRUE, observed)
+      fit_id <- if (all(observed)) fit else fit_on(FALSE, which(observed))
+      fit_log <- fit_on(TRUE, which(observed))
       jacobian <- sum(stats::model.response(stats::model.frame(fit_log)))
       if (as.numeric(stats::logLik(fit_log)) - jacobian > as.numeric(stats::logLik(fit_id))) {
         # The log model is fitted on every positive value (imputed ones included)
-        fit <- if (all(observed)) fit_log else fit_on(TRUE, y > 0)
+        fit <- if (all(observed)) fit_log else fit_on(TRUE, which(y > 0))
         scale <- "log"
       }
     }

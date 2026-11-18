@@ -154,8 +154,7 @@ rapid_threshold_select.rapid <- function(X, tau_range = seq(0.05, 0.95, by = 0.0
   # A relative tolerance of 1 or more is read as percent, as num_epsilon in rapid()
   if (!above && !identical(rule$metric, "absolute") && any(thresholds >= 1)) {
     .rapid_warn(c("epsilon_range has values of 1 or more and is read as percent. A relative ",
-                  "tolerance is now a proportion: use epsilon_range = ",
-                  paste(format(range(thresholds) / 100), collapse = " to "), "."),
+                  "tolerance is now a proportion: divide epsilon_range by 100."),
                 "legacy_tolerance")
     thresholds <- thresholds / 100
   }
