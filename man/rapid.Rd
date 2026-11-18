@@ -62,7 +62,9 @@ arguments. A misspelled argument of \code{rapid()} is an error.}
 default), "lm" (linear model), "cart" (decision tree), "gbm" (gradient
 boosting), "logit" (logistic regression, two classes only), or "lookup" (one
 fully grown tree that reads off the synthetic records sharing the key
-values; read its excess over the chance level, not RAPID itself)}
+values; read its excess over the chance level, not RAPID itself). A
+user-defined attacker built with \code{\link{rapid_learner}()} is accepted
+as well.}
 
 \item{num_eval_method}{character, rule for a numeric target: "band"
 (default) compares the probability the attacker puts into the tolerance band
@@ -407,6 +409,7 @@ Visualization for Synthetic Data. \emph{Journal of Official Statistics}.
 Other rapid: 
 \code{\link{confint.rapid}()},
 \code{\link{predict.rapid}()},
+\code{\link{rapid_learner}()},
 \code{\link{rapid_methods}},
 \code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_suite}()},

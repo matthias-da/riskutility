@@ -17,7 +17,8 @@
 
 #' Attacker model
 #'
-#' @param model_type Name of the model, or a `rapid_learner` (returned as is).
+#' @param model_type Name of the model, or a `rapid_learner` (its arguments are
+#'   merged with `user_args`).
 #' @param user_args List of arguments for the backend function; they override
 #'   the defaults of the learner.
 #' @return A list of class `c("rapid_learner_<name>", "rapid_learner")` with
@@ -28,7 +29,12 @@
 #'   `note` (a line the print of a `rapid` object adds, or `NULL`).
 #' @noRd
 .rapid_learner <- function(model_type, user_args = list()) {
-  if (inherits(model_type, "rapid_learner")) return(model_type)
+  if (inherits(model_type, "rapid_learner")) {
+    if (length(user_args) == 0) return(model_type)
+    learner <- model_type
+    learner$args <- utils::modifyList(as.list(learner$args), as.list(user_args))
+    return(.learner_take_options(learner))
+  }
   both <- c("numeric", "categorical")
   spec <- switch(if (is.character(model_type) && length(model_type) == 1) model_type else "",
     rf = list(requires = "ranger", targets = both, dists = c("auto", "grid", "exact"),
@@ -50,15 +56,21 @@
                    paste0("\"", .rapid_learner_names, "\"", collapse = ", "), "."), "model")
   )
   learner <- c(list(name = model_type, args = as.list(user_args)), spec)
-
-  # Learner arguments passed through `...`
   if ("prune" %in% spec$options) learner$prune <- TRUE
+  learner <- structure(learner,
+                       class = c(paste0("rapid_learner_", model_type), "rapid_learner"))
+  .learner_take_options(learner)
+}
+
+# Moves the learner arguments passed through `...` (`.rapid_learner_options`)
+# from `args` into fields of the learner; warns about those it does not know.
+.learner_take_options <- function(learner) {
   for (opt in intersect(.rapid_learner_options, names(learner$args))) {
     value <- learner$args[[opt]]
     learner$args[[opt]] <- NULL
-    if (!opt %in% spec$options) {
+    if (!opt %in% learner$options) {
       .rapid_warn(c("Argument '", opt, "' is ignored: it has no meaning for model_type = \"",
-                    model_type, "\"."), "ignored_argument")
+                    learner$name, "\"."), "ignored_argument")
     } else {
       if (!is.logical(value) || length(value) != 1 || is.na(value)) {
         .rapid_abort(c("'", opt, "' must be TRUE or FALSE."), "input")
@@ -67,8 +79,7 @@
     }
   }
   if (length(learner$args) == 0) learner$args <- list()
-
-  structure(learner, class = c(paste0("rapid_learner_", model_type), "rapid_learner"))
+  learner
 }
 
 # Names of the built-in learners that support a target type
@@ -696,3 +707,250 @@
   n_leaves <- sum(ranger::treeInfo(fit, tree = 1)$terminal)
   paste0("lookup: 1 fully grown tree, ", n_leaves, " leaves")
 }
+
+# ---- User-defined learners -------------------------------------------------------------------
+
+#' User-Defined Attacker Model for RAPID
+#'
+#' Builds an attacker model from functions of the user, for the argument
+#' \code{model_type} of \code{\link{rapid}}, \code{\link{rapid_suite}} and the
+#' functions that fit through \code{rapid()} (\code{\link{rapid_test}},
+#' \code{\link{rapid_threshold_select}}, \code{\link{rapid_qi_contribution}},
+#' \code{\link{rapid_synthesizer_cv}}).
+#'
+#' The functions are called with their arguments by position.
+#' \code{fit(formula, data, ...)} trains the attacker on the synthetic data:
+#' \code{formula} is \code{target ~ key_var1 + key_var2 + ...}, \code{data}
+#' holds the prepared synthetic records (classes of a categorical target that no
+#' synthetic record has are dropped from its levels), and \code{...} are the
+#' arguments given in \code{...} of \code{rapid()}.
+#'
+#' \code{predict_prob(fit, newdata)} returns, for a categorical target, a
+#' matrix with one row per record of \code{newdata} and the class names as
+#' column names; a class missing from the columns gets probability 0.
+#' \code{predict_point(fit, newdata)} returns, for a numeric target, one point
+#' prediction per record. \code{predict_quantiles(fit, newdata, probs)} returns
+#' the predictive distribution as an \code{nrow(newdata) x length(probs)}
+#' matrix of quantiles; the band rule (\code{num_eval_method = "band"}, the
+#' default) needs it, the point rule does not. \code{num_dist = "auto"} and
+#' \code{"grid"} both use these quantiles; \code{"exact"} is not available.
+#'
+#' The output of the functions is checked (dimensions, names, no \code{NA});
+#' a violation is an error of class \code{"rapid_error_model"}. Errors raised
+#' inside the functions are passed on unchanged. Records with a
+#' quasi-identifier level that the synthetic data do not contain are refused
+#' with an error of class \code{"rapid_error_levels"}, before the functions are
+#' called. Variable importance (\code{plot(x, which = 4)}) is not available.
+#'
+#' @param name character, the name of the model; it is the \code{model_type}
+#'   of the \code{rapid} object and the name of the model in a suite
+#' @param fit function \code{(formula, data)} returning the fitted model
+#' @param predict_prob function \code{(fit, newdata)} for a categorical target,
+#'   or \code{NULL}
+#' @param predict_point function \code{(fit, newdata)} for a numeric target, or
+#'   \code{NULL}
+#' @param predict_quantiles function \code{(fit, newdata, probs)} giving the
+#'   predictive distribution of a numeric target, or \code{NULL}
+#' @param requires character vector of packages the functions need; a missing
+#'   one is an error of class \code{"rapid_error_dependency"} (in
+#'   \code{rapid_suite()} the model is skipped)
+#'
+#' @return An object of class \code{c("rapid_learner_custom",
+#'   "rapid_learner")}. Its field \code{targets} is \code{"categorical"} when
+#'   \code{predict_prob} is given and \code{"numeric"} when
+#'   \code{predict_point} is given.
+#'
+#' @seealso \code{\link{rapid}}, \code{\link{rapid_suite}}
+#' @family rapid
+#' @examples
+#' set.seed(1)
+#' X <- data.frame(age = sample(20:60, 100, replace = TRUE),
+#'                 hours = sample(10:50, 100, replace = TRUE))
+#' X$income <- 20000 + 600 * X$age + 300 * X$hours + rnorm(100, 0, 5000)
+#' Y <- X
+#' Y$income <- Y$income + rnorm(100, 0, 3000)
+#'
+#' # A linear model with its normal predictive distribution
+#' my_lm <- rapid_learner(
+#'   "my_lm",
+#'   fit = stats::lm,
+#'   predict_point = function(fit, newdata) predict(fit, newdata),
+#'   predict_quantiles = function(fit, newdata, probs) {
+#'     p <- predict(fit, newdata, se.fit = TRUE)
+#'     sd <- sqrt(p$se.fit^2 + p$residual.scale^2)
+#'     outer(p$fit, rep(1, length(probs))) + outer(sd, qnorm(probs))
+#'   }
+#' )
+#' my_lm
+#' rapid(X, Y, key_vars = c("age", "hours"), target_var = "income",
+#'       model_type = my_lm, n_perm = 3, seed = 1)
+#' @export
+rapid_learner <- function(name, fit, predict_prob = NULL, predict_point = NULL,
+                          predict_quantiles = NULL, requires = character()) {
+  if (!is.character(name) || length(name) != 1 || is.na(name) || !nzchar(name)) {
+    .rapid_abort("'name' must be a single non-empty character string.", "input")
+  }
+  .learner_check_fun(fit, "fit", c("formula", "data"))
+  .learner_check_fun(predict_prob, "predict_prob", c("fit", "newdata"), optional = TRUE)
+  .learner_check_fun(predict_point, "predict_point", c("fit", "newdata"), optional = TRUE)
+  .learner_check_fun(predict_quantiles, "predict_quantiles", c("fit", "newdata", "probs"),
+                     optional = TRUE)
+  if (is.null(predict_prob) && is.null(predict_point)) {
+    .rapid_abort(c("Give 'predict_prob' (categorical target), 'predict_point' (numeric ",
+                   "target), or both."), "input")
+  }
+  if (!is.null(predict_quantiles) && is.null(predict_point)) {
+    .rapid_abort(c("'predict_quantiles' belongs to a numeric target and needs ",
+                   "'predict_point' as well."), "input")
+  }
+  if (!is.character(requires) || anyNA(requires)) {
+    .rapid_abort("'requires' must be a character vector of package names.", "input")
+  }
+  structure(
+    list(name = name, args = list(), requires = requires,
+         targets = c(if (!is.null(predict_point)) "numeric",
+                     if (!is.null(predict_prob)) "categorical"),
+         dists = c("auto", "grid"), options = character(0), unseen_levels = FALSE,
+         note = NULL, fit = fit, predict_prob = predict_prob, predict_point = predict_point,
+         predict_quantiles = predict_quantiles),
+    class = c("rapid_learner_custom", "rapid_learner")
+  )
+}
+
+# A function of the user must have the named arguments, or `...`
+.learner_check_fun <- function(f, what, args, optional = FALSE) {
+  if (optional && is.null(f)) return(invisible(TRUE))
+  if (!is.function(f)) {
+    .rapid_abort(c("'", what, "' must be a function", if (optional) " or NULL", "."), "input")
+  }
+  formals_f <- names(formals(args(f)))
+  missing_args <- setdiff(args, formals_f)
+  if (length(missing_args) > 0 && !"..." %in% formals_f) {
+    .rapid_abort(c("'", what, "' must be a function (", paste(args, collapse = ", "),
+                   "); it has no argument ", paste0("'", missing_args, "'", collapse = ", "),
+                   "."), "input")
+  }
+  invisible(TRUE)
+}
+
+#' @rdname rapid_learner
+#' @param x a \code{rapid_learner} object
+#' @param ... ignored
+#' @export
+format.rapid_learner <- function(x, ...) {
+  c(paste0("RAPID attacker model: ", x$name),
+    paste0("  Targets:  ", paste(x$targets, collapse = ", ")),
+    paste0("  Requires: ", if (length(x$requires) > 0) paste(x$requires, collapse = ", ")
+                           else "no package"))
+}
+
+#' @rdname rapid_learner
+#' @export
+format.rapid_learner_custom <- function(x, ...) {
+  given <- c("fit", "predict_prob", "predict_point", "predict_quantiles")
+  given <- given[!vapply(x[given], is.null, logical(1))]
+  c(NextMethod(), paste0("  User-defined: ", paste(given, collapse = ", ")))
+}
+
+#' @rdname rapid_learner
+#' @export
+print.rapid_learner <- function(x, ...) {
+  cat(format(x, ...), sep = "\n")
+  invisible(x)
+}
+
+# Output of a user's function that breaks its contract
+.learner_bad_output <- function(learner, what, problem) {
+  .rapid_abort(c("'", what, "' of the learner \"", learner$name, "\" ", problem, "."),
+               "model")
+}
+
+#' @exportS3Method .learner_fit rapid_learner_custom
+#' @noRd
+.learner_fit.rapid_learner_custom <- function(learner, formula, data, target_var,
+                                              num_dist = "auto", num_scale = "auto",
+                                              metric = "symmetric") {
+  y <- data[[target_var]]
+  data <- .learner_drop_unused(data, target_var)
+  fit <- do.call(learner$fit, c(list(formula, data), learner$args))
+  .learner_tag(fit, y)
+}
+
+#' @exportS3Method .learner_predict rapid_learner_custom
+#' @noRd
+.learner_predict.rapid_learner_custom <- function(learner, fit, newdata, target_var) {
+  n <- nrow(newdata)
+  levels <- attr(fit, "y_levels")
+  if (is.null(levels)) {
+    p <- learner$predict_point(fit, newdata)
+    if (!is.numeric(p) || length(p) != n) {
+      .learner_bad_output(learner, "predict_point",
+                          paste0("must return one number per record of newdata (", n, ")"))
+    }
+    if (anyNA(p)) .learner_bad_output(learner, "predict_point", "returned NA")
+    return(as.numeric(p))
+  }
+  P <- learner$predict_prob(fit, newdata)
+  if (is.data.frame(P)) P <- as.matrix(P)
+  if (!is.matrix(P) || !is.numeric(P) || nrow(P) != n) {
+    .learner_bad_output(learner, "predict_prob",
+                        paste0("must return a numeric matrix with one row per record ",
+                               "of newdata (", n, ")"))
+  }
+  if (is.null(colnames(P))) {
+    .learner_bad_output(learner, "predict_prob",
+                        "must return a matrix with the class names as column names")
+  }
+  unknown <- setdiff(colnames(P), levels)
+  if (length(unknown) > 0 || anyDuplicated(colnames(P)) > 0) {
+    .learner_bad_output(learner, "predict_prob",
+                        paste0("must have distinct class names of the target as column ",
+                               "names; unknown: ", paste(unknown, collapse = ", ")))
+  }
+  if (anyNA(P)) .learner_bad_output(learner, "predict_prob", "returned NA")
+  .learner_probs(P, levels)
+}
+
+#' @exportS3Method .learner_pdist rapid_learner_custom
+#' @noRd
+.learner_pdist.rapid_learner_custom <- function(learner, fit, newdata, train, target_var,
+                                                num_dist = "auto", n_quantiles = 100) {
+  if (is.null(learner$predict_quantiles)) {
+    # Only a rule that asks for the distribution fails (the point rule does not)
+    return(.pdist_unavailable(nrow(newdata), c(
+      "The band rule needs a predictive distribution, but the learner \"", learner$name,
+      "\" has no 'predict_quantiles'. Give it to rapid_learner() or use ",
+      "num_eval_method = \"point\".")))
+  }
+  probs <- .pdist_probs(n_quantiles)
+  Q <- learner$predict_quantiles(fit, newdata, probs)
+  if (is.data.frame(Q)) Q <- as.matrix(Q)
+  if (!is.matrix(Q) || !is.numeric(Q) || nrow(Q) != nrow(newdata) ||
+      ncol(Q) != length(probs)) {
+    .learner_bad_output(learner, "predict_quantiles",
+                        paste0("must return a numeric matrix with one row per record (",
+                               nrow(newdata), ") and one column per probability (",
+                               length(probs), ")"))
+  }
+  if (anyNA(Q)) .learner_bad_output(learner, "predict_quantiles", "returned NA")
+  .pdist_grid(unname(Q))
+}
+
+#' @exportS3Method .learner_describe rapid_learner_custom
+#' @noRd
+.learner_describe.rapid_learner_custom <- function(learner, fit) {
+  paste0(learner$name, ": user-defined learner")
+}
+
+#' A predictive distribution that is not available
+#'
+#' Stands in for the distribution of a learner that has none, so that rules
+#' without a distribution work; the mass raises `msg` as a `"model"` error.
+#' @noRd
+.pdist_unavailable <- function(n, msg) {
+  structure(list(n = n, msg = msg), class = c("rapid_pdist_unavailable", "rapid_pdist"))
+}
+
+#' @exportS3Method .pdist_mass rapid_pdist_unavailable
+#' @noRd
+.pdist_mass.rapid_pdist_unavailable <- function(pd, lo, hi) .rapid_abort(pd$msg, "model")

@@ -15,7 +15,9 @@
 #'   default), "lm" (linear model), "cart" (decision tree), "gbm" (gradient
 #'   boosting), "logit" (logistic regression, two classes only), or "lookup" (one
 #'   fully grown tree that reads off the synthetic records sharing the key
-#'   values; read its excess over the chance level, not RAPID itself)
+#'   values; read its excess over the chance level, not RAPID itself). A
+#'   user-defined attacker built with \code{\link{rapid_learner}()} is accepted
+#'   as well.
 #' @param num_eval_method character, rule for a numeric target: "band"
 #'   (default) compares the probability the attacker puts into the tolerance band
 #'   around the true value with the share of original values in that band;
@@ -390,7 +392,9 @@ rapid.default <- function(X, Y,
   given <- names(call)[-1L]
 
   # Choices
-  model_type <- .rapid_choice(model_type, .rapid_learner_names, "model_type")
+  if (!inherits(model_type, "rapid_learner")) {
+    model_type <- .rapid_choice(model_type, .rapid_learner_names, "model_type")
+  }
   num_dist <- .rapid_choice(num_dist, c("auto", "grid", "exact"), "num_dist")
   num_scale <- .rapid_choice(num_scale, c("auto", "identity", "log"), "num_scale")
   na_strategy <- .rapid_choice(na_strategy, c("constant", "drop", "median"), "na_strategy")
@@ -857,7 +861,7 @@ validate_rapid <- function(x) {
 #' @noRd
 .plot_qi_importance <- function(x, top_n = 15) {
   .rapid_require(x, c("version", "model"))
-  learner <- if (!is.null(x$attack)) x$attack$learner else .rapid_learner(x$model_type)
+  learner <- if (!is.null(x$attack)) x$attack$learner else x$predictor$learner
   imp <- .learner_importance(learner, x$model)
 
   if (is.null(imp) || length(imp) == 0) {

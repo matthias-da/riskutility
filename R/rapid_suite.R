@@ -32,7 +32,10 @@
 #' @param target_var character, name of the sensitive target variable
 #' @param model_types character vector of attacker models, any of
 #'   \code{"rf"}, \code{"lm"}, \code{"cart"}, \code{"gbm"}, \code{"logit"},
-#'   \code{"lookup"} (default \code{c("rf", "cart", "gbm", "lookup")})
+#'   \code{"lookup"} (default \code{c("rf", "cart", "gbm", "lookup")}); a
+#'   \code{\link{rapid_learner}()} object, or a list of names and such objects,
+#'   is accepted as well. The models are named by their \code{name}, which must
+#'   be distinct.
 #' @param ... for the data methods, arguments of \code{\link{rapid}} that go to
 #'   every model (for example \code{num_tau}, \code{n_perm}); the old argument
 #'   names are accepted. For the \code{rapid} method, further \code{rapid}
@@ -121,24 +124,20 @@ rapid_suite.default <- function(X, Y, key_vars, target_var,
     if (missing(target_var)) NULL else target_var,
     list(...)
   )
-  if (!is.character(model_types) || length(model_types) == 0 || anyNA(model_types) ||
-      anyDuplicated(model_types) > 0 || !all(model_types %in% .rapid_learner_names)) {
-    .rapid_abort(c("'model_types' must be distinct names out of: ",
-                   paste0("\"", .rapid_learner_names, "\"", collapse = ", "), "."), "input")
-  }
+  learners <- .rapid_suite_learners(model_types)
 
   # Decide before fitting which models can run
   is_categorical <- .rapid_var_kind(inputs$X[[inputs$target_var]], inputs$target_var,
                                     "X") == "categorical"
   skipped <- character(0)
-  for (m in model_types) {
+  for (m in names(learners)) {
     why <- tryCatch({
-      .learner_check(.rapid_learner(m), is_categorical, "auto")
+      .learner_check(.rapid_learner(learners[[m]]), is_categorical, "auto")
       NULL
     }, rapid_error_dependency = conditionMessage, rapid_error_model = conditionMessage)
     if (!is.null(why)) skipped[m] <- why
   }
-  usable <- setdiff(model_types, names(skipped))
+  usable <- setdiff(names(learners), names(skipped))
   if (length(skipped) > 0) {
     msg <- paste0("Skipped model(s) ", paste(names(skipped), collapse = ", "), ": ",
                   paste(skipped, collapse = " "))
@@ -148,11 +147,40 @@ rapid_suite.default <- function(X, Y, key_vars, target_var,
 
   fits <- lapply(usable, function(m) {
     do.call(rapid, c(list(inputs$X, inputs$Y, key_vars = inputs$key_vars,
-                          target_var = inputs$target_var, model_type = m, seed = seed),
+                          target_var = inputs$target_var, model_type = learners[[m]],
+                          seed = seed),
                      inputs$dots))
   })
   names(fits) <- usable
   .rapid_suite_new(fits)
+}
+
+#' The attacker models of a suite, named by their names
+#'
+#' @param model_types A character vector of built-in names, a `rapid_learner`,
+#'   or a list of both.
+#' @return Named list of names (built-in learners) and `rapid_learner` objects.
+#' @noRd
+.rapid_suite_learners <- function(model_types) {
+  if (inherits(model_types, "rapid_learner")) model_types <- list(model_types)
+  if (is.character(model_types)) model_types <- as.list(model_types)
+  ok <- is.list(model_types) && length(model_types) > 0 &&
+    all(vapply(model_types, function(m) {
+      inherits(m, "rapid_learner") ||
+        (is.character(m) && length(m) == 1 && !is.na(m) && m %in% .rapid_learner_names)
+    }, logical(1)))
+  if (!ok) {
+    .rapid_abort(c("'model_types' must be names out of ",
+                   paste0("\"", .rapid_learner_names, "\"", collapse = ", "),
+                   ", rapid_learner() objects, or a list of both."), "input")
+  }
+  learner_names <- vapply(model_types, function(m) if (is.character(m)) m else m$name,
+                          character(1))
+  if (anyDuplicated(learner_names) > 0) {
+    .rapid_abort(c("The models in 'model_types' must have distinct names; '",
+                   learner_names[anyDuplicated(learner_names)], "' occurs twice."), "input")
+  }
+  stats::setNames(model_types, learner_names)
 }
 
 #' @rdname rapid_suite

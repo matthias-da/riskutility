@@ -101,6 +101,7 @@ illustrated in the case of the binomial. \emph{Biometrika}, 26(4), 404--413.
 Other rapid: 
 \code{\link{predict.rapid}()},
 \code{\link{rapid}()},
+\code{\link{rapid_learner}()},
 \code{\link{rapid_methods}},
 \code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_suite}()},

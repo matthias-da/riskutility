@@ -64,7 +64,10 @@ objects.}
 
 \item{model_types}{character vector of attacker models, any of
 \code{"rf"}, \code{"lm"}, \code{"cart"}, \code{"gbm"}, \code{"logit"},
-\code{"lookup"} (default \code{c("rf", "cart", "gbm", "lookup")})}
+\code{"lookup"} (default \code{c("rf", "cart", "gbm", "lookup")}); a
+\code{\link{rapid_learner}()} object, or a list of names and such objects,
+is accepted as well. The models are named by their \code{name}, which must
+be distinct.}
 
 \item{seed}{random seed, passed to every \code{rapid()} call (default NULL:
 the random stream is left alone)}
@@ -157,6 +160,7 @@ Other rapid:
 \code{\link{confint.rapid}()},
 \code{\link{predict.rapid}()},
 \code{\link{rapid}()},
+\code{\link{rapid_learner}()},
 \code{\link{rapid_methods}},
 \code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_synthesizer_cv}()},
