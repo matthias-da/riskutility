@@ -589,3 +589,39 @@ test_that("fitted models do not carry the data in their call", {
              store_model = TRUE, n_perm = 0)
   expect_lt(call_size(r), 300, label = "custom")
 })
+
+test_that("a factor level the release does not use is no single value for gbm", {
+  skip_if_not_installed("xgboost")
+  o <- sim_numeric(150)
+  o$g <- factor(ifelse(o$x2 > 0, "a", "b"))
+  s <- noisy_copy(o, seed = 2)
+  s$g <- factor("a", levels = c("a", "b"))
+  r <- rapid(o, s, c("x1", "g"), "y", model_type = "gbm", n_perm = 0, seed = 1, nrounds = 10)
+  expect_s3_class(r, "rapid")
+  oc <- to_classes(o)
+  sc <- to_classes(s, ref = o)
+  expect_s3_class(rapid(oc, sc, c("x1", "g"), "y", model_type = "gbm", n_perm = 0, seed = 1,
+                        nrounds = 10), "rapid")
+  # The default suite runs every model on such a release
+  skip_if_not_installed("rpart")
+  su <- rapid_suite(o, s, key_vars = c("x1", "g"), target_var = "y", n_perm = 0, seed = 1)
+  expect_identical(names(su$fits), c("rf", "cart", "gbm", "lookup"))
+  # A factor with one level is still refused
+  o1 <- o
+  o1$g <- factor("a")
+  s1 <- noisy_copy(o1, seed = 2)
+  expect_error(rapid(o1, s1, c("x1", "g"), "y", model_type = "gbm", n_perm = 0),
+               regexp = "'g'", class = "rapid_error_model")
+})
+
+test_that("a release without observed target values is a classed error for lm", {
+  o <- sim_numeric(80)
+  s <- noisy_copy(o, seed = 2)
+  s$y <- NA_real_
+  err <- expect_warning(expect_error(rapid(o, s, qi, "y", model_type = "lm", n_perm = 0),
+                                     class = "rapid_error_model"),
+                        class = "rapid_warning_missing_target")
+  err <- tryCatch(suppressWarnings(rapid(o, s, qi, "y", model_type = "lm", n_perm = 0)),
+                  rapid_error_model = function(e) e)
+  expect_match(conditionMessage(err), "no observed target value", fixed = TRUE)
+})

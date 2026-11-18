@@ -239,6 +239,8 @@ rapid_threshold_select.default <- function(X, Y, key_vars, target_var, ...,
     call$num_epsilon_type <- NULL
   }
   call$threshold_rule <- "fixed"
+  # perm_level has no meaning under a fixed threshold
+  call$perm_level <- NULL
   call$n_perm <- 0
   .rapid_rescore(x, .rule_set_threshold(x$rule, threshold), n_perm = 0,
                  threshold_rule = "fixed", perm_level = x$perm_level, call = call)

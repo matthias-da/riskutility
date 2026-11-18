@@ -210,10 +210,15 @@
 }
 
 # Models with a design matrix (lm, logit, gbm) cannot use a factor
-# quasi-identifier with a single value in the training data
-.learner_check_single_level <- function(learner, formula, data) {
+# quasi-identifier with a single value in the training data. `count` says what
+# the learner's design matrix sees: the values used (lm and glm drop unused
+# levels) or the levels (gbm's model.matrix keeps them).
+.learner_check_single_level <- function(learner, formula, data,
+                                        count = c("used", "levels")) {
+  count <- match.arg(count)
+  n_values <- function(v) if (count == "used") length(unique(v)) else nlevels(v)
   vars <- attr(stats::terms(formula), "term.labels")
-  one <- vars[vapply(vars, function(v) is.factor(data[[v]]) && length(unique(data[[v]])) < 2,
+  one <- vars[vapply(vars, function(v) is.factor(data[[v]]) && n_values(data[[v]]) < 2,
                      logical(1))]
   if (length(one) > 0) {
     .rapid_abort(c("model_type = \"", learner$name, "\" cannot use a factor quasi-identifier ",
@@ -309,6 +314,11 @@
   # Imputed target values (marked by the data preparation) do not decide the scale
   observed <- attr(data, "rapid_observed_target")
   if (is.null(observed)) observed <- rep(TRUE, length(y))
+  if (!any(observed)) {
+    .rapid_abort(c("The release has no observed target value: every value of '", target_var,
+                   "' in Y is missing, so model_type = \"lm\" has nothing to learn from."),
+                 "model")
+  }
   fit_on <- function(log_scale, rows = rep(TRUE, length(y))) {
     d <- data[rows, , drop = FALSE]
     if (log_scale) d[[target_var]] <- log(d[[target_var]])
@@ -492,7 +502,7 @@
                                            num_dist = "auto", num_scale = "auto",
                                            metric = "symmetric") {
   y <- data[[target_var]]
-  .learner_check_single_level(learner, formula, data)
+  .learner_check_single_level(learner, formula, data, count = "levels")
   args <- .gbm_split_args(learner$args)
   if (is.factor(y)) {
     K <- nlevels(y)

@@ -329,6 +329,17 @@ test_that("a percent grid of the point rule is read as percent with a warning", 
   expect_identical(sel$results$significant, same$results$significant)
 })
 
+test_that("the object at the selected threshold keeps a call without ignored arguments", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  x <- rapid(o, s, qi, "y", model_type = "lm", threshold_rule = "permutation",
+             perm_level = 0.9, seed = 1)
+  sel <- rapid_threshold_select(x, tau_range = c(0.1, 0.2), n_permutations = 19, seed = 1)
+  expect_false(is.null(sel$observed_rapid))
+  expect_no_warning(refit <- eval(sel$observed_rapid$call))
+  expect_identical(refit$rapid, sel$observed_rapid$rapid)
+})
+
 test_that("threshold_star is NA when nothing is significant", {
   sel <- rapid_threshold_select(lm_fit(shuffle_target = TRUE), n_permutations = 19,
                                 seed = 1)

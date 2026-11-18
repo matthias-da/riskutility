@@ -673,8 +673,8 @@ plot(rapid_res, which = c(1, 3))
 
 In the running example income is drawn independently of the quasi-identifiers,
 in the original and in the synthetic data. The release therefore carries no
-information about income, and RAPID stays at its chance level. The threshold curve (`which = 3`) shows RAPID and the chance
-level across thresholds.
+information about income, and RAPID stays at its chance level. The threshold
+curve (`which = 3`) shows RAPID and the chance level across thresholds.
 
 RAPID complements the CAP family in two ways. First, it captures non-linear
 relationships and variable interactions. Second, it comes with inferential tools.
