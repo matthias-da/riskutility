@@ -98,6 +98,7 @@ Other rapid:
 \code{\link{rapid_synthesizer_cv}()},
 \code{\link{rapid_test}()},
 \code{\link{rapid_threshold_select}()},
+\code{\link{summary.rapid}()},
 \code{\link{update.rapid}()}
 }
 \author{

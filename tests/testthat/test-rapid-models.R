@@ -439,35 +439,3 @@ test_that("a missing backend package is a classed error", {
   }
   expect_silent(.learner_check(.rapid_learner("lm"), FALSE, "auto"))
 })
-
-test_that("the compatibility wrappers keep rapid_test() running", {
-  set.seed(42)
-  X <- data.frame(
-    age = sample(20:60, 80, replace = TRUE),
-    sex = sample(c("M", "F"), 80, replace = TRUE),
-    income = rnorm(80, 50000, 10000)
-  )
-  Y <- X
-  Y$income <- Y$income + rnorm(80, 0, 5000)
-  res <- suppressWarnings(rapid_test(X, Y, quasi_identifiers = c("age", "sex"),
-                                     sensitive_attribute = "income",
-                                     model_type = "lm", n_permutations = 9))
-  expect_s3_class(res, "rapid_test")
-  expect_length(res$null_distribution, 9)
-})
-
-test_that("the compatibility wrappers keep the 0.2.0 models", {
-  skip_if_not_installed("rpart")
-  o <- sim_numeric(120)
-  s <- noisy_copy(o)
-  fit <- .fit_rapid_model("cart", f_num, s, o, "y")
-  expect_equal(fit$frame, rpart::rpart(f_num, data = s)$frame)
-  expect_equal(unname(.predict_rapid("cart", fit, o, "y")),
-               unname(stats::predict(rpart::rpart(f_num, data = s), o)))
-  ln <- sim_lognormal(100, 0.9, 8)
-  expect_equal(unname(.predict_rapid("lm", .fit_rapid_model("lm", f_num, ln, ln, "y"), ln, "y")),
-               unname(stats::predict(stats::lm(f_num, ln), ln)))
-  skip_if_not_installed("xgboost")
-  gbm <- .fit_rapid_model("gbm", f_num, s, o, "y")
-  expect_length(.predict_rapid("gbm", gbm, o, "y"), 120)
-})

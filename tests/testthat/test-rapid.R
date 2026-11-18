@@ -236,6 +236,62 @@ test_that("rapid() summary method works", {
   expect_output(print(summ), "Summary: RAPID")
 })
 
+test_that("rare summary reproduces Oscar's marking for the point rule", {
+  fx <- rapid_fixture()
+  x <- rapid(fx$num$o, fx$num$s, c("x1", "x2"), "y", model_type = "lm",
+             num_eval_method = "point", num_scale = "identity")
+  sm <- summary(x, common_share = 0.7)
+  expect_equal(sm$rare_hit_rate, fx$point_rule$rare_hit_rate, tolerance = 1e-12)
+  expect_equal(sm$rare_rate, fx$point_rule$rare_confidence_rate, tolerance = 1e-12)
+  expect_identical(sm$n_rare, sum(fx$point_rule$rare))
+  expect_equal(sm$rare_share, 0.3)
+})
+
+test_that("rare fields are NA for a rule without baseline", {
+  o <- sim_numeric(100)
+  x <- rapid(o, noisy_copy(o), c("x1", "x2"), "y", model_type = "lm",
+             num_eval_method = "point")
+  x$baseline <- NULL
+  sm <- summary(x)
+  expect_true(is.na(sm$n_rare) && is.na(sm$rare_hit_rate) && is.na(sm$rare_rate))
+  expect_output(print(sm), "Summary: RAPID")
+})
+
+test_that("summary reports the Wilson interval, chance level and excess", {
+  o <- sim_numeric(100)
+  x <- rapid(o, noisy_copy(o), c("x1", "x2"), "y", model_type = "lm", seed = 1)
+  tab <- summary(x, level = 0.9)$table
+  ci <- confint(x, level = 0.9)
+  expect_identical(names(tab), c("target", "model", "rule", "threshold", "n", "rapid",
+                                 "lower", "upper", "chance", "excess"))
+  expect_equal(c(tab$lower, tab$upper), unname(ci[1, ]))
+  expect_equal(tab$excess, x$rapid - x$chance)
+  expect_identical(tab$model, "lm")
+  expect_error(summary(x, common_share = 1), class = "rapid_error_input")
+})
+
+test_that("summary has no risk_level", {
+  o <- sim_numeric(100)
+  x <- rapid(o, noisy_copy(o), c("x1", "x2"), "y", model_type = "lm")
+  sm <- summary(x)
+  expect_null(sm$risk_level)
+  out <- utils::capture.output(print(sm))
+  expect_false(any(grepl("[Rr]isk level|LOW|MEDIUM|HIGH", out)))
+})
+
+test_that("summary tables of two releases stack", {
+  o <- sim_numeric(120)
+  a <- rapid(o, noisy_copy(o, sd = 2, seed = 1), c("x1", "x2"), "y", model_type = "lm",
+             seed = 1)
+  b <- rapid(o, noisy_copy(o, sd = 8, seed = 1), c("x1", "x2"), "y", model_type = "lm",
+             seed = 1)
+  stacked <- rbind(as.data.frame(summary(a)), as.data.frame(summary(b)))
+  expect_s3_class(stacked, "data.frame")
+  expect_equal(nrow(stacked), 2)
+  expect_equal(stacked$rapid, c(a$rapid, b$rapid))
+  expect_identical(as.data.frame(summary(a)), summary(a)$table)
+})
+
 test_that("rapid() validates inputs correctly", {
   set.seed(123)
   n <- 50

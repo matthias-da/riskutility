@@ -55,6 +55,27 @@
 .rapid_aliases <- c(original_data = "X", synthetic_data = "Y",
                     quasi_identifiers = "key_vars", sensitive_attribute = "target_var")
 
+#' Replace the old argument names in `dots` by the names used here
+#'
+#' @param arg Named list of the data arguments (`NULL` when not given).
+#' @param dots The extra arguments of the call.
+#' @return `list(arg, dots)`; `dots` without the alias names.
+#' @noRd
+.rapid_resolve_aliases <- function(arg, dots) {
+  for (alias in intersect(names(.rapid_aliases), names(dots))) {
+    name <- .rapid_aliases[[alias]]
+    if (!(name %in% names(arg))) next
+    if (!is.null(arg[[name]])) {
+      .rapid_abort(c("'", name, "' and its alias '", alias, "' are both given. ",
+                     "Use '", name, "' only."), "input")
+    }
+    arg[name] <- list(dots[[alias]])
+    dots[[alias]] <- NULL
+  }
+  if (length(dots) == 0) dots <- list()
+  list(arg = arg, dots = dots)
+}
+
 #' Resolve the data arguments of a RAPID function
 #'
 #' Accepts the four data arguments (`NULL` when not given), the old alias names
@@ -64,17 +85,10 @@
 #'   alias names.
 #' @noRd
 .rapid_inputs <- function(X, Y, key_vars, target_var, dots) {
-  arg <- list(X = X, Y = Y, key_vars = key_vars, target_var = target_var)
-  for (alias in intersect(names(.rapid_aliases), names(dots))) {
-    name <- .rapid_aliases[[alias]]
-    if (!is.null(arg[[name]])) {
-      .rapid_abort(c("'", name, "' and its alias '", alias, "' are both given. ",
-                     "Use '", name, "' only."), "input")
-    }
-    arg[name] <- list(dots[[alias]])
-    dots[[alias]] <- NULL
-  }
-  if (length(dots) == 0) dots <- list()
+  resolved <- .rapid_resolve_aliases(
+    list(X = X, Y = Y, key_vars = key_vars, target_var = target_var), dots)
+  arg <- resolved$arg
+  dots <- resolved$dots
 
   holdout <- NULL
   if (inherits(arg$X, "synth_pair")) {

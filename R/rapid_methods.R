@@ -88,75 +88,140 @@ nobs.rapid <- function(object, ...) {
 
 #' Summary method for rapid objects
 #'
+#' \code{summary()} reports RAPID with its Wilson confidence interval, the
+#' chance level and the excess, and how the flagged records are spread over
+#' common and rare values of the target. \code{as.data.frame()} returns the
+#' one-row table, so that the summaries of several releases can be stacked with
+#' \code{rbind()}.
+#'
+#' A value is rare when the baseline of its record (the share of original
+#' records that fall in its tolerance band, or whose class it shares) is below
+#' the \code{1 - common_share} quantile of the baselines. Close predictions of
+#' common values carry little information: an attacker who always guesses the
+#' typical value is often right. \code{rare_hit_rate} is the share of flagged
+#' records among the rare ones and \code{rare_rate} the share of all records
+#' that are flagged and rare. Both are \code{NA} for a rule without baseline.
+#'
 #' @param object an object of class "rapid"
+#' @param common_share share of records treated as common (between 0 and 1)
+#' @param level confidence level of the Wilson interval, as in
+#'   \code{\link{confint.rapid}}
+#' @param x an object of class "summary.rapid"
+#' @param digits number of decimal places
+#' @param row.names,optional not used
 #' @param ... additional arguments (ignored)
-#' @return A list of summary statistics for the corresponding object.
+#' @return \code{summary()}: an object of class "summary.rapid", a list with the
+#'   one-row data frame \code{table} (\code{target}, \code{model}, \code{rule},
+#'   \code{threshold}, \code{n}, \code{rapid}, \code{lower}, \code{upper},
+#'   \code{chance}, \code{excess}), \code{rare_share}, \code{n_rare},
+#'   \code{rare_hit_rate}, \code{rare_rate} and the settings of the fit.
+#'   \code{print()}: the input, invisibly. \code{as.data.frame()}: \code{table}.
+#' @examples
+#' set.seed(1)
+#' X <- data.frame(age = sample(20:60, 100, replace = TRUE))
+#' X$income <- 20000 + 600 * X$age + rnorm(100, 0, 3000)
+#' Y <- X
+#' Y$income <- Y$income + rnorm(100, 0, 2000)
+#' r <- rapid(X, Y, key_vars = "age", target_var = "income", model_type = "lm")
+#' summary(r)
+#' # Summaries of several releases in one table
+#' r2 <- rapid(X, Y, key_vars = "age", target_var = "income", model_type = "lm",
+#'             num_tau = 0.5)
+#' rbind(as.data.frame(summary(r)), as.data.frame(summary(r2)))
+#' @family rapid
 #' @export
-summary.rapid <- function(object, ...) {
+summary.rapid <- function(object, common_share = 0.7, level = 0.95, ...) {
   .rapid_require(object, "version")
-  summ <- list(
-    rapid = object$rapid,
+  if (!is.numeric(common_share) || length(common_share) != 1 || is.na(common_share) ||
+      common_share <= 0 || common_share >= 1) {
+    .rapid_abort("'common_share' must be a single number between 0 and 1.", "input")
+  }
+  ci <- stats::confint(object, level = level)
+
+  # Rare values: baseline below the 1 - common_share quantile
+  b <- object$baseline
+  if (is.null(b)) {
+    n_rare <- NA_integer_
+    rare_hit_rate <- rare_rate <- NA_real_
+  } else {
+    rare <- b < stats::quantile(b, 1 - common_share, names = FALSE)
+    n_rare <- sum(rare)
+    rare_hit_rate <- if (n_rare > 0) mean(object$at_risk[rare]) else NA_real_
+    rare_rate <- mean(object$at_risk & rare)
+  }
+
+  structure(list(
+    table = data.frame(
+      target = object$target_var, model = object$model_type,
+      rule = format(object$rule), threshold = object$threshold, n = object$n_total,
+      rapid = object$rapid, lower = ci[[1]], upper = ci[[2]],
+      chance = object$chance, excess = object$excess, stringsAsFactors = FALSE
+    ),
+    rare_share = 1 - common_share,
+    n_rare = n_rare,
+    rare_hit_rate = rare_hit_rate,
+    rare_rate = rare_rate,
+    level = level,
     n_at_risk = object$n_at_risk,
     pct_at_risk = object$pct_at_risk,
-    n_total = object$n_total,
+    n_perm = object$n_perm,
     method = object$method,
-    rule = format(object$rule),
-    threshold = object$threshold,
-    model_type = object$model_type,
     attacker = object$attacker,
     model_metrics = object$model_metrics,
     is_categorical = object$is_categorical,
-    key_vars = object$key_vars,
-    target_var = object$target_var,
-    risk_level = if (object$rapid < 0.05) "LOW" else if (object$rapid < 0.15) "MEDIUM" else "HIGH"
-  )
-  class(summ) <- "summary.rapid"
-  summ
+    key_vars = object$key_vars
+  ), class = "summary.rapid")
 }
 
-#' Print method for summary.rapid objects
-#'
-#' @param x an object of class "summary.rapid"
-#' @param ... additional arguments (ignored)
-#' @return The input object, invisibly.
+#' @rdname summary.rapid
+#' @export
+format.summary.rapid <- function(x, digits = 4, ...) {
+  f <- function(v) formatC(v, digits = digits, format = "f")
+  tab <- x$table
+  m <- x$model_metrics
+  perf <- if (x$is_categorical) {
+    paste0("  Accuracy: ", f(m$accuracy))
+  } else {
+    c(paste0("  MAE: ", f(m$mae)), paste0("  RMSE: ", f(m$rmse)),
+      paste0("  Relative MAE: ", f(m$rmae)), paste0("  Relative RMSE: ", f(m$rrmse)))
+  }
+  c(
+    "Summary: RAPID Disclosure Risk Assessment",
+    "==========================================",
+    "Configuration:",
+    paste0("  Attacker: ", x$attacker),
+    paste0("  Rule: ", tab$rule),
+    paste0("  Key variables: ", paste(x$key_vars, collapse = ", ")),
+    paste0("  Target variable: ", tab$target),
+    "Risk assessment:",
+    paste0("  RAPID: ", f(tab$rapid), " [", f(tab$lower), ", ", f(tab$upper), "] (",
+           format(100 * x$level), "% Wilson interval)"),
+    paste0("  Records at risk: ", x$n_at_risk, " / ", tab$n, sprintf(" (%.2f%%)", x$pct_at_risk)),
+    if (!is.na(tab$chance)) {
+      paste0("  Chance level: ", f(tab$chance), " (", x$n_perm, " permutations), excess: ",
+             f(tab$excess))
+    },
+    if (!is.na(x$n_rare)) {
+      c(paste0("Rare values (baseline below the ", format(100 * x$rare_share),
+               "% quantile; ", x$n_rare, " records):"),
+        paste0("  Flagged share among rare records: ", f(x$rare_hit_rate)),
+        paste0("  Share of all records flagged and rare: ", f(x$rare_rate)))
+    },
+    "Model performance:", perf
+  )
+}
+
+#' @rdname summary.rapid
 #' @export
 print.summary.rapid <- function(x, ...) {
-  cat("Summary: RAPID Disclosure Risk Assessment\n")
-  cat("==========================================\n\n")
-
-  cat("Configuration:\n")
-  cat("  Attacker:", x$attacker, "\n")
-  cat("  Rule:", x$rule, "\n")
-  cat("  Key variables:", paste(x$key_vars, collapse = ", "), "\n")
-  cat("  Target variable:", x$target_var, "\n\n")
-
-  cat("Risk Assessment:\n")
-  cat("  RAPID score:", sprintf("%.4f", x$rapid), "\n")
-  cat("  Records at risk:", x$n_at_risk, "/", x$n_total,
-      sprintf("(%.2f%%)", x$pct_at_risk), "\n")
-  cat("  Risk level:", x$risk_level, "\n\n")
-
-  cat("Model Performance:\n")
-  if (x$is_categorical) {
-    cat("  Accuracy:", sprintf("%.4f (%.1f%%)", x$model_metrics$accuracy,
-                              100 * x$model_metrics$accuracy), "\n")
-  } else {
-    cat("  MAE:", sprintf("%.4f", x$model_metrics$mae), "\n")
-    cat("  RMSE:", sprintf("%.4f", x$model_metrics$rmse), "\n")
-    cat("  Relative MAE:", sprintf("%.4f", x$model_metrics$rmae), "\n")
-    cat("  Relative RMSE:", sprintf("%.4f", x$model_metrics$rrmse), "\n")
-  }
-
-  cat("\nInterpretation Guidelines:\n")
-  if (x$risk_level == "LOW") {
-    cat("  Low risk: Synthetic data provides good privacy protection.\n")
-  } else if (x$risk_level == "MEDIUM") {
-    cat("  Medium risk: Some records may be at risk. Review the at-risk records.\n")
-  } else {
-    cat("  High risk: Significant disclosure risk detected. Consider additional protection.\n")
-  }
-
+  cat(format(x, ...), sep = "\n")
   invisible(x)
+}
+
+#' @rdname summary.rapid
+#' @export
+as.data.frame.summary.rapid <- function(x, row.names = NULL, optional = FALSE, ...) {
+  x$table
 }
 
 #' Update a rapid object

@@ -319,103 +319,120 @@ test_that("plot methods return a ggplot", {
 # rapid_synthesizer_cv
 # ==========================================================================
 
-test_that("rapid_synthesizer_cv() works with a simple synthesizer", {
-  d <- .make_test_data(n = 100)
-
-  # Simple synthesizer: add noise to numeric, resample categorical
-  simple_synth <- function(data, seed = NULL) {
-    if (!is.null(seed)) set.seed(seed)
-    s <- data
-    for (v in names(s)) {
-      if (is.numeric(s[[v]])) {
-        s[[v]] <- s[[v]] + stats::rnorm(nrow(s), 0, stats::sd(s[[v]]) * 0.1)
-      } else {
-        s[[v]] <- sample(s[[v]], replace = TRUE)
-      }
+# Adds noise to numeric variables and resamples the others
+.cv_synth <- function(data, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  s <- data
+  for (v in names(s)) {
+    if (is.numeric(s[[v]])) {
+      s[[v]] <- s[[v]] + stats::rnorm(nrow(s), 0, stats::sd(s[[v]]) * 0.1)
+    } else {
+      s[[v]] <- sample(s[[v]], replace = TRUE)
     }
-    s
   }
+  s
+}
 
-  cv <- rapid_synthesizer_cv(
-    original_data = d$original,
-    synthesizer = simple_synth,
-    quasi_identifiers = c("age", "gender"),
-    sensitive_attribute = "income",
-    k = 3,
-    seed = 1,
-    verbose = FALSE,
-    model_type = "lm",
-    num_epsilon = 0.1
-  )
+.cv_num <- function(..., d = .make_test_data(n = 100)) {
+  rapid_synthesizer_cv(d$original, .cv_synth, key_vars = c("age", "gender"),
+                       target_var = "income", k = 3, model_type = "lm", ...)
+}
 
+test_that("rapid_synthesizer_cv() works with a simple synthesizer", {
+  cv <- .cv_num(seed = 1, num_tau = 0.2)
   expect_s3_class(cv, "rapid_cv")
   expect_true(cv$cv_summary$mean >= 0 && cv$cv_summary$mean <= 1)
   expect_true(cv$cv_summary$sd >= 0)
   expect_true(cv$cv_summary$ci_lower <= cv$cv_summary$ci_upper)
   expect_equal(cv$settings$k, 3)
   expect_false(cv$settings$is_categorical)
+  expect_equal(cv$rapid, cv$cv_summary$mean)
 })
 
-test_that("rapid_synthesizer_cv() returns details when requested", {
-  d <- .make_test_data(n = 100)
-
-  simple_synth <- function(data, seed = NULL) {
-    if (!is.null(seed)) set.seed(seed)
-    s <- data
-    for (v in names(s)) {
-      if (is.numeric(s[[v]])) {
-        s[[v]] <- s[[v]] + stats::rnorm(nrow(s), 0, stats::sd(s[[v]]) * 0.1)
-      } else {
-        s[[v]] <- sample(s[[v]], replace = TRUE)
-      }
-    }
-    s
-  }
-
-  cv <- rapid_synthesizer_cv(
-    original_data = d$original,
-    synthesizer = simple_synth,
-    quasi_identifiers = c("age", "gender"),
-    sensitive_attribute = "income",
-    k = 3,
-    return_details = TRUE,
-    seed = 1,
-    verbose = FALSE,
-    model_type = "lm",
-    num_epsilon = 0.1
-  )
-
-  expect_true(!is.null(cv$cv_details))
-  expect_equal(nrow(cv$cv_details), 3)
-  expect_true("rapid" %in% names(cv$cv_details))
+test_that("CV always holds the fold table and the fold objects", {
+  cv <- .cv_num(seed = 1)
+  expect_identical(names(cv$folds)[1:5], c("fold", "n", "rapid", "chance", "excess"))
+  expect_true(all(c("mae", "rmse", "rmae", "rrmse") %in% names(cv$folds)))
+  expect_equal(nrow(cv$folds), 3)
+  expect_equal(sum(cv$folds$n), 100)
+  expect_length(cv$fits, 3)
+  expect_true(all(vapply(cv$fits, inherits, logical(1), "rapid")))
+  expect_equal(cv$folds$rapid, vapply(cv$fits, function(f) f$rapid, numeric(1)))
+  expect_identical(as.data.frame(cv), cv$folds)
 })
 
-test_that("print.rapid_cv() runs without error", {
-  d <- .make_test_data(n = 100)
-  simple_synth <- function(data, seed = NULL) {
-    if (!is.null(seed)) set.seed(seed)
-    s <- data
-    for (v in names(s)) {
-      if (is.numeric(s[[v]])) {
-        s[[v]] <- s[[v]] + stats::rnorm(nrow(s), 0, stats::sd(s[[v]]) * 0.1)
-      } else {
-        s[[v]] <- sample(s[[v]], replace = TRUE)
-      }
-    }
-    s
+test_that("CV labels the rule actually used", {
+  cv <- .cv_num(seed = 1)
+  expect_identical(cv$rule, cv$fits[[1]]$rule)
+  expect_identical(cv$method, "band")
+  expect_identical(cv$threshold, 0.3)
+
+  d <- .make_test_data_cat(n = 120)
+  cat_cv <- function(...) {
+    rapid_synthesizer_cv(d$original, .cv_synth, key_vars = c("age", "gender"),
+                         target_var = "health", k = 3, model_type = "cart", seed = 1, ...)
   }
+  skip_if_not_installed("rpart")
+  default <- cat_cv()
+  expect_identical(default$method, "RCS_marginal")
+  expect_identical(default$threshold, 0.3)
+  cond <- cat_cv(cat_eval_method = "RCS_conditional")
+  expect_identical(cond$method, "RCS_conditional")
+  expect_identical(cond$threshold, 1)
+})
 
-  cv <- rapid_synthesizer_cv(
-    original_data = d$original,
-    synthesizer = simple_synth,
-    quasi_identifiers = c("age", "gender"),
-    sensitive_attribute = "income",
-    k = 3,
-    seed = 1,
-    verbose = FALSE,
-    model_type = "lm",
-    num_epsilon = 0.1
-  )
+test_that("CV reports the mean chance level", {
+  cv <- .cv_num(seed = 1, n_perm = 5)
+  expect_false(anyNA(cv$folds$chance))
+  expect_equal(cv$cv_summary$mean_chance, mean(cv$folds$chance))
+  expect_equal(cv$cv_summary$mean_excess, mean(cv$folds$rapid - cv$folds$chance))
+  expect_equal(cv$chance, cv$cv_summary$mean_chance)
+  expect_equal(cv$excess, cv$cv_summary$mean_excess)
+  expect_equal(cv$fits[[1]]$n_perm, 5)
+})
 
-  expect_output(print(cv), "Cross-Validation Results")
+test_that("CV has no default seed", {
+  expect_null(formals(rapid_synthesizer_cv)$seed)
+  expect_false(isTRUE(formals(rapid_synthesizer_cv)$verbose))
+  # The data are drawn once: .make_test_data() seeds the generator itself
+  d <- .make_test_data(n = 100)
+  a <- .cv_num(d = d)
+  b <- .cv_num(d = d)
+  expect_false(isTRUE(all.equal(a$folds$mae, b$folds$mae)))
+  c1 <- .cv_num(seed = 3)
+  c2 <- .cv_num(seed = 3)
+  expect_equal(c1$folds$rapid, c2$folds$rapid)
+  expect_equal(c1$folds$chance, c2$folds$chance)
+  expect_equal(c1$folds$mae, c2$folds$mae)
+})
+
+test_that("CV accepts the old names and warns about the deprecated arguments", {
+  d <- .make_test_data(n = 100)
+  cv <- rapid_synthesizer_cv(original_data = d$original, synthesizer = .cv_synth,
+                             quasi_identifiers = c("age", "gender"),
+                             sensitive_attribute = "income", k = 3, model_type = "lm",
+                             seed = 1)
+  expect_s3_class(cv, "rapid_cv")
+  expect_identical(cv$settings$target_var, "income")
+  expect_warning(.cv_num(seed = 1, return_details = TRUE), class = "rapid_warning_deprecated")
+  expect_warning(.cv_num(seed = 1, return_all_records = TRUE),
+                 class = "rapid_warning_deprecated")
+  expect_error(rapid_synthesizer_cv(d$original, .cv_synth, key_vars = "age",
+                                    target_var = "income", k = 1),
+               class = "rapid_error_input")
+})
+
+test_that("CV print, summary and plot methods", {
+  cv <- .cv_num(seed = 1)
+  out <- utils::capture.output(res <- withVisible(print(cv)))
+  expect_false(res$visible)
+  expect_identical(out, format(cv))
+  expect_match(out[1], "cross-validation", ignore.case = TRUE)
+  sm <- summary(cv)
+  expect_s3_class(sm, "summary.rapid_cv")
+  expect_identical(utils::capture.output(print(sm)), format(sm))
+  expect_output(print(sm), "Mean chance level")
+  p <- withVisible(plot(cv))
+  expect_false(p$visible)
+  expect_s3_class(p$value, "ggplot")
 })

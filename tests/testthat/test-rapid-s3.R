@@ -229,3 +229,73 @@ test_that("update() to a permutation threshold equals a fresh call with a random
   expect_identical(u$rapid, fresh$rapid)
   expect_identical(u$at_risk, fresh$at_risk)
 })
+
+# ---- the verbs of every RAPID class ------------------------------------------------
+
+rapid_classes <- function() {
+  o <- sim_numeric(100)
+  s <- noisy_copy(o)
+  fit <- rapid(o, s, qi, "y", model_type = "lm", seed = 1)
+  synth <- function(data, seed = NULL) noisy_copy(data, seed = seed)
+  list(
+    rapid = fit,
+    rapid_test = rapid_test(fit, n_permutations = 9, seed = 1),
+    rapid_threshold = rapid_threshold_select(fit, tau_range = c(0.2, 0.4),
+                                             n_permutations = 9, seed = 1),
+    rapid_contribution = rapid_qi_contribution(o, s, key_vars = qi, target_var = "y",
+                                               model_type = "lm", n_permutations = 9,
+                                               seed = 1),
+    rapid_cv = rapid_synthesizer_cv(o, synth, key_vars = qi, target_var = "y",
+                                    k = 3, model_type = "lm", seed = 1)
+  )
+}
+
+test_that("every RAPID class answers print, summary, plot and as.data.frame", {
+  for (cl in names(rapid_classes())) {
+    for (verb in c("print", "summary", "plot", "as.data.frame", "format")) {
+      expect_false(is.null(getS3method(verb, cl, optional = TRUE)),
+                   info = paste(verb, cl))
+    }
+  }
+})
+
+test_that("every summary method returns summary.<class> with a print method", {
+  for (nm in names(rapid_classes())) {
+    obj <- rapid_classes()[[nm]]
+    sm <- summary(obj)
+    expect_s3_class(sm, paste0("summary.", nm))
+    expect_false(is.null(getS3method("print", paste0("summary.", nm), optional = TRUE)),
+                 info = nm)
+    out <- utils::capture.output(res <- withVisible(print(sm)))
+    expect_false(res$visible, info = nm)
+    expect_identical(res$value, sm, info = nm)
+    expect_true(length(out) > 0, info = nm)
+  }
+})
+
+test_that("every print method returns its input invisibly", {
+  for (nm in names(rapid_classes())) {
+    obj <- rapid_classes()[[nm]]
+    out <- utils::capture.output(res <- withVisible(print(obj)))
+    expect_false(res$visible, info = nm)
+    expect_identical(res$value, obj, info = nm)
+    expect_identical(out, format(obj), info = nm)
+  }
+})
+
+test_that("the plot methods of the companion classes return the ggplot invisibly", {
+  # plot.rapid() draws base graphics for some types; it is not part of this check
+  classes <- rapid_classes()
+  for (nm in setdiff(names(classes), "rapid")) {
+    p <- withVisible(plot(classes[[nm]]))
+    expect_false(p$visible, info = nm)
+    expect_s3_class(p$value, "ggplot")
+  }
+})
+
+test_that("every RAPID generic has X as first argument", {
+  for (fn in c("rapid", "rapid_test", "rapid_threshold_select", "rapid_qi_contribution",
+               "rapid_synthesizer_cv")) {
+    expect_identical(names(formals(get(fn)))[1], "X", info = fn)
+  }
+})

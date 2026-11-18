@@ -2,18 +2,81 @@
 % Please edit documentation in R/rapid_methods.R
 \name{summary.rapid}
 \alias{summary.rapid}
+\alias{format.summary.rapid}
+\alias{print.summary.rapid}
+\alias{as.data.frame.summary.rapid}
 \title{Summary method for rapid objects}
 \usage{
-\method{summary}{rapid}(object, ...)
+\method{summary}{rapid}(object, common_share = 0.7, level = 0.95, ...)
+
+\method{format}{summary.rapid}(x, digits = 4, ...)
+
+\method{print}{summary.rapid}(x, ...)
+
+\method{as.data.frame}{summary.rapid}(x, row.names = NULL, optional = FALSE, ...)
 }
 \arguments{
 \item{object}{an object of class "rapid"}
 
+\item{common_share}{share of records treated as common (between 0 and 1)}
+
+\item{level}{confidence level of the Wilson interval, as in
+\code{\link{confint.rapid}}}
+
 \item{...}{additional arguments (ignored)}
+
+\item{x}{an object of class "summary.rapid"}
+
+\item{digits}{number of decimal places}
+
+\item{row.names, optional}{not used}
 }
 \value{
-A list of summary statistics for the corresponding object.
+\code{summary()}: an object of class "summary.rapid", a list with the
+one-row data frame \code{table} (\code{target}, \code{model}, \code{rule},
+\code{threshold}, \code{n}, \code{rapid}, \code{lower}, \code{upper},
+\code{chance}, \code{excess}), \code{rare_share}, \code{n_rare},
+\code{rare_hit_rate}, \code{rare_rate} and the settings of the fit.
+\code{print()}: the input, invisibly. \code{as.data.frame()}: \code{table}.
 }
 \description{
-Summary method for rapid objects
+\code{summary()} reports RAPID with its Wilson confidence interval, the
+chance level and the excess, and how the flagged records are spread over
+common and rare values of the target. \code{as.data.frame()} returns the
+one-row table, so that the summaries of several releases can be stacked with
+\code{rbind()}.
 }
+\details{
+A value is rare when the baseline of its record (the share of original
+records that fall in its tolerance band, or whose class it shares) is below
+the \code{1 - common_share} quantile of the baselines. Close predictions of
+common values carry little information: an attacker who always guesses the
+typical value is often right. \code{rare_hit_rate} is the share of flagged
+records among the rare ones and \code{rare_rate} the share of all records
+that are flagged and rare. Both are \code{NA} for a rule without baseline.
+}
+\examples{
+set.seed(1)
+X <- data.frame(age = sample(20:60, 100, replace = TRUE))
+X$income <- 20000 + 600 * X$age + rnorm(100, 0, 3000)
+Y <- X
+Y$income <- Y$income + rnorm(100, 0, 2000)
+r <- rapid(X, Y, key_vars = "age", target_var = "income", model_type = "lm")
+summary(r)
+# Summaries of several releases in one table
+r2 <- rapid(X, Y, key_vars = "age", target_var = "income", model_type = "lm",
+            num_tau = 0.5)
+rbind(as.data.frame(summary(r)), as.data.frame(summary(r2)))
+}
+\seealso{
+Other rapid: 
+\code{\link{confint.rapid}()},
+\code{\link{rapid}()},
+\code{\link{rapid_methods}},
+\code{\link{rapid_qi_contribution}()},
+\code{\link{rapid_synthesizer_cv}()},
+\code{\link{rapid_test}()},
+\code{\link{rapid_threshold_select}()},
+\code{\link{update.rapid}()}
+}
+\concept{rapid}

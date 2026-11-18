@@ -2,73 +2,100 @@
 % Please edit documentation in R/rapid_synthesizer_cv.R
 \name{rapid_synthesizer_cv}
 \alias{rapid_synthesizer_cv}
+\alias{format.rapid_cv}
 \alias{print.rapid_cv}
+\alias{summary.rapid_cv}
+\alias{format.summary.rapid_cv}
+\alias{print.summary.rapid_cv}
+\alias{plot.rapid_cv}
+\alias{as.data.frame.rapid_cv}
 \title{Cross-Validation of Synthesizer Disclosure Risk}
 \usage{
 rapid_synthesizer_cv(
-  original_data,
+  X,
   synthesizer = NULL,
-  quasi_identifiers,
-  sensitive_attribute,
+  key_vars,
+  target_var,
   k = 5,
   stratified = TRUE,
-  return_details = FALSE,
-  return_all_records = FALSE,
-  seed = 2025,
-  verbose = TRUE,
-  ...
+  seed = NULL,
+  verbose = FALSE,
+  ...,
+  return_details,
+  return_all_records
 )
 
+\method{format}{rapid_cv}(x, digits = 3, ...)
+
 \method{print}{rapid_cv}(x, ...)
+
+\method{summary}{rapid_cv}(object, ...)
+
+\method{format}{summary.rapid_cv}(x, ...)
+
+\method{print}{summary.rapid_cv}(x, ...)
+
+\method{plot}{rapid_cv}(x, ...)
+
+\method{as.data.frame}{rapid_cv}(x, row.names = NULL, optional = FALSE, ...)
 }
 \arguments{
-\item{original_data}{A data frame of original (confidential) records.}
+\item{X}{A data frame of original (confidential) records.}
 
 \item{synthesizer}{A function that takes a data frame (and optionally
 a \code{seed} argument) and returns a synthetic data frame.  If
 \code{NULL}, \code{synthpop::syn()} is used as a default.}
 
-\item{quasi_identifiers}{Character vector of quasi-identifier column
-names.}
+\item{key_vars}{Character vector of quasi-identifier column names.}
 
-\item{sensitive_attribute}{Character string naming the sensitive
-(target) variable.}
+\item{target_var}{Character string naming the sensitive (target)
+variable.}
 
 \item{k}{Number of folds (default 5).}
 
 \item{stratified}{Logical; use stratified folds for categorical
-targets?  Requires the \pkg{caret} package (default \code{TRUE}).}
+targets (default \code{TRUE})?}
 
-\item{return_details}{Logical; include per-fold metrics in the
-result?}
-
-\item{return_all_records}{Logical; include per-record risk data
-from every fold?}
-
-\item{seed}{Optional random seed.}
+\item{seed}{Optional random seed; there is no default.  With a seed, the
+folds are drawn from it and the synthesizer of fold \eqn{i} receives
+\code{seed + i}.}
 
 \item{verbose}{Logical; print progress messages?}
 
-\item{...}{additional arguments (ignored)}
+\item{...}{Additional arguments passed to \code{\link{rapid}}
+(e.g. \code{model_type}, \code{cat_tau}, \code{num_tau},
+\code{n_perm}).  The old argument names \code{original_data},
+\code{quasi_identifiers} and \code{sensitive_attribute} are accepted
+as aliases of \code{X}, \code{key_vars} and \code{target_var}.}
 
-\item{x}{an object of class \code{"rapid_cv"}}
+\item{return_details, return_all_records}{Deprecated and ignored: the
+object always holds the per-fold table \code{folds} and the fold
+objects \code{fits}.}
+
+\item{x, object}{an object of class \code{"rapid_cv"}}
+
+\item{digits}{number of decimal places}
+
+\item{row.names, optional}{not used}
 }
 \value{
 An object of class \code{"rapid_cv"} with components:
 \describe{
+\item{folds}{Data frame with one row per fold: \code{fold},
+\code{n} (records of the test split), \code{rapid},
+\code{chance}, \code{excess} and the model metrics.}
+\item{fits}{List of the \code{rapid} objects of the folds.}
 \item{cv_summary}{List with \code{mean}, \code{sd}, \code{se},
 \code{median}, \code{min}, \code{max}, \code{ci_lower},
-\code{ci_upper} of the fold-level RAPID scores, plus
-aggregated model metrics.}
-\item{cv_details}{Data frame of per-fold results (if
-\code{return_details = TRUE}).}
-\item{fold_data}{Concatenated per-record risk data across folds
-(if \code{return_all_records = TRUE}).}
+\code{ci_upper} of the fold-level RAPID values, their
+\code{mean_chance} and \code{mean_excess}, plus the mean model
+metrics.}
+\item{rapid, chance, excess}{Means over the folds.}
+\item{rule}{The scoring rule, taken from the first fold.}
+\item{method, threshold, model_type}{Method and threshold of the
+rule and the attacker model.}
 \item{settings}{List of CV settings (\code{k}, \code{stratified},
 etc.).}
-\item{eval_method}{Evaluation method used.}
-\item{model_type}{Model type used.}
-\item{threshold}{Threshold value used.}
 }
 }
 \description{
@@ -77,26 +104,36 @@ k-fold cross-validation.
 In each fold the synthesizer is trained on the training split and
 RAPID is evaluated on the held-out test split, giving a
 distribution of risk scores that accounts for variability in both
-the synthesis and the evaluation.
+the synthesis and the evaluation.  Every fold is one call of
+\code{\link{rapid}}, so the fold values come with their chance level
+and excess.
 }
 \examples{
+set.seed(1)
+df <- data.frame(age = sample(20:80, 150, replace = TRUE),
+                 sex = factor(sample(c("m", "f"), 150, replace = TRUE)))
+df$income <- 20000 + 500 * df$age + rnorm(150, 0, 5000)
+noisy <- function(data, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  data$income <- data$income + rnorm(nrow(data), 0, 3000)
+  data[sample(nrow(data)), ]
+}
+cv <- rapid_synthesizer_cv(df, noisy, key_vars = c("age", "sex"),
+                           target_var = "income", model_type = "lm",
+                           k = 3, seed = 1)
+cv
+summary(cv)
 \donttest{
-# Requires the 'synthpop' package for the default-style synthesizer
+plot(cv)
+# With synthpop as the synthesizer
 if (requireNamespace("synthpop", quietly = TRUE)) {
-  df <- data.frame(
-    age = sample(20:80, 200, replace = TRUE),
-    sex = factor(sample(c("m", "f"), 200, replace = TRUE)),
-    region = factor(sample(LETTERS[1:4], 200, replace = TRUE)),
-    income = rnorm(200, 50000, 10000)
-  )
   cv <- rapid_synthesizer_cv(
-    original_data = df,
+    df,
     synthesizer = function(data, seed = NULL) {
       synthpop::syn(data, m = 1, seed = seed, print.flag = FALSE)$syn
     },
-    quasi_identifiers = c("age", "sex", "region"),
-    sensitive_attribute = "income",
-    model_type = "rf", k = 5
+    key_vars = c("age", "sex"), target_var = "income",
+    model_type = "rf", k = 5, seed = 1
   )
   print(cv)
 }
@@ -118,6 +155,7 @@ Other rapid:
 \code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_test}()},
 \code{\link{rapid_threshold_select}()},
+\code{\link{summary.rapid}()},
 \code{\link{update.rapid}()}
 }
 \author{
