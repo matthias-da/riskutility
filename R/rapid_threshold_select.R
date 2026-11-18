@@ -32,9 +32,15 @@
 #' \code{\link{rapid_test}} for an example). Each threshold of the grid is tested
 #' at level \code{alpha} on its own. There is no correction for testing many
 #' thresholds, so under the null hypothesis the chance that at least one
-#' threshold of the grid comes out significant can exceed \code{alpha}. Read
-#' \code{threshold_star} as a description of how strict a threshold the release
-#' still fails, and test the threshold you settle on with \code{rapid_test()}.
+#' threshold of the grid comes out significant can exceed \code{alpha}.
+#'
+#' The selected threshold is exploratory. Read \code{threshold_star} as a
+#' description of how strict a threshold the release still fails. A test with
+#' \code{rapid_test()} at \code{threshold_star} on the same object is not a
+#' confirmation, because the threshold was chosen by looking at the same data.
+#' To test a threshold, fix it before looking at the results, or select it on
+#' one data set and test it on data not used for the selection, such as a
+#' holdout or another release.
 #'
 #' @inheritParams rapid_test
 #' @param ... for the data methods, arguments of \code{\link{rapid}} (model

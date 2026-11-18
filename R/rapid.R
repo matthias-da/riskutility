@@ -118,12 +118,17 @@
 #'   (field \code{model}) and, in the field \code{predictor}, the attacker, the
 #'   prepared synthetic data and the distribution settings. \code{predict()} and
 #'   the importance plot \code{plot(x, which = 4)} need both. The prepared
-#'   synthetic data make the object about as large as \code{Y}. Default
+#'   synthetic data make the object at least as large as \code{Y}, and a
+#'   random forest is much larger than its training data: with \code{"rf"} the
+#'   stored model can take many times the size of \code{Y}. Default
 #'   \code{FALSE}.
 #' @param store_predictions logical. If \code{TRUE} (default), the result keeps
 #'   the attacker's predictions (field \code{attack}), so that
 #'   \code{\link{rapid_test}()}, \code{\link{rapid_threshold_select}()},
 #'   \code{update()} and the null outline of \code{plot()} work without a refit.
+#'   The predictions of a continuous target include the predictive distribution
+#'   (for a grid, \code{n_quantiles} values per record), so the object is
+#'   several times as large as the data. \code{FALSE} keeps it small.
 #' @param seed integer, random seed (default \code{NULL}: the random stream is
 #'   left alone). The fit and the permutations are each started from it.
 #' @param verbose logical, print progress messages (default \code{FALSE})
@@ -316,7 +321,9 @@
 #'     \code{"exact"} uses the weights of Meinshausen (2006): per tree, each
 #'     synthetic value in the record's terminal node has weight one over the node
 #'     size, all values in the node count (in-bag or not), and the mass is the
-#'     mean over the trees.}
+#'     mean over the trees. It removes the Monte Carlo noise, but the stored
+#'     predictions hold the terminal nodes of every record in every tree, so the
+#'     object grows large and \code{rapid_test()} slows down for large data.}
 #'   \item{gbm}{A second model with the same settings and the quantile loss
 #'     estimates the \eqn{K} quantiles, crossing quantiles are sorted. Only the
 #'     grid is available (\code{"auto"} gives it).}
@@ -364,8 +371,12 @@
 #' threshold the \code{perm_level} quantile of all permuted scores, so that
 #' about 5 percent of the records or fewer (\code{perm_level = 0.95}) pass it
 #' when the predictions carry no information. \code{\link{rapid_threshold_select}()}
-#' scans a grid of thresholds and returns the largest one at which RAPID is
-#' above the \code{1 - alpha} quantile of its permutation distribution.
+#' scans a grid of thresholds and returns the strictest one at which RAPID is
+#' above the \code{1 - alpha} quantile of its permutation distribution: the
+#' largest gain threshold, or under the point rule the smallest tolerance. This
+#' choice is exploratory. A test at the selected threshold on the same data is
+#' not a confirmation, so fix the threshold in advance or confirm it on data not
+#' used for the selection.
 #'
 #' @section Which attacker answers which question:
 #' RAPID depends on the attacker, and the attackers answer two different
@@ -387,15 +398,15 @@
 #' size \code{min.node.size} (default 5 for a continuous target, 10 for class
 #' probabilities), which \code{rapid()} leaves unchanged and reports in the
 #' field \code{attacker}. The table gives RAPID / chance level for the band rule
-#' (\eqn{\tau}{tau} = 0.3, tolerance 10 percent) as computed with Oscar Thees'
-#' implementation of the band method in a review of 18 November 2026: n = 1000,
-#' lognormal target, mean of 3 replications. The first column is an exact copy
-#' of the original as the release with a target independent of the
-#' quasi-identifiers, so every flag beyond chance is a reproduced record. The
-#' second is an independent synthetic sample with a strong dependence of the
-#' target on the quasi-identifiers (\eqn{\rho}{rho} = 0.99 in the review). The
-#' review reports node size 3 only with the sentence that it flags 100 percent
-#' of the copied records, as node size 1 does.
+#' (\eqn{\tau}{tau} = 0.3, tolerance 10 percent) from a simulation by the
+#' package authors with the implementation of the band method in the RAPID
+#' package: n = 1000 records, a lognormal target, the mean of 3 replications.
+#' The first column is an exact copy of the original as the release with a
+#' target independent of the quasi-identifiers, so every flag beyond chance is
+#' a reproduced record. The second is an independent synthetic sample with a
+#' strong dependence of the target on the quasi-identifiers (correlation
+#' \eqn{\rho}{rho} = 0.99). For node size 3 the simulation recorded only that
+#' it flags all copied records, as node size 1 does.
 #' \tabular{lll}{
 #'   \code{min.node.size} \tab exact copy, no dependence \tab independent sample,
 #'     \eqn{\rho}{rho} = 0.99 \cr
@@ -476,6 +487,13 @@
 #' }
 #' The risk levels LOW, MEDIUM and HIGH of \code{summary()} are gone. Read
 #' the excess over the chance level and \code{\link{rapid_test}()} instead.
+#' Several fields and record columns of 0.2.0 are renamed or removed, and
+#' reading them gives \code{NULL} without an error. The confidence is the
+#' column \code{g} (0.2.0: \code{true_prob}), the baseline \code{b}
+#' (\code{baseline}), the score of \code{RCS_conditional} \code{ratio}
+#' (\code{relative_score}) and the error of the point rule \code{error}, a
+#' proportion (\code{symmetric_error_pct}, in percent). The full list is in
+#' the file NEWS.md.
 #'
 #' @section Reproducing the paper and the RAPID package:
 #' The RAPID paper (Templ, Thees and Müller, 2026) and the RAPID package of

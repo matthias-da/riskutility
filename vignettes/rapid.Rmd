@@ -146,9 +146,10 @@ The mean confidence and baseline per class show where the risk comes from:
 aggregate(cbind(g, b, at_risk) ~ health, data = as.data.frame(r_health), FUN = mean)
 ```
 
-A chronic condition is rare in the original data, but the release lets the attacker see that it
-is frequent among older persons. The share at risk is therefore highest among persons with a
-chronic condition.
+A chronic condition holds `r pct(mean(orig$health == "chronic"))` of the original records, and its
+baseline is that share. The release lets the attacker see that the condition is frequent among
+older persons, so the confidence for it rises far above the baseline. The share at risk is
+therefore highest among persons with a chronic condition.
 
 # Continuous target: the band {#sec-continuous}
 
@@ -390,8 +391,12 @@ ts
 Above $\tau$ = `r ts$threshold_star` no threshold is significant. The gain of a record is below
 its confidence, and the confidence of the linear model never exceeds `r f3(max(r_inc$records$g))`
 here (see the plot of $g$ against $b$). Thresholds near that value flag almost no record. Each
-threshold of the grid is tested on its own, without a correction for testing many. Read the
-recommended threshold as a description, and test the threshold you settle on with `rapid_test()`.
+threshold of the grid is tested on its own, without a correction for testing many. The
+recommended threshold is exploratory: it describes how strict a threshold the release still fails.
+A test with `rapid_test()` at this threshold on the same data is not a confirmation, because the
+threshold was chosen by looking at these data. To test a threshold, fix it in advance, or select
+it on one data set and test it on data not used for the selection, such as a holdout or another
+release.
 
 # Inference and reproduction: which attacker answers which question {#sec-attackers}
 

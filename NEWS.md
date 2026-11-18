@@ -48,7 +48,8 @@ Several defaults change reported values. Each item below gives the call that rep
   `max(0, rapid - chance)`. 0.2.0 reported the raw RAPID of a linear model under the point rule,
   which is now
   `rapid(X, Y, kv, tv, model_type = "lm", num_eval_method = "point", num_scale = "identity",
-  num_epsilon = 0.1)$rapid`.
+  num_epsilon = 0.1)$rapid`. For a categorical target 0.2.0 reported `NA` with a warning,
+  because its linear model does not take a categorical target.
 * `disclosure_report()` passes RAPID when the p-value of `rapid_test()` (199 permutations) is
   above the new argument `rapid_alpha` (default 0.05). Its row reports the chance level and the
   excess. 0.2.0 passed RAPID when it was below 0.15 under the 0.2.0 rule. With the default
@@ -71,6 +72,16 @@ Several defaults change reported values. Each item below gives the call that rep
   one is given.
 * The predicted class of a record (column `predicted_class`) takes the first class with the
   highest probability. 0.2.0 broke ties at random.
+* Renamed and removed fields. Code that reads them gets `NULL` without an error, for example
+  `x$records$relative_score`. In the record table of a `rapid` object the 0.2.0 columns `true_prob`,
+  `baseline`, `relative_score`, `symmetric_error_pct`, `threshold` and `threshold_type` are gone.
+  The confidence is `g`, the baseline `b`, the score of `RCS_conditional` `ratio`, the gain of the
+  gain rules `r` and the error of the point rule `error`, a proportion where 0.2.0 gave percent. The
+  rule and its threshold are the fields `rule` and `threshold` of the object. The field
+  `error_range` is gone. A `rapid_cv` object holds `folds`, `fits` and `method` in place of
+  `cv_details`, `fold_data` and `eval_method`. The table `results` of `rapid_threshold_select()`
+  gains the column `chance`, and its object the fields `rapid`, `chance`, `excess`, `n_permutations`
+  and `rule`.
 
 ## New
 
@@ -105,8 +116,8 @@ Several defaults change reported values. Each item below gives the call that rep
   `as.data.frame()` and `[[`. The holdout of a `synth_pair` is scored by every attacker. A model
   that cannot run with the given target or `num_dist` is skipped with a warning of class
   `rapid_warning_skipped_model`.
-* `rapid_learner()` builds a user-defined attacker from a fitting function and prediction
-  functions. It is accepted wherever `model_type` is. The output of the prediction functions is checked.
+* `rapid_learner()` builds a user-defined attacker from a fitting function and prediction functions.
+  It is accepted wherever `model_type` is. The output of the prediction functions is checked.
   `predict_prob` must return probabilities between 0 and 1 whose sum per record is at most 1, so
   that scores such as the linear predictor of `glm` are refused with an error of class
   `rapid_error_model`.

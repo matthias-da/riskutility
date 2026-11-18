@@ -671,9 +671,9 @@ summary(rapid_res)
 plot(rapid_res, which = c(1, 3))
 ```
 
-The synthetic data of the running example are drawn independently of the
-original, so income does not depend on the quasi-identifiers and RAPID stays at
-its chance level. The threshold curve (`which = 3`) shows RAPID and the chance
+In the running example income is drawn independently of the quasi-identifiers,
+in the original and in the synthetic data. The release therefore carries no
+information about income, and RAPID stays at its chance level. The threshold curve (`which = 3`) shows RAPID and the chance
 level across thresholds.
 
 RAPID complements the CAP family in two ways. First, it captures non-linear
@@ -1259,10 +1259,11 @@ statistical disclosure control:
    inference --- under a single API.
 
 2. **Novel implementations.** It provides the first R implementations of
-   RAPID, two of the three GDPR failure criteria from @stadler2022synthetic
+   two of the three GDPR failure criteria from @stadler2022synthetic
    (singling out and linkability), $t$-closeness, DOMIAS density-based
    membership inference, and eight-method record linkage with bijective and
-   optimal transport matching.
+   optimal transport matching. It implements RAPID with its chance level and
+   a choice of attackers.
 
 3. **Unified API.** The `synth_pair` container and consistent S3 class
    pattern eliminate parameter repetition and ensure practitioners can switch
@@ -1345,8 +1346,9 @@ Four extensions are planned: (i) a Shiny dashboard for interactive evaluation;
 All computations were performed using R `r getRversion()` [@R2025] with the
 riskutility package version `r packageVersion("riskutility")`. Core
 dependencies include data.table for efficient data manipulation and ggplot2
-for all visualizations. ML-based methods require optional packages: ranger,
-rpart, xgboost, and caret, loaded conditionally via `requireNamespace()`.
+for all visualizations. ML-based methods use ranger, which is imported, and the
+optional packages rpart, xgboost and caret, loaded conditionally via
+`requireNamespace()`.
 
 ```{r scalability-table, echo=FALSE}
 scale_df <- data.frame(

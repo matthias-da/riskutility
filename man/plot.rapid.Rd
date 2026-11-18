@@ -88,10 +88,11 @@ distribution. Type 3 shows RAPID against the threshold together with the
 chance curve, the share of records flagged under permuted true values. The
 permutations are drawn once per call from the stored predictions and the
 \code{n_perm} of the fit, starting from the seed of the fit when there is
-one. The chance
-curve then passes through \code{x$chance} at the object's threshold, as
-long as the caller has not changed \code{RNGkind()} since the fit. The random
-stream of the caller is restored afterwards. Without stored predictions or
+one. For a fit with a seed the chance curve passes through \code{x$chance}
+at the object's threshold, as long as the caller has not changed
+\code{RNGkind()} since the fit. For a fit without a seed the permutations
+are new draws, and the curve passes near \code{x$chance}, not through it.
+The random stream of the caller is restored afterwards. Without stored predictions or
 with \code{n_perm = 0}, the outline and the chance curve are left out.
 
 \strong{Other rules.} The point rule, \code{RCS_conditional} and

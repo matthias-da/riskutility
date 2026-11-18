@@ -137,7 +137,10 @@ Wald statistic \eqn{z = (R - \pi_0) / \sqrt{\pi_0 (1 - \pi_0) / n}}{z = (R -
 pi0) / sqrt(pi0 (1 - pi0) / n)} with \eqn{n} scored records gives a
 one-sided p-value from the normal distribution. The Wald test needs a stable
 estimate of \eqn{\pi_0}{pi0}: use \code{n_permutations >= 999} (the print
-says so otherwise).
+says so otherwise). Its variance treats every record as flagged with the same
+probability \eqn{\pi_0}{pi0}. When records differ in that probability, as
+they do under a forest attacker, the permutation distribution is narrower,
+and the Wald test is conservative.
 
 \code{plot()} draws the null distribution with the observed RAPID and the
 \code{1 - alpha} quantile of the null. This quantile is the criterion of
