@@ -59,7 +59,11 @@ functions that fit through \code{rapid()} (\code{\link{rapid_test}},
 \code{\link{rapid_synthesizer_cv}}).
 }
 \details{
-The functions are called with their arguments by position.
+The functions are called with their arguments by position, in the order
+given in the argument descriptions below; an argument name of that list
+that a function has at another position is an error of class
+\code{"rapid_error_input"}.
+
 \code{fit(formula, data, ...)} trains the attacker on the synthetic data:
 \code{formula} is \code{target ~ key_var1 + key_var2 + ...}, \code{data}
 holds the prepared synthetic records (classes of a categorical target that no
@@ -82,6 +86,10 @@ inside the functions are passed on unchanged. Records with a
 quasi-identifier level that the synthetic data do not contain are refused
 with an error of class \code{"rapid_error_levels"}, before the functions are
 called. Variable importance (\code{plot(x, which = 4)}) is not available.
+
+The functions are stored with the resulting \code{rapid} object as given,
+including the environment of a closure, so define them at top level or keep
+them free of large captured objects.
 }
 \examples{
 set.seed(1)

@@ -718,7 +718,11 @@
 #' \code{\link{rapid_threshold_select}}, \code{\link{rapid_qi_contribution}},
 #' \code{\link{rapid_synthesizer_cv}}).
 #'
-#' The functions are called with their arguments by position.
+#' The functions are called with their arguments by position, in the order
+#' given in the argument descriptions below; an argument name of that list
+#' that a function has at another position is an error of class
+#' \code{"rapid_error_input"}.
+#'
 #' \code{fit(formula, data, ...)} trains the attacker on the synthetic data:
 #' \code{formula} is \code{target ~ key_var1 + key_var2 + ...}, \code{data}
 #' holds the prepared synthetic records (classes of a categorical target that no
@@ -741,6 +745,10 @@
 #' quasi-identifier level that the synthetic data do not contain are refused
 #' with an error of class \code{"rapid_error_levels"}, before the functions are
 #' called. Variable importance (\code{plot(x, which = 4)}) is not available.
+#'
+#' The functions are stored with the resulting \code{rapid} object as given,
+#' including the environment of a closure, so define them at top level or keep
+#' them free of large captured objects.
 #'
 #' @param name character, the name of the model; it is the \code{model_type}
 #'   of the \code{rapid} object and the name of the model in a suite
@@ -817,7 +825,7 @@ rapid_learner <- function(name, fit, predict_prob = NULL, predict_point = NULL,
   )
 }
 
-# A function of the user must have the named arguments, or `...`
+# A function of the user must have the named arguments at their positions, or `...`
 .learner_check_fun <- function(f, what, args, optional = FALSE) {
   if (optional && is.null(f)) return(invisible(TRUE))
   if (!is.function(f)) {
@@ -829,6 +837,14 @@ rapid_learner <- function(name, fit, predict_prob = NULL, predict_point = NULL,
     .rapid_abort(c("'", what, "' must be a function (", paste(args, collapse = ", "),
                    "); it has no argument ", paste0("'", missing_args, "'", collapse = ", "),
                    "."), "input")
+  }
+  # The call is by position: a required name it has must sit at its position
+  position <- match(args, formals_f)
+  misplaced <- args[!is.na(position) & position != seq_along(args)]
+  if (length(misplaced) > 0) {
+    .rapid_abort(c("'", what, "' is called by position as (", paste(args, collapse = ", "),
+                   "); its argument ", paste0("'", misplaced, "'", collapse = ", "),
+                   " is not at that position."), "input")
   }
   invisible(TRUE)
 }

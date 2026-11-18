@@ -68,6 +68,22 @@ test_that("the constructor derives the targets and checks the functions", {
                                 predict_point = function(...) NULL), "rapid_learner")
 })
 
+test_that("the constructor refuses arguments out of their calling order", {
+  point <- function(fit, newdata) 1
+  expect_error(rapid_learner("x", fit = function(data, formula) NULL, predict_point = point),
+               class = "rapid_error_input", regexp = "formula, data")
+  expect_error(rapid_learner("x", fit = stats::lm, predict_point = point,
+                             predict_quantiles = function(fit, probs, newdata) 1),
+               class = "rapid_error_input", regexp = "fit, newdata, probs")
+  # Accepted shapes: lm, predict, only `...`, extra arguments after the required ones
+  expect_s3_class(rapid_learner("x", fit = stats::lm, predict_point = stats::predict),
+                  "rapid_learner_custom")
+  expect_s3_class(rapid_learner("x", fit = function(...) NULL, predict_point = point),
+                  "rapid_learner_custom")
+  expect_s3_class(rapid_learner("x", fit = function(formula, data, weights = NULL) NULL,
+                                predict_point = point), "rapid_learner_custom")
+})
+
 test_that("print shows name and targets", {
   out <- capture.output(res <- print(cart_learner()))
   expect_identical(res$name, "my_cart")
