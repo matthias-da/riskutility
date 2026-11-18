@@ -176,3 +176,34 @@ test_that("update() with a model argument refits", {
   expect_identical(update(np, num_tau = 0.5)$rule$threshold, 0.5)
   expect_identical(update(r, num_tau = 0.5, evaluate = FALSE)$num_tau, 0.5)
 })
+
+test_that("update() with a new error metric refits when the metric chose the scale", {
+  set.seed(7)
+  o <- data.frame(x1 = stats::rnorm(150), x2 = stats::rnorm(150))
+  o$y <- exp(10 + 0.6 * o$x1 + 0.4 * o$x2 + 0.5 * stats::rnorm(150))
+  s <- noisy_copy(o, sd = 0, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "lm", seed = 1)
+  fresh <- rapid(o, s, qi, "y", model_type = "lm", num_error_metric = "absolute",
+                 num_epsilon = 5000, seed = 1)
+  # The two metrics lead to different working scales
+  expect_match(r$attacker, "log scale")
+  expect_match(fresh$attacker, "identity scale")
+  u <- update(r, num_error_metric = "absolute", num_epsilon = 5000)
+  expect_identical(u$attacker, fresh$attacker)
+  expect_identical(u$rapid, fresh$rapid)
+  expect_identical(u$at_risk, fresh$at_risk)
+  expect_identical(u$rule, fresh$rule)
+})
+
+test_that("update() with a new error metric rescores a learner without a working scale", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "rf", seed = 1)
+  fresh <- rapid(o, s, qi, "y", model_type = "rf", num_error_metric = "stabilised_relative",
+                 seed = 1)
+  local_mocked_bindings(.learner_fit = function(...) stop("refit"))
+  u <- update(r, num_error_metric = "stabilised_relative")
+  expect_identical(u$rule, fresh$rule)
+  expect_identical(u$rapid, fresh$rapid)
+  expect_identical(u$at_risk, fresh$at_risk)
+})

@@ -172,10 +172,9 @@ print.summary.rapid <- function(x, ...) {
 #' changed call is evaluated in the caller's frame, as
 #' \code{\link[stats]{update}} does.
 #'
-#' A rescored object equals the result of the changed call, except where the
-#' fit depends on a changed argument: under \code{num_scale = "auto"} the
-#' working scale of the linear model depends on the error metric, which a
-#' rescored object keeps from the first fit.
+#' A changed \code{num_error_metric} refits when the model has a working scale
+#' chosen under \code{num_scale = "auto"} (the linear model), because that
+#' choice depends on the error metric.
 #'
 #' @param object an object of class "rapid"
 #' @param ... arguments of \code{\link{rapid}} to change, as \code{name = value}
@@ -212,16 +211,23 @@ update.rapid <- function(object, ..., evaluate = TRUE) {
   if (!isTRUE(evaluate)) return(call)
 
   env <- parent.frame()
-  if (!all(names(extras) %in% .rapid_scoring_args) || is.null(object$attack)) {
-    return(eval(call, env))
-  }
-
-  # Rescore: the scoring arguments of the changed call, the defaults of rapid() otherwise
+  # The arguments of the changed call, the defaults of rapid() otherwise
   defaults <- formals(rapid.default)
   value <- function(name) {
     if (name %in% names(call)) eval(call[[name]], env)
     else if (name %in% names(defaults)) eval(defaults[[name]])
   }
+  # Under num_scale = "auto" a learner with a working scale chose it by the error metric
+  metric_drives_fit <- "num_error_metric" %in% names(extras) && !object$is_categorical &&
+    !is.null(object$attack) && "num_scale" %in% object$attack$learner$options &&
+    identical(.rapid_choice(value("num_scale"), c("auto", "identity", "log"), "num_scale"),
+              "auto")
+  if (!all(names(extras) %in% .rapid_scoring_args) || is.null(object$attack) ||
+      metric_drives_fit) {
+    return(eval(call, env))
+  }
+
+  # Rescore the stored attack
   scoring <- .rapid_scoring(
     object$is_categorical, names(call)[-1L],
     num_eval_method = value("num_eval_method"), num_error_metric = value("num_error_metric"),

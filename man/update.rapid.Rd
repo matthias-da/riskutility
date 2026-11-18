@@ -30,10 +30,9 @@ changed call is evaluated in the caller's frame, as
 \code{\link[stats]{update}} does.
 }
 \details{
-A rescored object equals the result of the changed call, except where the
-fit depends on a changed argument: under \code{num_scale = "auto"} the
-working scale of the linear model depends on the error metric, which a
-rescored object keeps from the first fit.
+A changed \code{num_error_metric} refits when the model has a working scale
+chosen under \code{num_scale = "auto"} (the linear model), because that
+choice depends on the error metric.
 }
 \examples{
 set.seed(1)
