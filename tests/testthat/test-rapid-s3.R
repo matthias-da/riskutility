@@ -246,7 +246,9 @@ rapid_classes <- function() {
                                                model_type = "lm", n_permutations = 9,
                                                seed = 1),
     rapid_cv = rapid_synthesizer_cv(o, synth, key_vars = qi, target_var = "y",
-                                    k = 3, model_type = "lm", seed = 1)
+                                    k = 3, model_type = "lm", seed = 1),
+    rapid_suite = rapid_suite(o, s, key_vars = qi, target_var = "y", model_types = "lm",
+                              n_perm = 3, seed = 1)
   )
 }
 
@@ -295,7 +297,7 @@ test_that("the plot methods of the companion classes return the ggplot invisibly
 
 test_that("every RAPID generic has X as first argument", {
   for (fn in c("rapid", "rapid_test", "rapid_threshold_select", "rapid_qi_contribution",
-               "rapid_synthesizer_cv")) {
+               "rapid_synthesizer_cv", "rapid_suite")) {
     expect_identical(names(formals(get(fn)))[1], "X", info = fn)
   }
 })

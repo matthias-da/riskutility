@@ -170,6 +170,7 @@ Other rapid:
 \code{\link{confint.rapid}()},
 \code{\link{rapid}()},
 \code{\link{rapid_methods}},
+\code{\link{rapid_suite}()},
 \code{\link{rapid_synthesizer_cv}()},
 \code{\link{rapid_test}()},
 \code{\link{rapid_threshold_select}()},
