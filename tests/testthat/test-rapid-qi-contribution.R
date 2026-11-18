@@ -1,5 +1,8 @@
 # Tests for rapid_qi_contribution()
 
+# Most tests use the cart attacker
+skip_if_not_installed("rpart")
+
 .make_contrib_data <- function(n = 300, seed = 1) {
   set.seed(seed)
   X <- data.frame(age = sample(20:70, n, replace = TRUE),
