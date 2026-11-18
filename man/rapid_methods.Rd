@@ -57,6 +57,7 @@ head(as.data.frame(r, at_risk_only = TRUE))
 \seealso{
 Other rapid: 
 \code{\link{confint.rapid}()},
+\code{\link{predict.rapid}()},
 \code{\link{rapid}()},
 \code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_suite}()},

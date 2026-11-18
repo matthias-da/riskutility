@@ -281,14 +281,18 @@ format.rapid_rule_NCE <- function(x, ...) {
 #' @param attack A `rapid_attack`.
 #' @param rule A `rapid_rule`.
 #' @param n_perm Number of permutations.
+#' @param ref_y Reference values of the baseline (the original values; for a
+#'   holdout they differ from the permuted values).
 #' @return Numeric matrix, one row per record and one column per permutation,
 #'   holding the score of the rule.
 #' @noRd
-.rapid_null <- function(attack, rule, n_perm) {
+.rapid_null <- function(attack, rule, n_perm, ref_y = attack$y) {
   y <- attack$y
-  vapply(seq_len(n_perm), function(k) {
-    .rule_score(rule, attack$pred, y[sample.int(length(y))], y)[[rule$score_var]]
+  null <- vapply(seq_len(n_perm), function(k) {
+    .rule_score(rule, attack$pred, y[sample.int(length(y))], ref_y)[[rule$score_var]]
   }, numeric(length(y)))
+  # One record: vapply() returns a vector
+  matrix(null, nrow = length(y), ncol = n_perm)
 }
 
 .rule_check_numeric <- function(pred, y, need_dist) {
@@ -338,7 +342,13 @@ format.rapid_rule_NCE <- function(x, ...) {
                  "input")
   }
   list(P = P, g = unname(P[cbind(seq_len(nrow(P)), col)]),
-       predicted_class = colnames(P)[max.col(P, ties.method = "first")])
+       predicted_class = .rapid_predicted_class(P))
+}
+
+# The class with the highest predicted probability (the first one on ties)
+.rapid_predicted_class <- function(P) {
+  P <- if (is.data.frame(P)) as.matrix(P) else P
+  colnames(P)[max.col(P, ties.method = "first")]
 }
 
 #' @exportS3Method .rule_score rapid_rule_RCS_marginal

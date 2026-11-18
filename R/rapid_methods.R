@@ -44,6 +44,15 @@ format.rapid <- function(x, digits = 3, ...) {
              x$n_perm, " permutation", if (x$n_perm != 1) "s", ")"),
       paste0("Excess = ", formatC(x$excess, digits = digits, format = "f")))
   }
+  f <- function(v) formatC(v, digits = digits, format = "f")
+  holdout <- if (!is.null(x$holdout)) {
+    h <- x$holdout
+    c(paste0("Holdout: RAPID = ", f(h$rapid), " on ", h$n, " record", if (h$n != 1) "s",
+             if (!is.na(h$chance)) {
+               paste0(", chance level = ", f(h$chance), ", excess = ", f(h$excess))
+             }),
+      paste0("Release-specific = ", f(x$release_specific), " (RAPID - holdout RAPID)"))
+  }
   spread <- if (length(x$chance_rates) > 1) stats::sd(x$chance_rates) else NA_real_
   indistinct <- if (!is.na(spread) && x$excess <= 2 * spread) {
     "RAPID is not distinguishable from the chance level; see rapid_test()."
@@ -55,7 +64,7 @@ format.rapid <- function(x, digits = 3, ...) {
     paste0("Rule: ", format(x$rule)),
     paste0("RAPID = ", formatC(x$rapid, digits = digits, format = "f"), ": ", x$n_at_risk,
            " of ", x$n_total, " records at risk"),
-    chance, indistinct, x$note,
+    chance, indistinct, holdout, x$note,
     "Next: summary(), plot(), confint(), rapid_test()"
   )
 }
@@ -84,6 +93,56 @@ as.data.frame.rapid <- function(x, row.names = NULL, optional = FALSE, ...,
 nobs.rapid <- function(object, ...) {
   .rapid_require(object, "version")
   object$n_total
+}
+
+#' Predictions of the attacker for new records
+#'
+#' Applies the attacker of a \code{rapid} object to new records. The records
+#' are prepared like the original data (column types, \code{na_strategy},
+#' factor levels). When they hold the target, they are scored under the rule of
+#' the object as calibrated, with baselines taken from the original values.
+#'
+#' @param object an object of class "rapid", created with \code{store_model = TRUE}
+#' @param newdata data frame with the quasi-identifiers and, optionally, the target
+#' @param ... not used
+#' @return The prepared records. With the target, followed by the record
+#'   columns of the rule and \code{at_risk} (as in \code{as.data.frame()});
+#'   without it, followed by \code{predicted_class} or \code{predicted_value}.
+#' @examples
+#' set.seed(1)
+#' X <- data.frame(age = sample(20:60, 100, replace = TRUE))
+#' X$income <- 20000 + 600 * X$age + rnorm(100, 0, 3000)
+#' Y <- X
+#' Y$income <- Y$income + rnorm(100, 0, 2000)
+#' r <- rapid(X, Y, key_vars = "age", target_var = "income", model_type = "lm",
+#'            store_model = TRUE)
+#' new <- data.frame(age = c(25, 50), income = c(36000, 50000))
+#' predict(r, new)
+#' predict(r, new["age"])
+#' @family rapid
+#' @export
+predict.rapid <- function(object, newdata, ...) {
+  .rapid_require(object, c("version", "model"))
+  .rapid_check_empty_dots(list(...), "predict() takes 'newdata' only.")
+  if (missing(newdata)) .rapid_abort("'newdata' is missing: pass the records to predict.",
+                                     "input")
+  p <- object$predictor
+  target <- object$target_var
+  new <- .rapid_prepare_new(newdata, p$train, object$key_vars, target, object$na,
+                            p$learner, "newdata", need_target = FALSE)
+  pred <- .rapid_predict(p$learner, object$model, new$data, p$train, target,
+                         object$is_categorical, p$num_dist, p$n_quantiles,
+                         point_only = !new$has_target)
+  if (new$has_target) {
+    ref_y <- .rapid_data(object)[[target]]
+    return(.rapid_score_records(object$rule, pred, new$data[[target]], ref_y, new$data,
+                                object$is_categorical)$rec$records)
+  }
+  out <- new$data
+  name <- if (object$is_categorical) "predicted_class" else "predicted_value"
+  if (name %in% names(out)) name <- paste0(name, ".rapid")
+  out[[name]] <- if (object$is_categorical) .rapid_predicted_class(pred) else pred
+  out
 }
 
 #' Summary method for rapid objects
@@ -306,5 +365,5 @@ update.rapid <- function(object, ..., evaluate = TRUE) {
   seed <- value("seed")
   if (!is.null(seed)) set.seed(seed)
   .rapid_rescore(object, scoring$rule, scoring$n_perm, scoring$threshold_rule,
-                 scoring$perm_level, call)
+                 scoring$perm_level, call, seed = seed)
 }

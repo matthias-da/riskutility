@@ -92,6 +92,7 @@ Statistical Inference. \emph{Journal of the American Statistical Association},
 \code{\link{rapid}}, \code{\link{rapid_test}}
 
 Other rapid: 
+\code{\link{predict.rapid}()},
 \code{\link{rapid}()},
 \code{\link{rapid_methods}},
 \code{\link{rapid_qi_contribution}()},

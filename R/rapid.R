@@ -63,8 +63,15 @@
 #'   over a baseline (band, RCS_marginal) and with \code{n_perm >= 1}.
 #' @param perm_level numeric in (0, 1), quantile of the permuted scores that is
 #'   the threshold under \code{threshold_rule = "permutation"} (default: 0.95)
-#' @param store_model logical, if TRUE store the fitted model object in the result
-#'   (needed for \code{plot(result, which = 4)} variable importance plot). Default FALSE.
+#' @param holdout data frame of original records that were not used to generate
+#'   the synthetic data (default: NULL; the holdout of a \code{synth_pair} is
+#'   used when not given). It is prepared like \code{X} and scored with the same
+#'   attacker and rule (a permutation threshold as found on \code{X}), with
+#'   baselines from the values of \code{X}. RAPID on \code{X} minus RAPID on
+#'   the holdout is the risk specific to this release.
+#' @param store_model logical, if TRUE store the fitted model object and the
+#'   prepared synthetic data in the result (needed for \code{predict()} and for
+#'   the variable importance plot \code{plot(result, which = 4)}). Default FALSE.
 #' @param store_predictions logical, if TRUE (default) the result keeps the
 #'   attacker's predictions, so that it can be tested and rescored without
 #'   fitting the model again
@@ -105,6 +112,12 @@
 #'     permutation, and rapid - chance
 #'   \item n_perm, threshold_rule, perm_level: the permutation settings
 #'   \item model: the fitted model object (only if store_model = TRUE)
+#'   \item predictor: what \code{predict()} needs besides the model: the
+#'     attacker, the prepared synthetic data and the distribution settings
+#'     (only if store_model = TRUE)
+#'   \item holdout: \code{list(rapid, chance, excess, n, records)} of the
+#'     holdout records (NULL without holdout)
+#'   \item release_specific: rapid - holdout$rapid (NULL without holdout)
 #'   \item model_type, attacker: the model and a line with the settings that
 #'     drive its result (number of trees and node size, number of leaves, scale)
 #'   \item model_metrics: model performance (accuracy for categorical, MAE/RMSE for numeric)
@@ -361,6 +374,8 @@ rapid.default <- function(X, Y,
                           n_perm = 10,
                           threshold_rule = c("fixed", "permutation"),
                           perm_level = 0.95,
+                          # Records the attacker has not seen
+                          holdout = NULL,
                           # Output options
                           store_model = FALSE,
                           store_predictions = TRUE,
@@ -419,10 +434,19 @@ rapid.default <- function(X, Y,
                  num_scale = if (is_categorical) "auto" else num_scale)
   if (!learner$unseen_levels) .rapid_check_levels(prepared$unseen, learner$name)
 
-  # Fit on the synthetic data, predict the original records
+  # Holdout: an explicit argument wins over the one of a synth_pair
+  if (is.null(holdout)) holdout <- inputs$holdout
+  if (!is.null(holdout)) {
+    holdout <- .rapid_prepare_new(holdout, prepared$Y, inputs$key_vars, inputs$target_var,
+                                  list(strategy = na_strategy, constant = na_constant_value),
+                                  learner, "holdout")$data
+  }
+
+  # Fit on the synthetic data, predict the original (and holdout) records
   if (verbose) message("  Fitting ", learner$name, " model on synthetic data...")
   attack <- .rapid_attack(prepared$X, prepared$Y, inputs$key_vars, inputs$target_var,
-                          learner, num_dist, num_scale, scoring$rule$metric, n_quantiles)
+                          learner, num_dist, num_scale, scoring$rule$metric, n_quantiles,
+                          holdout = holdout)
 
   if (verbose) message("  Evaluating disclosure risk...")
   # The permutations start from the seed as well, so that update() without a
@@ -436,7 +460,7 @@ rapid.default <- function(X, Y,
                 call = call),
     store_model = isTRUE(store_model), store_predictions = isTRUE(store_predictions),
     n_perm = scoring$n_perm, threshold_rule = scoring$threshold_rule,
-    perm_level = scoring$perm_level
+    perm_level = scoring$perm_level, seed = seed
   )
 }
 
@@ -488,8 +512,8 @@ rapid.default <- function(X, Y,
 #'
 #' The record table is the prepared data followed by the columns of the rule.
 #' @noRd
-.rapid_data <- function(x) {
-  x$records[, seq_len(ncol(x$records) - length(x$record_cols)), drop = FALSE]
+.rapid_data <- function(x, records = x$records) {
+  records[, seq_len(ncol(records) - length(x$record_cols)), drop = FALSE]
 }
 
 #' Score the stored attack of a rapid object under a new rule
@@ -498,16 +522,21 @@ rapid.default <- function(X, Y,
 #' @param rule A `rapid_rule`.
 #' @param n_perm,threshold_rule,perm_level Permutation settings.
 #' @param call The call stored in the result.
+#' @param seed Seed set before the permutations of a holdout.
 #' @noRd
-.rapid_rescore <- function(x, rule, n_perm, threshold_rule, perm_level, call) {
+.rapid_rescore <- function(x, rule, n_perm, threshold_rule, perm_level, call, seed = NULL) {
   .rapid_require(x, c("version", "predictions"))
   attack <- x$attack
   attack["model"] <- list(x$model)
+  attack["train"] <- list(x$predictor$train)
+  if (!is.null(attack$holdout)) {
+    attack$holdout$data <- .rapid_data(x, x$holdout$records)
+  }
   .rapid_assess(
     attack, rule, data = .rapid_data(x),
     meta = list(key_vars = x$key_vars, target_var = x$target_var, na = x$na, call = call),
     store_model = !is.null(x$model), store_predictions = TRUE,
-    n_perm = n_perm, threshold_rule = threshold_rule, perm_level = perm_level
+    n_perm = n_perm, threshold_rule = threshold_rule, perm_level = perm_level, seed = seed
   )
 }
 
@@ -519,12 +548,16 @@ rapid.default <- function(X, Y,
 #' Fit the attacker on the synthetic data and predict the original records
 #'
 #' @param X,Y Prepared original and synthetic data (`.rapid_prepare_data()`).
+#' @param holdout Prepared holdout records (`.rapid_prepare_new()`) or `NULL`.
 #' @return A list of class `rapid_attack` with `pred` (probability matrix, or
 #'   `list(point, dist)`), `y` (true values), `learner`, `model`, `formula`,
-#'   `is_categorical` and `attacker` (the line from `.learner_describe()`).
+#'   `is_categorical`, `attacker` (the line from `.learner_describe()`),
+#'   `train` (the synthetic data), `num_dist`, `n_quantiles` and `holdout`
+#'   (`list(pred, y, data)` or `NULL`).
 #' @noRd
 .rapid_attack <- function(X, Y, key_vars, target_var, learner, num_dist = "auto",
-                          num_scale = "auto", metric = "symmetric", n_quantiles = 100) {
+                          num_scale = "auto", metric = "symmetric", n_quantiles = 100,
+                          holdout = NULL) {
   # The formula lives in the global environment, so that the object does not
   # keep the data of the calling frame alive.
   formula <- stats::as.formula(paste(target_var, "~", paste(key_vars, collapse = " + ")),
@@ -534,19 +567,32 @@ rapid.default <- function(X, Y,
   if (is.null(metric)) metric <- "symmetric"
 
   fit <- .learner_fit(learner, formula, Y, target_var, num_dist, num_scale, metric)
-  point <- .learner_predict(learner, fit, X, target_var)
-  pred <- if (is_categorical) {
-    point
-  } else {
-    list(point = point,
-         dist = .learner_pdist(learner, fit, X, Y, target_var, num_dist, n_quantiles))
+  predict_on <- function(data) {
+    .rapid_predict(learner, fit, data, Y, target_var, is_categorical, num_dist, n_quantiles)
   }
   structure(
-    list(pred = pred, y = y, learner = learner, model = fit, formula = formula,
+    list(pred = predict_on(X), y = y, learner = learner, model = fit, formula = formula,
          is_categorical = is_categorical, attacker = .learner_describe(learner, fit),
-         note = learner$note),
+         note = learner$note, train = Y, num_dist = num_dist, n_quantiles = n_quantiles,
+         holdout = if (!is.null(holdout)) {
+           list(pred = predict_on(holdout), y = holdout[[target_var]], data = holdout)
+         }),
     class = "rapid_attack"
   )
+}
+
+#' The attacker's prediction for prepared records
+#'
+#' @param point_only If TRUE, a numeric target gets only the point prediction.
+#' @return A probability matrix (categorical target), `list(point, dist)`
+#'   (numeric target), or the point predictions.
+#' @noRd
+.rapid_predict <- function(learner, fit, data, train, target_var, is_categorical,
+                           num_dist, n_quantiles, point_only = FALSE) {
+  point <- .learner_predict(learner, fit, data, target_var)
+  if (is_categorical || point_only) return(point)
+  list(point = point,
+       dist = .learner_pdist(learner, fit, data, train, target_var, num_dist, n_quantiles))
 }
 
 #' Score an attack under a rule and assemble the rapid object
@@ -559,10 +605,12 @@ rapid.default <- function(X, Y,
 #' @param meta `list(key_vars, target_var, na, call)`.
 #' @param n_perm,threshold_rule,perm_level Permutations of the true values for
 #'   the chance level, and whether their `perm_level` quantile is the threshold.
+#' @param seed Seed set again before the permutations of the holdout, so that a
+#'   holdout equal to the original data gives the main result.
 #' @noRd
 .rapid_assess <- function(attack, rule, data, meta, store_model = FALSE,
                           store_predictions = TRUE, n_perm = 10,
-                          threshold_rule = "fixed", perm_level = 0.95) {
+                          threshold_rule = "fixed", perm_level = 0.95, seed = NULL) {
   .rapid_check_perm(n_perm, threshold_rule, perm_level, rule)
   # The permutations come first: under a permutation threshold they set the flag
   null <- if (n_perm > 0) .rapid_null(attack, rule, n_perm)
@@ -570,19 +618,33 @@ rapid.default <- function(X, Y,
     rule <- .rule_set_threshold(
       rule, stats::quantile(null, perm_level, names = FALSE, na.rm = TRUE))
   }
-  chance_rates <- if (is.null(null)) numeric(0) else
-    apply(null, 2, function(s) mean(.rule_flag(rule, s)))
+  chance_rates <- .rapid_chance_rates(rule, null)
   chance <- if (n_perm > 0) mean(chance_rates) else NA_real_
 
-  sc <- .rule_score(rule, attack$pred, attack$y, attack$y)
-  score <- sc[[rule$score_var]]
-  at_risk <- .rule_flag(rule, score)
+  main <- .rapid_score_records(rule, attack$pred, attack$y, attack$y, data,
+                               attack$is_categorical)
+  sc <- main$sc
+  score <- main$score
+  at_risk <- main$at_risk
   n <- length(at_risk)
-  rec <- .rapid_records(data, attack, sc, at_risk)
+  rec <- main$rec
 
-  # The model is kept once and only on request
+  # The holdout is scored under the rule as calibrated on the original records
+  holdout <- NULL
+  if (!is.null(attack$holdout)) {
+    if (!is.null(seed)) set.seed(seed)
+    holdout <- .rapid_score_holdout(attack, rule, n_perm)
+    attack$holdout$data <- NULL
+  }
+
+  # The model and the training data are kept once and only on request
   model <- attack$model
+  predictor <- if (store_model) {
+    list(learner = attack$learner, train = attack$train, num_dist = attack$num_dist,
+         n_quantiles = attack$n_quantiles)
+  }
   attack["model"] <- list(NULL)
+  attack["train"] <- list(NULL)
 
   validate_rapid(new_rapid(list(
     rapid = sum(at_risk) / n,
@@ -605,6 +667,9 @@ rapid.default <- function(X, Y,
     record_cols = rec$cols,
     attack = if (store_predictions) attack,
     model = if (store_model) model,
+    predictor = predictor,
+    holdout = holdout,
+    release_specific = if (!is.null(holdout)) sum(at_risk) / n - holdout$rapid,
     model_type = attack$learner$name,
     attacker = attack$attacker,
     note = attack$note,
@@ -617,6 +682,48 @@ rapid.default <- function(X, Y,
     na = meta$na,
     call = meta$call
   )))
+}
+
+#' Share flagged in each permutation
+#' @param null Matrix from `.rapid_null()`, or `NULL` (no permutations).
+#' @noRd
+.rapid_chance_rates <- function(rule, null) {
+  if (is.null(null)) return(numeric(0))
+  apply(null, 2, function(s) mean(.rule_flag(rule, s)))
+}
+
+#' Score records under a rule and build their record table
+#'
+#' Shared by the original records, the holdout and `predict()`.
+#'
+#' @param pred,y The attacker's prediction and the true values.
+#' @param ref_y The original values the baseline is taken from.
+#' @param data The prepared records.
+#' @return `list(sc, score, at_risk, rec)`; `rec` from `.rapid_records()`.
+#' @noRd
+.rapid_score_records <- function(rule, pred, y, ref_y, data, is_categorical) {
+  sc <- .rule_score(rule, pred, y, ref_y)
+  score <- sc[[rule$score_var]]
+  at_risk <- .rule_flag(rule, score)
+  rec <- .rapid_records(data, list(is_categorical = is_categorical, y = y), sc, at_risk)
+  list(sc = sc, score = score, at_risk = at_risk, rec = rec)
+}
+
+#' Score the holdout of an attack
+#'
+#' The holdout is scored with the rule of the main result, its baseline and its
+#' permutations use the original values as reference.
+#' @return `list(rapid, chance, excess, n, records)`.
+#' @noRd
+.rapid_score_holdout <- function(attack, rule, n_perm) {
+  ho <- attack$holdout
+  null <- if (n_perm > 0) .rapid_null(ho, rule, n_perm, ref_y = attack$y)
+  chance <- if (n_perm > 0) mean(.rapid_chance_rates(rule, null)) else NA_real_
+  s <- .rapid_score_records(rule, ho$pred, ho$y, attack$y, ho$data, attack$is_categorical)
+  n <- length(s$at_risk)
+  share <- sum(s$at_risk) / n
+  list(rapid = share, chance = chance, excess = share - chance, n = n,
+       records = s$rec$records)
 }
 
 #' Check the settings of the permutations
@@ -663,8 +770,9 @@ rapid.default <- function(X, Y,
 .rapid_fields <- c("rapid", "n_at_risk", "pct_at_risk", "n_total", "chance", "chance_rates",
                    "excess", "n_perm", "threshold_rule", "perm_level", "rule", "method",
                    "threshold", "score", "baseline", "at_risk", "records", "record_cols",
-                   "attack", "model", "model_type", "attacker", "model_metrics", "formula",
-                   "key_vars", "target_var", "is_categorical", "na", "call", "version")
+                   "attack", "model", "predictor", "holdout", "release_specific",
+                   "model_type", "attacker", "model_metrics", "formula", "key_vars",
+                   "target_var", "is_categorical", "na", "call", "version")
 
 #' Constructor of the rapid class
 #' @param fields Named list of the fields of the object.
@@ -711,7 +819,7 @@ validate_rapid <- function(x) {
     .rapid_abort(c("The object does not hold the attacker's predictions; re-run rapid() ",
                    "with store_predictions = TRUE."), "object")
   }
-  if ("model" %in% what && is.null(x$model)) {
+  if ("model" %in% what && (is.null(x$model) || is.null(x$predictor))) {
     .rapid_abort(c("The object does not hold the fitted model; re-run rapid() with ",
                    "store_model = TRUE."), "object")
   }

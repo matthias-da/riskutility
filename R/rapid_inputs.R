@@ -267,16 +267,97 @@
   list(X = X, Y = Y, is_categorical = is_categorical, dropped = dropped, unseen = unseen)
 }
 
+#' Prepare new records (a holdout, the newdata of predict()) like the original data
+#'
+#' The same steps as `.rapid_prepare_data()` for `X`: the target (if present)
+#' and the quasi-identifiers in that order, the column types of the data the
+#' attacker was fitted on, `na_strategy` for the target, the level "missing"
+#' for missing categorical values, and the factor levels of the training data.
+#'
+#' @param data Data frame of new records.
+#' @param train The prepared synthetic data the attacker was fitted on.
+#' @param na `list(strategy, constant)` as stored in a `rapid` object.
+#' @param learner The attacker; levels it cannot predict are refused.
+#' @param name Name of the data in messages.
+#' @param need_target Must the data hold the target?
+#' @return `list(data, has_target)`.
+#' @noRd
+.rapid_prepare_new <- function(data, train, key_vars, target_var, na, learner, name,
+                               need_target = TRUE) {
+  if (!is.data.frame(data)) .rapid_abort(c("'", name, "' must be a data frame."), "input")
+  data <- as.data.frame(data)
+  if (nrow(data) == 0) .rapid_abort(c("'", name, "' has no rows."), "input")
+  has_target <- need_target || target_var %in% names(data)
+  vars <- c(if (has_target) target_var, key_vars)
+  miss <- setdiff(vars, names(data))
+  if (length(miss) > 0) {
+    .rapid_abort(c("Variables missing in ", name, ": ", paste0("'", miss, "'", collapse = ", "),
+                   "."), "input")
+  }
+  data <- data[, vars, drop = FALSE]
+
+  for (v in vars) {
+    kind <- .rapid_var_kind(data[[v]], v, name)
+    fitted_kind <- if (is.factor(train[[v]])) "categorical" else "numeric"
+    if (kind != fitted_kind) {
+      .rapid_abort(c("Variable '", v, "' is ", kind, " in ", name, " but ", fitted_kind,
+                     " in the data the attacker was fitted on."), "input")
+    }
+    data[[v]] <- if (kind == "numeric") as.numeric(data[[v]]) else
+      factor(data[[v]], levels = if (is.factor(data[[v]])) levels(data[[v]]) else
+        sort(unique(data[[v]])))
+  }
+
+  # Missing values as for X (train has none left, so only `data` changes)
+  if (has_target) {
+    data <- .handle_sensitive_na(data, train, target_var, na$strategy, na$constant)$original
+    if (nrow(data) == 0) {
+      .rapid_abort(c("'", name, "' has no records left after removing missing target ",
+                     "values."), "input")
+    }
+  }
+  data <- .handle_qi_na(data, key_vars)
+
+  # The factor levels of the training data; values outside them cannot be predicted
+  unknown <- list()
+  unseen <- list()
+  for (v in vars[vapply(data[vars], is.factor, logical(1))]) {
+    values <- unique(as.character(data[[v]]))
+    new <- setdiff(values, levels(train[[v]]))
+    if (length(new) > 0) unknown[[v]] <- new
+    if (v != target_var) {
+      empty <- setdiff(values, c(new, unique(as.character(train[[v]]))))
+      if (length(empty) > 0) unseen[[v]] <- empty
+    }
+    data[[v]] <- factor(data[[v]], levels = levels(train[[v]]),
+                        ordered = is.ordered(train[[v]]))
+  }
+  if (length(unknown) > 0) {
+    what <- vapply(names(unknown), function(v) {
+      paste0("'", v, "' (", paste(unknown[[v]], collapse = ", "), ")")
+    }, character(1))
+    .rapid_abort(c("The records of '", name, "' contain levels that occur neither in the ",
+                   "original nor in the synthetic data: ", paste(what, collapse = "; "),
+                   ". Recode them or drop these records."), "levels")
+  }
+  if (!learner$unseen_levels) {
+    .rapid_check_levels(unseen, learner$name, paste0("records of '", name, "'"))
+  }
+
+  list(data = data, has_target = has_target)
+}
+
 #' Refuse quasi-identifier levels that the attacker model has never seen
 #' @param unseen Named list from `.rapid_prepare_data()`.
 #' @param model Name of the model, for the message.
+#' @param data_name Name of the scored data, for the message.
 #' @noRd
-.rapid_check_levels <- function(unseen, model) {
+.rapid_check_levels <- function(unseen, model, data_name = "original data") {
   if (length(unseen) == 0) return(invisible(TRUE))
   what <- vapply(names(unseen), function(v) {
     paste0("'", v, "' (", paste(unseen[[v]], collapse = ", "), ")")
   }, character(1))
-  .rapid_abort(c("The original data contain quasi-identifier levels that do not occur in ",
+  .rapid_abort(c("The ", data_name, " contain quasi-identifier levels that do not occur in ",
                  "the synthetic data: ", paste(what, collapse = "; "), ". The model '",
                  model, "' cannot predict such records. Use a tree-based model ",
                  "(\"rf\", \"cart\", \"gbm\") or recode these levels."), "levels")

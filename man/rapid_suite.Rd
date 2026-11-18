@@ -155,6 +155,7 @@ if (requireNamespace("ranger", quietly = TRUE) &&
 
 Other rapid: 
 \code{\link{confint.rapid}()},
+\code{\link{predict.rapid}()},
 \code{\link{rapid}()},
 \code{\link{rapid_methods}},
 \code{\link{rapid_qi_contribution}()},

@@ -148,6 +148,7 @@ Synthetic Data. \emph{Journal of Official Statistics}.
 
 Other rapid: 
 \code{\link{confint.rapid}()},
+\code{\link{predict.rapid}()},
 \code{\link{rapid}()},
 \code{\link{rapid_methods}},
 \code{\link{rapid_qi_contribution}()},

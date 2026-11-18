@@ -31,6 +31,7 @@ rapid(X, ...)
   n_perm = 10,
   threshold_rule = c("fixed", "permutation"),
   perm_level = 0.95,
+  holdout = NULL,
   store_model = FALSE,
   store_predictions = TRUE,
   seed = NULL,
@@ -125,8 +126,16 @@ over a baseline (band, RCS_marginal) and with \code{n_perm >= 1}.}
 \item{perm_level}{numeric in (0, 1), quantile of the permuted scores that is
 the threshold under \code{threshold_rule = "permutation"} (default: 0.95)}
 
-\item{store_model}{logical, if TRUE store the fitted model object in the result
-(needed for \code{plot(result, which = 4)} variable importance plot). Default FALSE.}
+\item{holdout}{data frame of original records that were not used to generate
+the synthetic data (default: NULL; the holdout of a \code{synth_pair} is
+used when not given). It is prepared like \code{X} and scored with the same
+attacker and rule (a permutation threshold as found on \code{X}), with
+baselines from the values of \code{X}. RAPID on \code{X} minus RAPID on
+the holdout is the risk specific to this release.}
+
+\item{store_model}{logical, if TRUE store the fitted model object and the
+prepared synthetic data in the result (needed for \code{predict()} and for
+the variable importance plot \code{plot(result, which = 4)}). Default FALSE.}
 
 \item{store_predictions}{logical, if TRUE (default) the result keeps the
 attacker's predictions, so that it can be tested and rescored without
@@ -166,6 +175,12 @@ when the true values are permuted; NA if n_perm = 0), the share of each
 permutation, and rapid - chance
 \item n_perm, threshold_rule, perm_level: the permutation settings
 \item model: the fitted model object (only if store_model = TRUE)
+\item predictor: what \code{predict()} needs besides the model: the
+attacker, the prepared synthetic data and the distribution settings
+(only if store_model = TRUE)
+\item holdout: \code{list(rapid, chance, excess, n, records)} of the
+holdout records (NULL without holdout)
+\item release_specific: rapid - holdout$rapid (NULL without holdout)
 \item model_type, attacker: the model and a line with the settings that
 drive its result (number of trees and node size, number of leaves, scale)
 \item model_metrics: model performance (accuracy for categorical, MAE/RMSE for numeric)
@@ -391,6 +406,7 @@ Visualization for Synthetic Data. \emph{Journal of Official Statistics}.
 
 Other rapid: 
 \code{\link{confint.rapid}()},
+\code{\link{predict.rapid}()},
 \code{\link{rapid_methods}},
 \code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_suite}()},
