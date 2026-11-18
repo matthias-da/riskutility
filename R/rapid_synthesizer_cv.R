@@ -37,7 +37,9 @@
 #' \describe{
 #'   \item{folds}{Data frame with one row per fold: \code{fold},
 #'     \code{n} (records of the test split), \code{rapid},
-#'     \code{chance}, \code{excess} and the model metrics.}
+#'     \code{chance}, \code{excess}, the model metrics and the
+#'     \code{threshold} of the fold (it differs between folds under
+#'     \code{threshold_rule = "permutation"}).}
 #'   \item{fits}{List of the \code{rapid} objects of the folds.}
 #'   \item{cv_summary}{List with \code{mean}, \code{sd}, \code{se},
 #'     \code{median}, \code{min}, \code{max}, \code{ci_lower},
@@ -45,7 +47,8 @@
 #'     \code{mean_chance} and \code{mean_excess}, plus the mean model
 #'     metrics.}
 #'   \item{rapid, chance, excess}{Means over the folds.}
-#'   \item{rule}{The scoring rule, taken from the first fold.}
+#'   \item{rule}{The scoring rule, taken from the first fold. Under a
+#'     permutation threshold the print adds the range of the fold thresholds.}
 #'   \item{method, threshold, model_type, attacker}{Method and threshold of
 #'     the rule, the attacker model and its settings line, all taken from the
 #'     first fold.}
@@ -53,10 +56,11 @@
 #'     \code{stratified}, \code{is_categorical}, \code{n_original},
 #'     \code{target_var}, \code{key_vars}.}
 #' }
-#' The interval \code{ci_lower}, \code{ci_upper} is the normal interval
-#' \eqn{\bar R \pm z_{0.975} s / \sqrt{k}}{mean +/- qnorm(0.975) sd / sqrt(k)}
-#' of the mean of the \eqn{k} fold values, where \eqn{s} is their standard
-#' deviation. With few folds it is a rough guide.
+#' The interval \code{ci_lower}, \code{ci_upper} is the t interval
+#' \eqn{\bar R \pm t_{0.975, k-1} s / \sqrt{k}}{mean +/- qt(0.975, k - 1) sd /
+#' sqrt(k)} of the mean of the \eqn{k} fold values, where \eqn{s} is their
+#' standard deviation. It is a rough guide: the folds share the original data,
+#' so the fold values are not independent.
 #' \code{format()} returns the printed lines and \code{print()} the object,
 #' invisibly. \code{summary()} returns an object of class
 #' \code{"summary.rapid_cv"} with the statistics over the folds and the fold
@@ -211,10 +215,10 @@ rapid_synthesizer_cv <- function(X,
   fold_df <- do.call(rbind, lapply(seq_len(k), function(i) {
     f <- fits[[i]]
     data.frame(fold = i, n = f$n_total, rapid = f$rapid, chance = f$chance,
-               excess = f$excess, as.data.frame(f$model_metrics))
+               excess = f$excess, as.data.frame(f$model_metrics), threshold = f$threshold)
   }))
   rapids <- fold_df$rapid
-  half <- stats::qnorm(0.975) * stats::sd(rapids) / sqrt(k)
+  half <- stats::qt(0.975, k - 1) * stats::sd(rapids) / sqrt(k)
 
   cv_summary <- list(
     mean   = mean(rapids),
@@ -228,7 +232,7 @@ rapid_synthesizer_cv <- function(X,
     mean_chance = mean(fold_df$chance),
     mean_excess = mean(fold_df$excess)
   )
-  metrics <- setdiff(names(fold_df), c("fold", "n", "rapid", "chance", "excess"))
+  metrics <- setdiff(names(fold_df), c("fold", "n", "rapid", "chance", "excess", "threshold"))
   for (m in metrics) {
     cv_summary[[paste0("mean_", m)]] <- mean(fold_df[[m]], na.rm = TRUE)
   }
@@ -284,6 +288,16 @@ rapid_synthesizer_cv <- function(X,
 }
 
 
+# A permutation threshold is calibrated in each fold: the rule line shows the
+# first, this line the range
+.rapid_cv_threshold_line <- function(x, f) {
+  th <- x$folds$threshold
+  if (is.null(th) || length(unique(th)) < 2) return(NULL)
+  paste0("  The threshold differs by fold: ", f(min(th)), " to ", f(max(th)),
+         " (folds$threshold)")
+}
+
+
 #' @rdname rapid_synthesizer_cv
 #' @param x,object an object of class \code{"rapid_cv"}
 #' @param digits number of decimal places
@@ -296,6 +310,7 @@ format.rapid_cv <- function(x, digits = 3, ...) {
            if (x$settings$stratified && x$settings$is_categorical) ", stratified", ")"),
     paste0("Target '", x$settings$target_var, "', attacker ", x$attacker),
     paste0("Rule: ", format(x$rule)),
+    .rapid_cv_threshold_line(x, f),
     paste0("RAPID: mean ", f(s$mean), ", SD ", f(s$sd), ", 95% CI [", f(s$ci_lower), ", ",
            f(s$ci_upper), "]"),
     if (!is.na(s$mean_chance)) {

@@ -84,7 +84,9 @@ An object of class \code{"rapid_cv"} with components:
 \describe{
 \item{folds}{Data frame with one row per fold: \code{fold},
 \code{n} (records of the test split), \code{rapid},
-\code{chance}, \code{excess} and the model metrics.}
+\code{chance}, \code{excess}, the model metrics and the
+\code{threshold} of the fold (it differs between folds under
+\code{threshold_rule = "permutation"}).}
 \item{fits}{List of the \code{rapid} objects of the folds.}
 \item{cv_summary}{List with \code{mean}, \code{sd}, \code{se},
 \code{median}, \code{min}, \code{max}, \code{ci_lower},
@@ -92,7 +94,8 @@ An object of class \code{"rapid_cv"} with components:
 \code{mean_chance} and \code{mean_excess}, plus the mean model
 metrics.}
 \item{rapid, chance, excess}{Means over the folds.}
-\item{rule}{The scoring rule, taken from the first fold.}
+\item{rule}{The scoring rule, taken from the first fold. Under a
+permutation threshold the print adds the range of the fold thresholds.}
 \item{method, threshold, model_type, attacker}{Method and threshold of
 the rule, the attacker model and its settings line, all taken from the
 first fold.}
@@ -100,10 +103,11 @@ first fold.}
 \code{stratified}, \code{is_categorical}, \code{n_original},
 \code{target_var}, \code{key_vars}.}
 }
-The interval \code{ci_lower}, \code{ci_upper} is the normal interval
-\eqn{\bar R \pm z_{0.975} s / \sqrt{k}}{mean +/- qnorm(0.975) sd / sqrt(k)}
-of the mean of the \eqn{k} fold values, where \eqn{s} is their standard
-deviation. With few folds it is a rough guide.
+The interval \code{ci_lower}, \code{ci_upper} is the t interval
+\eqn{\bar R \pm t_{0.975, k-1} s / \sqrt{k}}{mean +/- qt(0.975, k - 1) sd /
+sqrt(k)} of the mean of the \eqn{k} fold values, where \eqn{s} is their
+standard deviation. It is a rough guide: the folds share the original data,
+so the fold values are not independent.
 \code{format()} returns the printed lines and \code{print()} the object,
 invisibly. \code{summary()} returns an object of class
 \code{"summary.rapid_cv"} with the statistics over the folds and the fold

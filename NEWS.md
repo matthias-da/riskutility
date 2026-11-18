@@ -29,7 +29,9 @@ Several defaults change reported values. Each item below gives the call that rep
 * `rapid_threshold_select()` under the point rule takes its grid `epsilon_range` as proportions
   (default `seq(0.01, 0.5, by = 0.02)`) and recommends the smallest significant tolerance, the
   strictest one. 0.2.0 recommended the largest, the least strict. The 0.2.0 choice is
-  `max(res$results$threshold[res$results$significant])`.
+  `max(res$results$threshold[res$results$significant])`. A grid with a value of 1 or more, such
+  as the 0.2.0 grid `seq(1, 50, by = 2)`, is read as percent with a warning, as `num_epsilon` in
+  `rapid()`.
 * The linear model chooses its working scale (`num_scale = "auto"`). It takes the log scale when
   the error metric is relative, all synthetic target values are positive and the log model has
   the higher likelihood on the original scale. Imputed synthetic values take no part in this
@@ -60,6 +62,10 @@ Several defaults change reported values. Each item below gives the call that rep
   minbucket = 7`).
 * `summary()` of a `rapid` object no longer labels the result LOW, MEDIUM or HIGH (cut-offs 0.05
   and 0.15). Read the excess over the chance level and `rapid_test()` instead.
+* The 95 % interval of `rapid_synthesizer_cv()` for the mean RAPID over the folds uses the t
+  quantile `qt(0.975, k - 1)` instead of `qnorm(0.975)`, so it is wider (2.78 instead of 1.96
+  standard errors at `k = 5`). It stays a rough guide, because the folds share the original
+  data.
 * `rapid_synthesizer_cv()` has no default seed and is silent by default. The 0.2.0 call is
   `rapid_synthesizer_cv(..., seed = 2025, verbose = TRUE)`. No RAPID function sets a seed unless
   one is given.
