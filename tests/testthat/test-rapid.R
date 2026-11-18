@@ -659,3 +659,109 @@ test_that("plot.rapid() draws every type for numeric and categorical targets", {
   expect_no_error(plot(cat3, which = 4))
   expect_error(plot(point, which = 4), regexp = "store_model", class = "rapid_error_object")
 })
+
+plot_fits <- function() {
+  o <- sim_numeric(150)
+  o$grp <- factor(rep(c("u", "v", "w"), 50))
+  s <- noisy_copy(o)
+  key <- c("x1", "x2", "grp")
+  list(
+    band = rapid(o, s, key, "y", model_type = "rf", seed = 1, store_model = TRUE),
+    point = rapid(o, s, key, "y", model_type = "lm", num_eval_method = "point",
+                  store_model = TRUE),
+    marginal = rapid(to_classes(o), to_classes(s, ref = o), key, "y", model_type = "rf",
+                     seed = 1, store_model = TRUE),
+    conditional = rapid(to_classes(o), to_classes(s, ref = o), key, "y", model_type = "rf",
+                        cat_eval_method = "RCS_conditional", seed = 1, store_model = TRUE)
+  )
+}
+
+test_that("each of which = 1:6 runs for a band, a point-rule and a categorical object", {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  for (x in plot_fits()) {
+    for (w in 1:4) expect_no_error(plot(x, which = w))
+    expect_no_error(suppressWarnings(plot(x, which = 5)))
+    expect_no_error(suppressWarnings(plot(x, which = 6)))
+  }
+})
+
+test_that("which = c(1, 3) draws both", {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  fits <- plot_fits()
+  res <- plot(fits$band, which = c(1, 3))
+  expect_type(res, "list")
+  expect_length(res, 2)
+  expect_named(res, c("1", "3"))
+  expect_s3_class(res[["1"]], "ggplot")
+  expect_s3_class(res[["3"]], "ggplot")
+  # The order given is kept; a base-graphics type gives a NULL entry
+  res <- plot(fits$point, which = c(3, 1))
+  expect_named(res, c("3", "1"))
+  expect_null(res[["1"]])
+  expect_s3_class(plot(fits$band, which = 2), "ggplot")
+  expect_s3_class(plot(fits$marginal, which = 2), "ggplot")
+  expect_null(plot(fits$conditional, which = 2))
+  expect_invisible(plot(fits$band, which = 1))
+})
+
+test_that("which = 3 holds a chance curve that agrees with the object at its threshold", {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  x <- plot_fits()$band
+  p <- plot(x, which = 3)
+  d <- p$data
+  expect_true("Chance level" %in% d$series)
+  expect_true("RAPID" %in% d$series)
+  tau <- x$threshold
+  at <- d[d$series == "Chance level", ]
+  expect_equal(approx(at$tau, at$value, xout = tau)$y, x$chance, tolerance = 0.03)
+  p2 <- plot(x, which = 3, tau_range = c(0, tau, 1))
+  at <- p2$data[p2$data$series == "Chance level", ]
+  expect_equal(at$value[at$tau == tau], x$chance)
+})
+
+test_that("a plot leaves the random stream of the caller alone", {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  x <- plot_fits()$band
+  set.seed(99)
+  before <- .Random.seed
+  plot(x, which = c(1, 3))
+  expect_identical(.Random.seed, before)
+  # Without a seed of the fit the stream is restored as well
+  o <- sim_numeric(100)
+  y <- rapid(o, noisy_copy(o), c("x1", "x2"), "y", model_type = "lm")
+  set.seed(99)
+  before <- .Random.seed
+  plot(y, which = 3)
+  expect_identical(.Random.seed, before)
+})
+
+test_that("an object without stored predictions still plots types 1 to 3", {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  o <- sim_numeric(100)
+  s <- noisy_copy(o)
+  x <- rapid(o, s, c("x1", "x2"), "y", model_type = "lm", store_predictions = FALSE)
+  for (w in 1:3) expect_s3_class(plot(x, which = w), "ggplot")
+  expect_false("Chance level" %in% plot(x, which = 3)$data$series)
+  x0 <- rapid(o, s, c("x1", "x2"), "y", model_type = "lm", n_perm = 0)
+  expect_false("Chance level" %in% plot(x0, which = 3)$data$series)
+})
+
+test_that("type 4 without the stored model is an object error", {
+  o <- sim_numeric(100)
+  x <- rapid(o, noisy_copy(o), c("x1", "x2"), "y", model_type = "rf")
+  expect_error(plot(x, which = 4), regexp = "store_model", class = "rapid_error_object")
+  expect_error(plot(x, which = 7), class = "rapid_error_input")
+})
+
+test_that("plot() asks for the stored model only, predict() also for the predictor", {
+  x <- plot_fits()$band
+  x$predictor <- NULL
+  expect_error(.rapid_require(x, c("version", "model")), NA)
+  expect_error(.rapid_require(x, c("version", "model", "predictor")),
+               class = "rapid_error_object")
+})

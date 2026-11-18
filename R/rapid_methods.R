@@ -122,7 +122,7 @@ nobs.rapid <- function(object, ...) {
 #' @family rapid
 #' @export
 predict.rapid <- function(object, newdata, ...) {
-  .rapid_require(object, c("version", "model"))
+  .rapid_require(object, c("version", "model", "predictor"))
   .rapid_check_empty_dots(list(...), "predict() takes 'newdata' only.")
   if (missing(newdata)) .rapid_abort("'newdata' is missing: pass the records to predict.",
                                      "input")
