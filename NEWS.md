@@ -96,7 +96,9 @@ Several defaults change reported values. Each item below gives the call that rep
 * `rapid_suite()` fits several attackers on the same data (default `rf`, `cart`, `gbm`,
   `lookup`) or combines fitted `rapid` objects, and reports the worst case, the largest RAPID
   and the largest excess with the model that has it. It has `print()`, `summary()`, `plot()`,
-  `as.data.frame()` and `[[`.
+  `as.data.frame()` and `[[`. The holdout of a `synth_pair` is scored by every attacker. A model
+  that cannot run with the given target or `num_dist` is skipped with a warning of class
+  `rapid_warning_skipped_model`.
 * `rapid_learner()` builds a user-defined attacker from a fitting function and prediction
   functions. It is accepted wherever `model_type` is. The output of the prediction functions is checked.
   `predict_prob` must return probabilities between 0 and 1 whose sum per record is at most 1, so

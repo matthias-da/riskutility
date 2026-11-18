@@ -142,3 +142,23 @@ test_that("as.data.frame returns the results", {
   expect_identical(as.data.frame(s), s$results)
   expect_named(s$results, c("model_type", "rapid", "chance", "excess", "n_at_risk"))
 })
+
+test_that("a suite keeps the holdout of a synth_pair", {
+  h <- sim_numeric(40, seed = 3)
+  pair <- synth_pair(o_suite, s_suite, key_vars = qi, target_var = "y", holdout = h)
+  su <- rapid_suite(pair, model_types = "lm", n_perm = 2, seed = 1)
+  one <- rapid(pair, model_type = "lm", n_perm = 2, seed = 1)
+  expect_false(is.null(su$fits[["lm"]]$holdout))
+  expect_identical(su$fits[["lm"]]$holdout, one$holdout)
+  expect_identical(su$fits[["lm"]]$release_specific, one$release_specific)
+})
+
+test_that("the skip check of a suite uses num_dist given in ...", {
+  skip_if_not_installed("xgboost")
+  w <- expect_warning(su <- rapid_suite(o_suite, s_suite, key_vars = qi, target_var = "y",
+                                        model_types = c("lm", "gbm"), num_dist = "exact",
+                                        n_perm = 0),
+                      class = "rapid_warning_skipped_model")
+  expect_match(conditionMessage(w), "gbm", fixed = TRUE)
+  expect_identical(names(su$fits), "lm")
+})

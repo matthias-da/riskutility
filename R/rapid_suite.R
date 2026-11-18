@@ -157,10 +157,13 @@ rapid_suite.default <- function(X, Y, key_vars, target_var,
   # Decide before fitting which models can run
   is_categorical <- .rapid_var_kind(inputs$X[[inputs$target_var]], inputs$target_var,
                                     "X") == "categorical"
+  num_dist <- inputs$dots[["num_dist", exact = TRUE]]
+  num_dist <- .rapid_choice(if (is.null(num_dist)) "auto" else num_dist,
+                            c("auto", "grid", "exact"), "num_dist")
   skipped <- character(0)
   for (m in names(learners)) {
     why <- tryCatch({
-      .learner_check(.rapid_learner(learners[[m]]), is_categorical, "auto")
+      .learner_check(.rapid_learner(learners[[m]]), is_categorical, num_dist)
       NULL
     }, rapid_error_dependency = conditionMessage, rapid_error_model = conditionMessage)
     if (!is.null(why)) skipped[m] <- why
@@ -173,11 +176,13 @@ rapid_suite.default <- function(X, Y, key_vars, target_var,
     .rapid_warn(msg, "skipped_model")
   }
 
+  # The holdout of a synth_pair, unless one is given in ...
+  holdout <- if (!"holdout" %in% names(inputs$dots)) list(holdout = inputs$holdout)
   fits <- lapply(usable, function(m) {
     do.call(rapid, c(list(inputs$X, inputs$Y, key_vars = inputs$key_vars,
                           target_var = inputs$target_var, model_type = learners[[m]],
                           seed = seed),
-                     inputs$dots))
+                     holdout, inputs$dots))
   })
   names(fits) <- usable
   .rapid_suite_new(fits)
