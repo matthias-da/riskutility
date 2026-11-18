@@ -318,6 +318,17 @@ test_that("threshold selection warns about the grid the rule does not use", {
                  regexp = "'epsilon_range'", class = "rapid_warning_ignored_argument")
 })
 
+test_that("a percent grid of the point rule is read as percent with a warning", {
+  x <- lm_fit(num_eval_method = "point")
+  expect_warning(sel <- rapid_threshold_select(x, epsilon_range = c(1, 5, 10),
+                                               n_permutations = 9, seed = 1),
+                 regexp = "epsilon_range", class = "rapid_warning_legacy_tolerance")
+  expect_equal(sel$results$threshold, c(0.01, 0.05, 0.1))
+  same <- rapid_threshold_select(x, epsilon_range = c(0.01, 0.05, 0.1), n_permutations = 9,
+                                 seed = 1)
+  expect_identical(sel$results$significant, same$results$significant)
+})
+
 test_that("threshold_star is NA when nothing is significant", {
   sel <- rapid_threshold_select(lm_fit(shuffle_target = TRUE), n_permutations = 19,
                                 seed = 1)

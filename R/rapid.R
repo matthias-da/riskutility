@@ -863,7 +863,7 @@ rapid.default <- function(X, Y,
 .rapid_assess <- function(attack, rule, data, meta, store_model = FALSE,
                           store_predictions = TRUE, n_perm = 10,
                           threshold_rule = "fixed", perm_level = 0.95, seed = NULL) {
-  .rapid_check_perm(n_perm, threshold_rule, perm_level, rule)
+  # The permutation settings were checked by .rapid_scoring()
   # The permutations come first: under a permutation threshold they set the flag
   null <- if (n_perm > 0) .rapid_null(attack, rule, n_perm)
   if (threshold_rule == "permutation") {
@@ -938,11 +938,16 @@ rapid.default <- function(X, Y,
 }
 
 #' Share flagged in each permutation
+#'
+#' The one place that turns permuted scores into shares, used by `rapid()`,
+#' `rapid_test()`, `rapid_threshold_select()` and the plots.
 #' @param null Matrix from `.rapid_null()`, or `NULL` (no permutations).
 #' @noRd
 .rapid_chance_rates <- function(rule, null) {
   if (is.null(null)) return(numeric(0))
-  apply(null, 2, function(s) mean(.rule_flag(rule, s)))
+  flags <- .rule_flag(rule, null)
+  dim(flags) <- dim(null)
+  colMeans(flags)
 }
 
 #' Score records under a rule and build their record table
@@ -1023,8 +1028,8 @@ rapid.default <- function(X, Y,
 .rapid_fields <- c("rapid", "n_at_risk", "pct_at_risk", "n_total", "chance", "chance_rates",
                    "excess", "n_perm", "threshold_rule", "perm_level", "rule", "method",
                    "threshold", "score", "baseline", "at_risk", "records", "record_cols",
-                   "attack", "model", "predictor", "holdout", "release_specific",
-                   "model_type", "attacker", "model_metrics", "formula", "key_vars",
+                   "attack", "model", "predictor", "holdout", "release_specific", "seed",
+                   "model_type", "attacker", "note", "model_metrics", "formula", "key_vars",
                    "target_var", "is_categorical", "na", "call", "version")
 
 #' Constructor of the rapid class

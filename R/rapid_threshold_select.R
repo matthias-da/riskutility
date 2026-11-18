@@ -45,7 +45,10 @@
 #'   above the threshold (default \code{seq(0.05, 0.95, by = 0.05)})
 #' @param epsilon_range numeric vector of tolerances for the point rule (a
 #'   proportion for the relative error metrics, units of the target for the
-#'   absolute one, default \code{seq(0.01, 0.5, by = 0.02)})
+#'   absolute one, default \code{seq(0.01, 0.5, by = 0.02)}). For a relative
+#'   metric, a grid with a value of 1 or more is read as percent, as
+#'   \code{num_epsilon} in \code{rapid()}, with a warning of class
+#'   \code{"rapid_warning_legacy_tolerance"}.
 #'
 #' @return An object of class \code{"rapid_threshold"} with components:
 #' \describe{
@@ -142,6 +145,14 @@ rapid_threshold_select.rapid <- function(X, tau_range = seq(0.05, 0.95, by = 0.0
     .rapid_abort(c("'", if (above) "tau_range" else "epsilon_range",
                    "' must be a numeric vector without missing values."), "input")
   }
+  # A relative tolerance of 1 or more is read as percent, as num_epsilon in rapid()
+  if (!above && !identical(rule$metric, "absolute") && any(thresholds >= 1)) {
+    .rapid_warn(c("epsilon_range has values of 1 or more and is read as percent. A relative ",
+                  "tolerance is now a proportion: use epsilon_range = ",
+                  paste(format(range(thresholds) / 100), collapse = " to "), "."),
+                "legacy_tolerance")
+    thresholds <- thresholds / 100
+  }
 
   # One score matrix under permuted true values serves every threshold: the
   # score of a rule does not depend on its threshold.
@@ -149,7 +160,7 @@ rapid_threshold_select.rapid <- function(X, tau_range = seq(0.05, 0.95, by = 0.0
   null <- .rapid_null(X$attack, rule, n_permutations)
   per_threshold <- vapply(thresholds, function(th) {
     r <- .rule_set_threshold(rule, th)
-    rates <- .rapid_null_rates(r, null)
+    rates <- .rapid_chance_rates(r, null)
     c(rapid_obs = mean(.rule_flag(r, X$score)), chance = mean(rates),
       null_quantile = stats::quantile(rates, 1 - alpha, names = FALSE))
   }, numeric(3))

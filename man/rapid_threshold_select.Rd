@@ -69,7 +69,10 @@ above the threshold (default \code{seq(0.05, 0.95, by = 0.05)})}
 
 \item{epsilon_range}{numeric vector of tolerances for the point rule (a
 proportion for the relative error metrics, units of the target for the
-absolute one, default \code{seq(0.01, 0.5, by = 0.02)})}
+absolute one, default \code{seq(0.01, 0.5, by = 0.02)}). For a relative
+metric, a grid with a value of 1 or more is read as percent, as
+\code{num_epsilon} in \code{rapid()}, with a warning of class
+\code{"rapid_warning_legacy_tolerance"}.}
 
 \item{n_permutations}{number of permutations (default 199)}
 

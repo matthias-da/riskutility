@@ -142,7 +142,7 @@ rapid_test.rapid <- function(X, n_permutations = 199, alpha = 0.05, seed = NULL,
   .rapid_check_test_args(n_permutations, alpha)
 
   if (!is.null(seed)) set.seed(seed)
-  null <- .rapid_null_rates(X$rule, .rapid_null(X$attack, X$rule, n_permutations))
+  null <- .rapid_chance_rates(X$rule, .rapid_null(X$attack, X$rule, n_permutations))
   statistic <- X$rapid
   p_value <- (1 + sum(null >= statistic)) / (1 + n_permutations)
   chance <- mean(null)
@@ -338,14 +338,6 @@ as.data.frame.rapid_test <- function(x, row.names = NULL, optional = FALSE, ...)
   call[[1L]] <- rapid
   if (!any(c("n_perm", "threshold_rule") %in% names(call))) call$n_perm <- 0
   eval(call, env)
-}
-
-#' RAPID of each permutation: share of flagged records per column of the null scores
-#' @noRd
-.rapid_null_rates <- function(rule, null) {
-  flags <- .rule_flag(rule, null)
-  dim(flags) <- dim(null)
-  colMeans(flags)
 }
 
 #' @noRd

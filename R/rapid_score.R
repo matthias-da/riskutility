@@ -9,6 +9,11 @@
 
 .rapid_metrics <- c("symmetric", "stabilised_relative", "absolute")
 
+.rapid_unknown_metric <- function(metric) {
+  .rapid_abort(c("Unknown error metric '", metric, "'. Use one of: ",
+                 paste(.rapid_metrics, collapse = ", "), "."), "input")
+}
+
 #' Error of a value against the true value
 #' @noRd
 .rapid_error <- function(y, v, metric, delta) {
@@ -16,8 +21,7 @@
     symmetric = 2 * abs(y - v) / (abs(y) + abs(v) + 2 * delta),
     stabilised_relative = abs(y - v) / (abs(y) + delta),
     absolute = abs(y - v),
-    .rapid_abort(c("Unknown error metric '", metric, "'. Use one of: ",
-                   paste(.rapid_metrics, collapse = ", "), "."), "input")
+    .rapid_unknown_metric(metric)
   )
 }
 
@@ -57,8 +61,7 @@
       neg <- y < 0
       data.frame(lo = ifelse(neg, -hi, lo), hi = ifelse(neg, -lo, hi))
     },
-    .rapid_abort(c("Unknown error metric '", metric, "'. Use one of: ",
-                   paste(.rapid_metrics, collapse = ", "), "."), "input")
+    .rapid_unknown_metric(metric)
   )
 }
 
@@ -235,11 +238,15 @@
   rule
 }
 
+# A threshold or tolerance in a printed rule: four significant digits, so that
+# a threshold calibrated by permutation does not print with all its digits
+.rule_number <- function(v) format(v, digits = 4)
+
 .rule_tolerance_label <- function(rule) {
   tol <- if (rule$metric == "absolute") {
-    format(rule$epsilon)
+    .rule_number(rule$epsilon)
   } else {
-    paste(format(100 * rule$epsilon), "%")
+    paste(.rule_number(100 * rule$epsilon), "%")
   }
   paste0(gsub("_", " ", rule$metric, fixed = TRUE), " error < ", tol)
 }
@@ -248,12 +255,12 @@
 format.rapid_rule <- function(x, ...) {
   # Fallback for a rule subclass without its own format method
   paste0(x$method, ": ", x$score_var, if (x$direction == "below") " < " else " > ",
-         format(x$threshold))
+         .rule_number(x$threshold))
 }
 
 #' @export
 format.rapid_rule_band <- function(x, ...) {
-  paste0("band: ", .rule_tolerance_label(x), ", gain > ", format(x$threshold))
+  paste0("band: ", .rule_tolerance_label(x), ", gain > ", .rule_number(x$threshold))
 }
 
 #' @export
@@ -263,18 +270,18 @@ format.rapid_rule_point <- function(x, ...) {
 
 #' @export
 format.rapid_rule_RCS_marginal <- function(x, ...) {
-  paste0("RCS_marginal: gain over the marginal baseline > ", format(x$threshold))
+  paste0("RCS_marginal: gain over the marginal baseline > ", .rule_number(x$threshold))
 }
 
 #' @export
 format.rapid_rule_RCS_conditional <- function(x, ...) {
   paste0("RCS_conditional: ratio to the class-conditional baseline > ",
-         format(x$threshold))
+         .rule_number(x$threshold))
 }
 
 #' @export
 format.rapid_rule_NCE <- function(x, ...) {
-  paste0("NCE: normalised cross-entropy score > ", format(x$threshold))
+  paste0("NCE: normalised cross-entropy score > ", .rule_number(x$threshold))
 }
 
 #' Score records under a rule

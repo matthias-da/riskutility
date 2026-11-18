@@ -700,13 +700,13 @@ plot.rapid <- function(x, y = NULL, ...,
   if (length(null) > 0) {
     cnt <- tabulate(findInterval(null, brk, rightmost.closed = TRUE), nbins = bins) /
       x$n_perm
-    steps <- data.frame(r = brk, n = c(cnt, cnt[bins]),
-                        line = "Permutation null (one draw)")
+    null_label <- paste0("Permutation null (mean of ", x$n_perm, " permutations)")
+    steps <- data.frame(r = brk, n = c(cnt, cnt[bins]), line = null_label)
     p <- p +
       ggplot2::geom_step(data = steps, ggplot2::aes(x = .data$r, y = .data$n,
                                                     colour = .data$line),
                          inherit.aes = FALSE, linewidth = 0.7) +
-      ggplot2::scale_colour_manual(values = c("Permutation null (one draw)" = "grey30"),
+      ggplot2::scale_colour_manual(values = stats::setNames("grey30", null_label),
                                    name = NULL)
   }
   subtitle <- if (annotate) {
@@ -758,7 +758,9 @@ plot.rapid <- function(x, y = NULL, ...,
       subtitle = if (annotate) {
         sprintf("%.1f%% at risk (n = %d / %d)", x$pct_at_risk, x$n_at_risk, x$n_total)
       },
-      x = "Baseline b (chance of the band)", y = "Confidence g (attacker)"
+      x = if (x$is_categorical) "Baseline b (share of the true class)" else
+        "Baseline b (chance of the band)",
+      y = "Confidence g (attacker)"
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"))
