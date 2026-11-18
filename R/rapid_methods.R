@@ -39,6 +39,15 @@ format.rapid <- function(x, digits = 3, ...) {
   .rapid_require(x, "version")
   qi <- x$key_vars
   shown <- if (length(qi) > 6) c(qi[1:5], "...") else qi
+  chance <- if (!is.na(x$chance)) {
+    c(paste0("Chance level = ", formatC(x$chance, digits = digits, format = "f"), " (",
+             x$n_perm, " permutation", if (x$n_perm != 1) "s", ")"),
+      paste0("Excess = ", formatC(x$excess, digits = digits, format = "f")))
+  }
+  spread <- if (length(x$chance_rates) > 1) stats::sd(x$chance_rates) else NA_real_
+  indistinct <- if (!is.na(spread) && x$excess <= 2 * spread) {
+    "RAPID is not distinguishable from the chance level; see rapid_test()."
+  }
   c(
     paste0("RAPID of '", x$target_var, "' given ", length(qi), " quasi-identifier",
            if (length(qi) != 1) "s", " (", paste(shown, collapse = ", "), "), attacker ",
@@ -46,6 +55,7 @@ format.rapid <- function(x, digits = 3, ...) {
     paste0("Rule: ", format(x$rule)),
     paste0("RAPID = ", formatC(x$rapid, digits = digits, format = "f"), ": ", x$n_at_risk,
            " of ", x$n_total, " records at risk"),
+    chance, indistinct,
     "Next: summary(), plot(), confint(), rapid_test()"
   )
 }

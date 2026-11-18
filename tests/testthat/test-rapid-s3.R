@@ -80,8 +80,8 @@ test_that("print output is stable", {
   skip_if_not_installed("rpart")
   o <- sim_numeric(150)
   s <- noisy_copy(o)
-  expect_snapshot(print(rapid(o, s, qi, "y", model_type = "lm")))
-  expect_snapshot(print(rapid(o, s, qi, "y", model_type = "lm", num_eval_method = "point")))
+  expect_snapshot(print(rapid(o, s, qi, "y", model_type = "lm", seed = 1)))
+  expect_snapshot(print(rapid(o, s, qi, "y", model_type = "lm", num_eval_method = "point", seed = 1)))
   expect_snapshot(print(rapid(to_classes(o), to_classes(s, ref = o), qi, "y",
                               model_type = "cart", seed = 1)))
 })

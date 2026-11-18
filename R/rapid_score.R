@@ -272,6 +272,25 @@ format.rapid_rule_NCE <- function(x, ...) {
 #' @noRd
 .rule_score <- function(rule, pred, y, ref_y) UseMethod(".rule_score")
 
+#' Scores under permuted true values
+#'
+#' The attacker is held fixed: each record keeps its prediction, the true values
+#' are permuted, and the baseline is that of the permuted value (the reference
+#' values stay the observed ones). Draws come from the current random stream.
+#'
+#' @param attack A `rapid_attack`.
+#' @param rule A `rapid_rule`.
+#' @param n_perm Number of permutations.
+#' @return Numeric matrix, one row per record and one column per permutation,
+#'   holding the score of the rule.
+#' @noRd
+.rapid_null <- function(attack, rule, n_perm) {
+  y <- attack$y
+  vapply(seq_len(n_perm), function(k) {
+    .rule_score(rule, attack$pred, y[sample.int(length(y))], y)[[rule$score_var]]
+  }, numeric(length(y)))
+}
+
 .rule_check_numeric <- function(pred, y, need_dist) {
   if (!is.list(pred) || !is.numeric(pred$point) || length(pred$point) != length(y)) {
     .rapid_abort("Numeric predictions must hold one point prediction per record.", "input")

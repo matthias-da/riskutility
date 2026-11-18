@@ -49,6 +49,16 @@
 #'   attribute: "constant" (default), "drop", or "median". Missing values of a
 #'   categorical variable become the level "missing".
 #' @param na_constant_value numeric, value for constant NA imputation (default: 0)
+#' @param n_perm integer, number of permutations of the true values that give the
+#'   chance level (default: 10). The attacker is kept fixed, each record's
+#'   prediction is scored against a randomly assigned true value and the baseline
+#'   of that value. 0 skips the permutations.
+#' @param threshold_rule character, \code{"fixed"} (default) flags with the
+#'   threshold of the rule; \code{"permutation"} takes the \code{perm_level}
+#'   quantile of all permuted scores as threshold. Only for rules with a gain
+#'   over a baseline (band, RCS_marginal) and with \code{n_perm >= 1}.
+#' @param perm_level numeric in (0, 1), quantile of the permuted scores that is
+#'   the threshold under \code{threshold_rule = "permutation"} (default: 0.95)
 #' @param store_model logical, if TRUE store the fitted model object in the result
 #'   (needed for \code{plot(result, which = 4)} variable importance plot). Default FALSE.
 #' @param store_predictions logical, if TRUE (default) the result keeps the
@@ -85,6 +95,10 @@
 #'     b the baseline and r the normalized gain (g - b) / (1 - b). A column whose
 #'     name is already used by a variable gets the suffix ".rapid".
 #'   \item attack: the attacker's predictions (NULL if store_predictions = FALSE)
+#'   \item chance, chance_rates, excess: the chance level (mean share flagged
+#'     when the true values are permuted; NA if n_perm = 0), the share of each
+#'     permutation, and rapid - chance
+#'   \item n_perm, threshold_rule, perm_level: the permutation settings
 #'   \item model: the fitted model object (only if store_model = TRUE)
 #'   \item model_type, attacker: the model and a line with the settings that
 #'     drive its result (number of trees and node size, number of leaves, scale)
@@ -338,6 +352,10 @@ rapid.default <- function(X, Y,
                           # NA handling
                           na_strategy = c("constant", "drop", "median"),
                           na_constant_value = 0,
+                          # Chance level and threshold
+                          n_perm = 10,
+                          threshold_rule = c("fixed", "permutation"),
+                          perm_level = 0.95,
                           # Output options
                           store_model = FALSE,
                           store_predictions = TRUE,
@@ -361,6 +379,7 @@ rapid.default <- function(X, Y,
                                    c("RCS_marginal", "RCS_conditional", "NCE"),
                                    "cat_eval_method")
   na_strategy <- .rapid_choice(na_strategy, c("constant", "drop", "median"), "na_strategy")
+  threshold_rule <- .rapid_choice(threshold_rule, c("fixed", "permutation"), "threshold_rule")
 
   # Data arguments (aliases, synth_pair) and arguments for the model
   inputs <- .rapid_inputs(
@@ -403,6 +422,7 @@ rapid.default <- function(X, Y,
                delta = num_delta, tau = num_tau),
     cat = list(method = cat_eval_method, tau = cat_tau)
   )
+  .rapid_check_perm(n_perm, threshold_rule, perm_level, rule)
 
   # Fit on the synthetic data, predict the original records
   if (verbose) message("  Fitting ", learner$name, " model on synthetic data...")
@@ -416,7 +436,8 @@ rapid.default <- function(X, Y,
                 na = list(strategy = na_strategy, constant = na_constant_value,
                           dropped = prepared$dropped),
                 call = call),
-    store_model = isTRUE(store_model), store_predictions = isTRUE(store_predictions)
+    store_model = isTRUE(store_model), store_predictions = isTRUE(store_predictions),
+    n_perm = n_perm, threshold_rule = threshold_rule, perm_level = perm_level
   )
 }
 
@@ -465,9 +486,23 @@ rapid.default <- function(X, Y,
 #' @param rule A `rapid_rule`.
 #' @param data The prepared original data (one row per scored record).
 #' @param meta `list(key_vars, target_var, na, call)`.
+#' @param n_perm,threshold_rule,perm_level Permutations of the true values for
+#'   the chance level, and whether their `perm_level` quantile is the threshold.
 #' @noRd
 .rapid_assess <- function(attack, rule, data, meta, store_model = FALSE,
-                          store_predictions = TRUE) {
+                          store_predictions = TRUE, n_perm = 10,
+                          threshold_rule = "fixed", perm_level = 0.95) {
+  .rapid_check_perm(n_perm, threshold_rule, perm_level, rule)
+  # The permutations come first: under a permutation threshold they set the flag
+  null <- if (n_perm > 0) .rapid_null(attack, rule, n_perm)
+  if (threshold_rule == "permutation") {
+    rule <- .rule_set_threshold(
+      rule, stats::quantile(null, perm_level, names = FALSE, na.rm = TRUE))
+  }
+  chance_rates <- if (is.null(null)) numeric(0) else
+    apply(null, 2, function(s) mean(.rule_flag(rule, s)))
+  chance <- if (n_perm > 0) mean(chance_rates) else NA_real_
+
   sc <- .rule_score(rule, attack$pred, attack$y, attack$y)
   score <- sc[[rule$score_var]]
   at_risk <- .rule_flag(rule, score)
@@ -483,6 +518,12 @@ rapid.default <- function(X, Y,
     n_at_risk = sum(at_risk),
     pct_at_risk = 100 * sum(at_risk) / n,
     n_total = n,
+    chance = chance,
+    chance_rates = chance_rates,
+    excess = sum(at_risk) / n - chance,
+    n_perm = n_perm,
+    threshold_rule = threshold_rule,
+    perm_level = perm_level,
     rule = rule,
     method = rule$method,
     threshold = rule$threshold,
@@ -506,6 +547,31 @@ rapid.default <- function(X, Y,
   )))
 }
 
+#' Check the settings of the permutations
+#' @noRd
+.rapid_check_perm <- function(n_perm, threshold_rule, perm_level, rule) {
+  if (!is.numeric(n_perm) || length(n_perm) != 1 || is.na(n_perm) || n_perm < 0 ||
+      n_perm != round(n_perm)) {
+    .rapid_abort("'n_perm' must be a single whole number (0 skips the permutations).",
+                 "input")
+  }
+  if (!is.numeric(perm_level) || length(perm_level) != 1 || is.na(perm_level) ||
+      perm_level <= 0 || perm_level >= 1) {
+    .rapid_abort("'perm_level' must be a single number between 0 and 1.", "input")
+  }
+  if (threshold_rule == "permutation") {
+    if (n_perm < 1) {
+      .rapid_abort("A permutation threshold needs 'n_perm' of at least 1.", "input")
+    }
+    if (!isTRUE(rule$gain)) {
+      .rapid_abort(c("A permutation threshold is only available for rules with a gain over ",
+                     "a baseline (num_eval_method = \"band\", cat_eval_method = ",
+                     "\"RCS_marginal\"); the rule '", rule$method, "' has none."), "input")
+    }
+  }
+  invisible(TRUE)
+}
+
 # Record table: the prepared data, the true value (numeric targets), the columns
 # of the rule and the flag. A column whose name is taken by a variable gets the
 # suffix ".rapid"; `cols` maps the plain names to the names in the table.
@@ -522,7 +588,8 @@ rapid.default <- function(X, Y,
 # A record column by its plain name
 .rapid_col <- function(x, name) x$records[[x$record_cols[[name]]]]
 
-.rapid_fields <- c("rapid", "n_at_risk", "pct_at_risk", "n_total", "rule", "method",
+.rapid_fields <- c("rapid", "n_at_risk", "pct_at_risk", "n_total", "chance", "chance_rates",
+                   "excess", "n_perm", "threshold_rule", "perm_level", "rule", "method",
                    "threshold", "score", "baseline", "at_risk", "records", "record_cols",
                    "attack", "model", "model_type", "attacker", "model_metrics", "formula",
                    "key_vars", "target_var", "is_categorical", "na", "call", "version")

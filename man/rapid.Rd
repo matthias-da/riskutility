@@ -28,6 +28,9 @@ rapid(X, ...)
   cat_tau = NULL,
   na_strategy = c("constant", "drop", "median"),
   na_constant_value = 0,
+  n_perm = 10,
+  threshold_rule = c("fixed", "permutation"),
+  perm_level = 0.95,
   store_model = FALSE,
   store_predictions = TRUE,
   seed = NULL,
@@ -105,6 +108,19 @@ categorical variable become the level "missing".}
 
 \item{na_constant_value}{numeric, value for constant NA imputation (default: 0)}
 
+\item{n_perm}{integer, number of permutations of the true values that give the
+chance level (default: 10). The attacker is kept fixed, each record's
+prediction is scored against a randomly assigned true value and the baseline
+of that value. 0 skips the permutations.}
+
+\item{threshold_rule}{character, \code{"fixed"} (default) flags with the
+threshold of the rule; \code{"permutation"} takes the \code{perm_level}
+quantile of all permuted scores as threshold. Only for rules with a gain
+over a baseline (band, RCS_marginal) and with \code{n_perm >= 1}.}
+
+\item{perm_level}{numeric in (0, 1), quantile of the permuted scores that is
+the threshold under \code{threshold_rule = "permutation"} (default: 0.95)}
+
 \item{store_model}{logical, if TRUE store the fitted model object in the result
 (needed for \code{plot(result, which = 4)} variable importance plot). Default FALSE.}
 
@@ -140,6 +156,10 @@ nce) and at_risk, for all records. Here g is the attacker's confidence,
 b the baseline and r the normalized gain (g - b) / (1 - b). A column whose
 name is already used by a variable gets the suffix ".rapid".
 \item attack: the attacker's predictions (NULL if store_predictions = FALSE)
+\item chance, chance_rates, excess: the chance level (mean share flagged
+when the true values are permuted; NA if n_perm = 0), the share of each
+permutation, and rapid - chance
+\item n_perm, threshold_rule, perm_level: the permutation settings
 \item model: the fitted model object (only if store_model = TRUE)
 \item model_type, attacker: the model and a line with the settings that
 drive its result (number of trees and node size, number of leaves, scale)
