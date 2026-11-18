@@ -21,7 +21,8 @@
 #'   targets (default \code{TRUE})?
 #' @param seed Optional random seed; there is no default.  With a seed, the
 #'   folds are drawn from it and the synthesizer of fold \eqn{i} receives
-#'   \code{seed + i}.
+#'   \code{seed + i} when it has a \code{seed} argument (or \code{...}).
+#'   A synthesizer without one draws from the random stream the seed started.
 #' @param verbose Logical; print progress messages?
 #' @param ... Additional arguments passed to \code{\link{rapid}}
 #'   (e.g. \code{model_type}, \code{cat_tau}, \code{num_tau},
@@ -130,6 +131,10 @@ rapid_synthesizer_cv <- function(X,
   key_vars <- resolved$arg$key_vars
   target_var <- resolved$arg$target_var
   dots <- resolved$dots
+  .rapid_check_reserved(dots, c(
+    Y = "the synthetic data of each fold come from 'synthesizer'",
+    synthetic_data = "the synthetic data of each fold come from 'synthesizer'"),
+    "rapid_synthesizer_cv")
   if (!is.data.frame(X)) {
     .rapid_abort("The original data are missing: pass 'X' (a data frame).", "input")
   }
@@ -157,6 +162,10 @@ rapid_synthesizer_cv <- function(X,
     }
   }
 
+  # A synthesizer without a seed argument draws from the stream seeded above
+  syn_args <- names(formals(args(synthesizer)))
+  takes_seed <- any(c("seed", "...") %in% syn_args)
+
   target_vec <- X[[target_var]]
   is_categorical <- is.factor(target_vec) || is.character(target_vec) || is.logical(target_vec)
 
@@ -183,7 +192,7 @@ rapid_synthesizer_cv <- function(X,
 
     # Synthesize from training split
     if (verbose) message(sprintf("synthesizing %d  ", length(train_idx)), appendLF = FALSE)
-    synth <- if (!is.null(seed)) {
+    synth <- if (!is.null(seed) && takes_seed) {
       synthesizer(X[train_idx, ], seed = seed + fold_id)
     } else {
       synthesizer(X[train_idx, ])

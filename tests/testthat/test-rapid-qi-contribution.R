@@ -11,6 +11,14 @@
   list(X = X, Y = Y)
 }
 
+test_that("an argument the contribution sets itself is a classed error", {
+  d <- .make_contrib_data(120)
+  expect_error(rapid_qi_contribution(d$X, d$Y, key_vars = c("age", "sex", "region"),
+                                     target_var = "smoker", model_type = "rf", n_perm = 5,
+                                     n_permutations = 5),
+               regexp = "n_permutations", class = "rapid_error_input")
+})
+
 test_that("rapid_qi_contribution returns one row per drop plus the reference", {
   d <- .make_contrib_data()
   res <- rapid_qi_contribution(d$X, d$Y, key_vars = c("age", "sex", "region"), target_var = "smoker",

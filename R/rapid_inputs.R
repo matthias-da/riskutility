@@ -22,7 +22,8 @@
 #'
 #' @param message Character; pasted together without separator.
 #' @param class Suffix of the condition class (`"deprecated"`,
-#'   `"ignored_argument"`, `"legacy_tolerance"`, `"skipped_model"`).
+#'   `"ignored_argument"`, `"legacy_tolerance"`, `"skipped_model"`,
+#'   `"missing_target"`, `"attribution_model"`).
 #' @noRd
 .rapid_warn <- function(message, class = NULL) {
   warning(structure(
@@ -145,6 +146,14 @@
              paste0("'", miss[[d]], "'", collapse = ", "), ".")
     }, character(1)), collapse = " "), "input")
   }
+  # The attacker's model formula needs syntactic names
+  bad <- vars[make.names(vars) != vars]
+  if (length(bad) > 0) {
+    .rapid_abort(c("The attacker's model formula needs syntactic variable names, but ",
+                   paste0("'", bad, "'", collapse = ", "), if (length(bad) == 1) " is" else
+                     " are", " not. Rename ", if (length(bad) == 1) "it" else "them",
+                   ", for example with make.names()."), "input")
+  }
 
   list(X = arg$X, Y = arg$Y, key_vars = arg$key_vars, target_var = arg$target_var,
        holdout = holdout, dots = dots)
@@ -175,6 +184,19 @@
     }
   }
   invisible(TRUE)
+}
+
+#' Refuse arguments in `dots` that a function sets itself
+#'
+#' @param reserved Named character vector: the argument names, and for each the
+#'   reason or the argument to use instead.
+#' @param fun Name of the function, for the message.
+#' @noRd
+.rapid_check_reserved <- function(dots, reserved, fun) {
+  clash <- intersect(names(dots), names(reserved))
+  if (length(clash) == 0) return(invisible(TRUE))
+  .rapid_abort(c("Argument '", clash[1], "' is set by ", fun, "() itself: ",
+                 reserved[[clash[1]]], "."), "input")
 }
 
 #' Refuse extra arguments in a method on a `rapid` object
@@ -575,7 +597,8 @@
     .rapid_abort("'num_epsilon' must be a single positive number.", "tolerance")
   }
   if (!is.null(epsilon_type)) {
-    epsilon_type <- match.arg(epsilon_type, c("percentage", "absolute"))
+    epsilon_type <- .rapid_choice(epsilon_type, c("percentage", "absolute"),
+                                  "num_epsilon_type")
     .rapid_warn(c("'num_epsilon_type' is deprecated. Choose the error metric with ",
                   "'num_error_metric' and give a relative tolerance as a proportion ",
                   "(0.1 for 10 %)."), "deprecated")

@@ -351,7 +351,7 @@ as.data.frame.rapid_test <- function(x, row.names = NULL, optional = FALSE, ...)
 #' @noRd
 .rapid_check_test_args <- function(n_permutations, alpha) {
   if (!is.numeric(n_permutations) || length(n_permutations) != 1 ||
-      is.na(n_permutations) || n_permutations < 1 ||
+      !is.finite(n_permutations) || n_permutations < 1 ||
       n_permutations != round(n_permutations)) {
     .rapid_abort("'n_permutations' must be a single whole number of at least 1.", "input")
   }

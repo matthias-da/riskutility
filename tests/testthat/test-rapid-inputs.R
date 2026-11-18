@@ -247,6 +247,19 @@ test_that("missing target values give a classed warning with counts and treatmen
                           model_type = "lm", n_perm = 0))
 })
 
+test_that("a variable name that is not syntactic is a classed error naming it", {
+  o <- sim_numeric(60)
+  names(o)[1] <- "my x1"
+  s <- noisy_copy(o, seed = 2)
+  expect_error(rapid(o, s, c("my x1", "x2"), "y", model_type = "lm", n_perm = 0),
+               regexp = "'my x1'", class = "rapid_error_input")
+  o <- sim_numeric(60)
+  names(o)[3] <- "the y"
+  s <- noisy_copy(o, target = "the y", seed = 2)
+  expect_error(rapid(o, s, c("x1", "x2"), "the y", model_type = "lm", n_perm = 0),
+               regexp = "'the y'", class = "rapid_error_input")
+})
+
 test_that("numeric NA in a quasi-identifier is a classed error", {
   o <- data.frame(x1 = c(1, NA, 3, 4), y = c(1, 2, 3, 4))
   s <- data.frame(x1 = c(1, 2, 3, 4), y = c(1, 2, 3, 4))

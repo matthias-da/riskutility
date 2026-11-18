@@ -201,6 +201,21 @@ test_that("the output of the user's functions is checked", {
   expect_error(rapid(o, s, qi, "y", model_type = failing), "my own error")
 })
 
+test_that("a fit function that returns NULL is a classed model error", {
+  null_fit <- function(formula, data) NULL
+  lc <- rapid_learner("null_cat", fit = null_fit, predict_prob = function(fit, newdata) {
+    matrix(1 / 3, nrow(newdata), 3, dimnames = list(NULL, c("a", "b", "c")))
+  })
+  oc <- sim_categorical(80)
+  expect_error(rapid(oc, oc, qi, "y", model_type = lc, n_perm = 0), regexp = "'fit'",
+               class = "rapid_error_model")
+  ln <- rapid_learner("null_num", fit = null_fit,
+                      predict_point = function(fit, newdata) rep(1, nrow(newdata)))
+  o <- sim_numeric(80)
+  expect_error(rapid(o, o, qi, "y", model_type = ln, num_eval_method = "point", n_perm = 0),
+               regexp = "'fit'", class = "rapid_error_model")
+})
+
 test_that("a quasi-identifier level the synthetic data lack is the classed level error", {
   o <- sim_numeric(80)
   o$g <- factor(rep(c("u", "v"), 40))

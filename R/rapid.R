@@ -982,7 +982,7 @@ rapid.default <- function(X, Y,
 #' Check the settings of the permutations
 #' @noRd
 .rapid_check_perm <- function(n_perm, threshold_rule, perm_level, rule) {
-  if (!is.numeric(n_perm) || length(n_perm) != 1 || is.na(n_perm) || n_perm < 0 ||
+  if (!is.numeric(n_perm) || length(n_perm) != 1 || !is.finite(n_perm) || n_perm < 0 ||
       n_perm != round(n_perm)) {
     .rapid_abort("'n_perm' must be a single whole number (0 skips the permutations).",
                  "input")

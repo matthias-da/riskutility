@@ -58,7 +58,8 @@ targets (default \code{TRUE})?}
 
 \item{seed}{Optional random seed; there is no default.  With a seed, the
 folds are drawn from it and the synthesizer of fold \eqn{i} receives
-\code{seed + i}.}
+\code{seed + i} when it has a \code{seed} argument (or \code{...}).
+A synthesizer without one draws from the random stream the seed started.}
 
 \item{verbose}{Logical; print progress messages?}
 

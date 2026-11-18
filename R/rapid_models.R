@@ -201,6 +201,21 @@
   out
 }
 
+# Models with a design matrix (lm, logit, gbm) cannot use a factor
+# quasi-identifier with a single value in the training data
+.learner_check_single_level <- function(learner, formula, data) {
+  vars <- attr(stats::terms(formula), "term.labels")
+  one <- vars[vapply(vars, function(v) is.factor(data[[v]]) && length(unique(data[[v]])) < 2,
+                     logical(1))]
+  if (length(one) > 0) {
+    .rapid_abort(c("model_type = \"", learner$name, "\" cannot use a factor quasi-identifier ",
+                   "with a single value in the synthetic data: ",
+                   paste0("'", one, "'", collapse = ", "), ". Drop it from key_vars or use ",
+                   "model_type = \"rf\" or \"cart\"."), "model")
+  }
+  invisible(TRUE)
+}
+
 .lm_importance <- function(fit) {
   coefs <- stats::coef(fit)[-1]
   abs(coefs) / sum(abs(coefs))
@@ -282,6 +297,7 @@
                                           num_dist = "auto", num_scale = "auto",
                                           metric = "symmetric") {
   y <- data[[target_var]]
+  .learner_check_single_level(learner, formula, data)
   # Imputed target values (marked by the data preparation) do not decide the scale
   observed <- attr(data, "rapid_observed_target")
   if (is.null(observed)) observed <- rep(TRUE, length(y))
@@ -365,6 +381,9 @@
                                             num_dist = "auto", num_scale = "auto",
                                             metric = "symmetric") {
   y <- data[[target_var]]
+  if (is.factor(y) && length(unique(y)) < 2) {
+    .rapid_abort("model_type = \"cart\" needs a target with at least two classes.", "model")
+  }
   data <- .learner_drop_unused(data, target_var)
   defaults <- list(formula = formula, data = data,
                    method = if (is.factor(y)) "class" else "anova")
@@ -464,6 +483,7 @@
                                            num_dist = "auto", num_scale = "auto",
                                            metric = "symmetric") {
   y <- data[[target_var]]
+  .learner_check_single_level(learner, formula, data)
   args <- .gbm_split_args(learner$args)
   if (is.factor(y)) {
     K <- nlevels(y)
@@ -559,6 +579,7 @@
                    " classes. Models for any number of classes: ",
                    .rapid_learners_for("categorical", exclude = "logit"), "."), "model")
   }
+  .learner_check_single_level(learner, formula, data)
   fit <- do.call(stats::glm, utils::modifyList(
     list(formula = formula, data = data, family = stats::binomial()), learner$args))
   .learner_tag(fit, y)
@@ -917,6 +938,7 @@ print.rapid_learner <- function(x, ...) {
   y <- data[[target_var]]
   data <- .learner_drop_unused(data, target_var)
   fit <- do.call(learner$fit, c(list(formula, data), learner$args))
+  if (is.null(fit)) .learner_bad_output(learner, "fit", "returned NULL")
   .learner_tag(fit, y)
 }
 

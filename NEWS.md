@@ -182,6 +182,14 @@ Several defaults change reported values. Each item below gives the call that rep
   fit once, through `rapid()`, and permute the fitted object's predictions.
 * Classes of a categorical target that occur only in the synthetic data became `NA`. The levels
   are now the union, original levels first.
+* Inputs that stopped with a base R error now give a classed error that names the problem: a
+  variable name that is not syntactic (`"my age"`), a `fit` of `rapid_learner()` that returns
+  `NULL`, `n_perm = Inf` or `n_permutations = Inf`, `n_perm` in `...` of
+  `rapid_qi_contribution()`, `Y` in `...` of `rapid_synthesizer_cv()`, a target with one class
+  for `model_type = "cart"`, a factor quasi-identifier with a single value in the synthetic data
+  for `"lm"`, `"logit"` and `"gbm"`, and an unknown `num_epsilon_type`.
+* `rapid_synthesizer_cv(seed = )` failed with a synthesizer that has no `seed` argument. Such a
+  synthesizer now draws from the random stream the seed started.
 * The references of `?rapid` cited the R-U map paper. They now cite the RAPID paper and
   Meinshausen (2006).
 

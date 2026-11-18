@@ -152,11 +152,15 @@ rapid_qi_contribution.default <- function(X, Y, key_vars, target_var, groups = N
     if (missing(target_var)) NULL else target_var,
     list(...)
   )
+  .rapid_check_reserved(inputs$dots, c(n_perm = paste(
+    "use 'n_permutations' for the permutations of each scenario")),
+    "rapid_qi_contribution")
   key_vars <- inputs$key_vars
   if (length(key_vars) < 2) {
     .rapid_abort("At least two quasi-identifiers are needed to drop one.", "input")
   }
-  if (!is.numeric(n_permutations) || length(n_permutations) != 1 || is.na(n_permutations) ||
+  if (!is.numeric(n_permutations) || length(n_permutations) != 1 ||
+      !is.finite(n_permutations) ||
       n_permutations < 0 || n_permutations != round(n_permutations)) {
     .rapid_abort("'n_permutations' must be a single whole number (0 skips the chance level).",
                  "input")

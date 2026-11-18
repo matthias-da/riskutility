@@ -131,7 +131,8 @@
                  contrasts = contrast_list)
     )
   }, error = function(e) {
-    warning("Could not fit attribution model: ", e$message, call. = FALSE)
+    .rapid_warn(c("Could not fit the attribution model: ", conditionMessage(e)),
+                "attribution_model")
     return(NULL)
   })
 

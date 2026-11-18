@@ -465,6 +465,20 @@ test_that("CV accepts the old names and warns about the deprecated arguments", {
                class = "rapid_error_input")
 })
 
+test_that("CV refuses Y and runs a synthesizer without a seed argument", {
+  o <- sim_numeric(90)
+  expect_error(rapid_synthesizer_cv(o, function(d, seed = NULL) d, qi, "y", model_type = "lm",
+                                    k = 3, n_perm = 0, Y = o),
+               regexp = "'Y'", class = "rapid_error_input")
+  noisy <- function(d) {
+    d$y <- d$y + stats::rnorm(nrow(d))
+    d
+  }
+  a <- rapid_synthesizer_cv(o, noisy, qi, "y", model_type = "lm", k = 3, n_perm = 0, seed = 1)
+  b <- rapid_synthesizer_cv(o, noisy, qi, "y", model_type = "lm", k = 3, n_perm = 0, seed = 1)
+  expect_identical(a$folds, b$folds)
+})
+
 test_that("CV print, summary and plot methods", {
   cv <- .cv_num(seed = 1)
   out <- utils::capture.output(res <- withVisible(print(cv)))
