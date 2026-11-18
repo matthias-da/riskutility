@@ -125,17 +125,15 @@ rapid_test <- function(original_data, synthetic_data,
   )
 
   # ---- Also compute the full rapid object for the result ----
-  observed_rapid <- rapid(
-    X = original_data, Y = synthetic_data,
-    key_vars = quasi_identifiers,
-    target_var = sensitive_attribute,
-    model_type = model_type,
+  observed_rapid <- .rapid_compat_observed(
+    prep$is_categorical, original_data, synthetic_data,
+    quasi_identifiers, sensitive_attribute, model_type,
     cat_tau = cat_tau, num_epsilon = num_epsilon,
     cat_eval_method = cat_eval_method,
     num_error_metric = num_error_metric,
     num_epsilon_type = num_epsilon_type,
     num_delta = num_delta,
-    seed = seed, verbose = FALSE, ...
+    seed = seed, ...
   )
 
   # ---- Permutation loop ----

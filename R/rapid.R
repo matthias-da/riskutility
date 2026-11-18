@@ -1,101 +1,155 @@
 #' RAPID: Risk of Attribute Prediction-Induced Disclosure
 #'
-#' Assesses inferential disclosure risk for a sensitive variable in synthetic data
-#' using the RAPID metric. This function trains a predictive model on synthetic data
-#' using quasi-identifiers, then evaluates attribute inference risk by scoring the
-#' model on the original data.
+#' Assesses the inferential disclosure risk of a sensitive variable in synthetic
+#' or anonymized data. An attacker model is trained on the released data to
+#' predict the sensitive variable from the quasi-identifiers and is then applied
+#' to the original records. A record is at risk when the attacker is confident
+#' about its true value well beyond what the marginal distribution of the
+#' sensitive variable already gives away. RAPID is the share of such records.
 #'
 #' @param X data frame of original data, or a \code{\link{synth_pair}} object
 #' @param Y data frame of synthetic data (not needed if X is a synth_pair)
 #' @param key_vars character vector of quasi-identifier variable names
 #' @param target_var character, name of the sensitive target variable
-#' @param model_type character, model type for inference: "rf" (random forest,
+#' @param model_type character, the attacker model: "rf" (random forest,
 #'   default), "lm" (linear model), "cart" (decision tree), "gbm" (gradient
-#'   boosting), or "logit" (logistic regression, binary only)
-#' @param num_epsilon numeric threshold for continuous attributes. For percentage-based
-#'   metrics (default), specify as percentage (e.g., 5 for 5\%). For absolute error,
-#'   specify in units of the sensitive attribute.
-#' @param num_epsilon_type character, threshold type: "percentage" (default) or "absolute"
-#' @param num_error_metric character, error metric for continuous variables:
-#'   "symmetric" (default, recommended), "stabilised_relative", or "absolute"
-#' @param num_delta numeric, smoothing constant for percentage-based metrics (default: 0.01)
-#' @param cat_tau numeric threshold for categorical risk. Interpretation depends on method:
-#'   \itemize{
-#'     \item For RCS_conditional: ratio threshold (default 1, typically 1--1.25)
-#'     \item For RCS_marginal: normalized gain threshold (typically 0.3)
-#'     \item For NCE: risk score threshold (typically 0.5--0.7)
-#'   }
-#' @param cat_eval_method character, method for categorical evaluation:
-#'   "RCS_conditional" (default), "RCS_marginal", or "NCE"
-#' @param na_strategy character, strategy for NA values in sensitive attribute:
-#'   "constant" (default), "drop", or "median"
+#'   boosting), or "logit" (logistic regression, two classes only)
+#' @param num_eval_method character, rule for a numeric target: "band"
+#'   (default) compares the probability the attacker puts into the tolerance band
+#'   around the true value with the share of original values in that band;
+#'   "point" flags a record when the error of the point prediction is below the
+#'   tolerance (the rule of riskutility <= 0.2.0)
+#' @param num_error_metric character, error metric that defines the tolerance
+#'   band: "symmetric" (default), "stabilised_relative", or "absolute"
+#' @param num_epsilon numeric tolerance. For the two relative metrics it is a
+#'   proportion (default 0.1, that is 10 percent). For the absolute metric it is
+#'   given in the units of the target and has no default. A relative tolerance of
+#'   1 or more is read as percent, with a warning.
+#' @param num_delta numeric, smoothing constant of the relative metrics (default: 0.01)
+#' @param num_tau numeric threshold on the normalized gain of a numeric target
+#'   under the band rule (default: 0.3)
+#' @param num_dist character, how the attacker's predictive distribution of a
+#'   numeric target is evaluated: "auto" (default) uses the exact probability
+#'   where the model provides one (normal or lognormal for "lm", the training
+#'   values in the leaf for "cart") and a grid of quantiles for "rf" and "gbm";
+#'   "grid" uses \code{n_quantiles} quantiles for all models
+#' @param num_scale character, working scale of the linear model for a numeric
+#'   target: "identity", "log", or "auto" (default), which takes the log scale
+#'   when the error metric is relative, all synthetic target values are positive
+#'   and the log model has the higher Gaussian likelihood on the original scale.
+#'   On the log scale the point prediction is the predictive median.
+#' @param n_quantiles integer, number of quantiles of a grid distribution (default: 100)
+#' @param cat_eval_method character, rule for a categorical target:
+#'   "RCS_marginal" (default, normalized gain over the marginal class share),
+#'   "RCS_conditional" (ratio to the class-conditional mean probability), or
+#'   "NCE" (normalized cross-entropy)
+#' @param cat_tau numeric threshold for a categorical target. The default
+#'   depends on the method: 0.3 for RCS_marginal, 1 for RCS_conditional, 0.5 for NCE.
+#' @param na_strategy character, strategy for NA values in a numeric sensitive
+#'   attribute: "constant" (default), "drop", or "median". Missing values of a
+#'   categorical variable become the level "missing".
 #' @param na_constant_value numeric, value for constant NA imputation (default: 0)
-#' @param return_all_records logical, if TRUE (default) return all records with risk status;
-#'   if FALSE return only at-risk records
 #' @param store_model logical, if TRUE store the fitted model object in the result
 #'   (needed for \code{plot(result, which = 4)} variable importance plot). Default FALSE.
+#' @param store_predictions logical, if TRUE (default) the result keeps the
+#'   attacker's predictions, so that it can be tested and rescored without
+#'   fitting the model again
 #' @param seed integer, random seed for reproducibility (default: NULL)
 #' @param verbose logical, print diagnostic messages (default: FALSE)
-#' @param ... additional arguments passed to model fitting functions
+#' @param ... additional arguments passed to the model fitting function
+#'   (\code{ranger::ranger}, \code{stats::lm}, \code{rpart::rpart},
+#'   \code{xgboost::xgb.train} parameters and \code{nrounds}, \code{stats::glm}).
+#'   For "cart", \code{prune = FALSE} keeps the tree as grown. The old argument
+#'   names \code{original_data}, \code{synthetic_data}, \code{quasi_identifiers}
+#'   and \code{sensitive_attribute} are accepted as aliases of the first four
+#'   arguments. A misspelled argument of \code{rapid()} is an error.
+#' @param num_epsilon_type deprecated. "percentage" reads \code{num_epsilon} as
+#'   percent, "absolute" selects the absolute error metric.
+#' @param return_all_records deprecated and ignored: the result always holds all
+#'   records. Use \code{as.data.frame(x, at_risk_only = TRUE)} for the flagged ones.
 #'
 #' @return An object of class "rapid" containing:
 #' \itemize{
-#'   \item rapid: the confidence rate (proportion of records at risk)
-#'   \item n_at_risk: number of records at risk
-#'   \item pct_at_risk: percentage of records at risk
-#'   \item method: evaluation method used (categorical) or "numeric"
-#'   \item threshold: threshold used (cat_tau or num_epsilon)
-#'   \item model_type: model type used
+#'   \item rapid: the proportion of records at risk
+#'   \item n_at_risk, pct_at_risk, n_total: number and percentage of records at
+#'     risk, number of scored records
+#'   \item rule: the scoring rule; method and threshold are copies of its
+#'     method and threshold
+#'   \item score, baseline, at_risk: per record, the score that is compared with
+#'     the threshold, the marginal baseline (NULL for NCE) and the flag
+#'   \item records: the prepared original data with the columns of the rule
+#'     (band rule: predicted_value, band_lo, band_hi, g, b, r; point rule:
+#'     predicted_value, error, b; RCS_marginal: predicted_class, g, b, r;
+#'     RCS_conditional: predicted_class, g, b, ratio; NCE: predicted_class, g,
+#'     nce) and at_risk, for all records. Here g is the attacker's confidence,
+#'     b the baseline and r the normalized gain (g - b) / (1 - b). A column whose
+#'     name is already used by a variable gets the suffix ".rapid".
+#'   \item attack: the attacker's predictions (NULL if store_predictions = FALSE)
+#'   \item model: the fitted model object (only if store_model = TRUE)
+#'   \item model_type, attacker: the model and a line with the settings that
+#'     drive its result (number of trees and node size, number of leaves, scale)
 #'   \item model_metrics: model performance (accuracy for categorical, MAE/RMSE for numeric)
-#'   \item model: the fitted model object (only if store_model=TRUE, otherwise NULL)
-#'   \item formula: the model formula used
-#'   \item records: data frame of at-risk records (or all records if return_all_records=TRUE)
-#'   \item key_vars, target_var: input parameters
-#'   \item call: the function call
+#'   \item formula, key_vars, target_var, is_categorical, na, call, version
 #' }
 #'
 #' @details
 #' RAPID (Risk of Attribute Prediction-Induced Disclosure) measures disclosure risk
 #' by training a predictive model on synthetic data and evaluating how well it can
-#' predict the sensitive attribute in the original data. High prediction accuracy
-#' indicates potential disclosure risk.
+#' predict the sensitive attribute in the original data.
 #'
 #' Unlike CAP-based methods (DCAP, TCAP) which use exact or fuzzy matching, RAPID
 #' uses machine learning models to capture more complex relationships between
 #' quasi-identifiers and sensitive attributes.
 #'
 #' \strong{For categorical sensitive variables:}
-#' Three evaluation methods are available:
 #' \itemize{
-#'   \item \code{RCS_conditional} (default): Measures if an observation is an outlier
-#'     within its class using class-conditional baseline.
-#'   \item \code{RCS_marginal}: Measures if the attribute can be inferred
-#'     better than the marginal baseline rate. Uses normalized gain.
+#'   \item \code{RCS_marginal} (default): the attacker's probability of the true
+#'     class, g, is compared with the share of that class in the original data, b.
+#'     The record is flagged when the normalized gain (g - b) / (1 - b) exceeds
+#'     \code{cat_tau}.
+#'   \item \code{RCS_conditional}: ratio of g to its mean among the records of
+#'     the same class.
 #'   \item \code{NCE}: Normalized Cross-Entropy, measures information leakage.
 #' }
 #'
 #' \strong{For continuous sensitive variables:}
-#' Risk is measured by the proportion of records for which prediction errors fall
-#' below a threshold. Three error metrics are available:
+#' The band rule (default) is the continuous counterpart of \code{RCS_marginal}.
+#' The tolerance band of a record holds all values whose error against the true
+#' value is below \code{num_epsilon}. g is the probability the attacker's
+#' predictive distribution puts into the band, b the share of original values in
+#' it, and the record is flagged when (g - b) / (1 - b) exceeds \code{num_tau}.
+#' Where the band holds all original values (b = 1) the gain is 0. The point
+#' rule flags a record when the error of the point prediction is below the
+#' tolerance. It also flags records whose value is easy to guess without any
+#' model, which is why it is no longer the default.
+#'
+#' The band is defined by one of three error metrics:
 #' \itemize{
-#'   \item \code{symmetric} (recommended): Symmetric percentage error, treats predicted
+#'   \item \code{symmetric} (recommended): symmetric relative error, treats predicted
 #'     and true values equally.
-#'   \item \code{stabilised_relative}: Stabilised relative error.
-#'   \item \code{absolute}: Raw absolute error (use with num_epsilon_type = "absolute").
+#'   \item \code{stabilised_relative}: stabilised relative error.
+#'   \item \code{absolute}: absolute error in the units of the target.
 #' }
 #'
-#' @section Threshold Selection Guidelines:
-#' \strong{Categorical sensitive variables:}
-#' \itemize{
-#'   \item RCS_conditional: \code{cat_tau = 1} (default)
-#'   \item RCS_marginal: \code{cat_tau = 0.3}
-#'   \item NCE: \code{cat_tau = 0.5-0.7}
-#' }
-#' \strong{Continuous sensitive variables:}
-#' \itemize{
-#'   \item symmetric: \code{num_epsilon = 5-10} (percentage)
-#'   \item absolute: \code{num_epsilon} depends on domain/scale
-#' }
+#' \strong{Attacker models:} The result depends on how sharp the attacker's
+#' predictive distribution is, so the settings that drive it are part of the
+#' result (\code{attacker}) and of the printed output. The tree of "cart" is
+#' grown with \code{cp = 0}, \code{minbucket = 5}, \code{xval = 10} and pruned at
+#' the smallest cross-validated error; the three values can be overridden and
+#' \code{prune = FALSE} keeps the tree as grown. Cross-validation is random, so
+#' set \code{seed} for a reproducible tree. To reproduce the results of the RAPID
+#' paper and of the RAPID package use \code{num_dist = "grid"},
+#' \code{num_scale = "identity"} and, for "cart", \code{prune = FALSE, cp = 0.01,
+#' minsplit = 20, minbucket = 7} (the defaults of rpart).
+#'
+#' @section Changes in 0.3.0:
+#' The defaults changed: numeric targets use the band rule with \code{num_tau =
+#' 0.3} and a tolerance of 10 percent (before: the point rule), categorical
+#' targets use \code{RCS_marginal} with \code{cat_tau = 0.3} (before:
+#' \code{RCS_conditional} with \code{cat_tau = 1}). A relative tolerance is a
+#' proportion (before: percent). The old rules remain available through
+#' \code{num_eval_method = "point"} and \code{cat_eval_method =
+#' "RCS_conditional"}.
 #'
 #' @section Comparison with CAP Methods:
 #' \itemize{
@@ -123,9 +177,9 @@
 #' original <- data.frame(
 #'   age = sample(20:70, n, replace = TRUE),
 #'   gender = factor(sample(c("M", "F"), n, replace = TRUE)),
-#'   region = factor(sample(c("N", "S", "E", "W"), n, replace = TRUE)),
-#'   income = round(rnorm(n, 50000, 10000))
+#'   region = factor(sample(c("N", "S", "E", "W"), n, replace = TRUE))
 #' )
+#' original$income <- round(20000 + 600 * original$age + rnorm(n, 0, 5000))
 #'
 #' # Synthetic version with some noise
 #' synthetic <- data.frame(
@@ -135,19 +189,28 @@
 #'   income = round(original$income * runif(n, 0.9, 1.1))
 #' )
 #'
-#' # RAPID for continuous sensitive variable
-#' \donttest{
+#' # RAPID for a continuous sensitive variable (band rule, linear model)
 #' result <- rapid(
 #'   X = original,
 #'   Y = synthetic,
 #'   key_vars = c("age", "gender", "region"),
 #'   target_var = "income",
-#'   model_type = "rf",
-#'   num_epsilon = 10,
-#'   verbose = TRUE
+#'   model_type = "lm"
 #' )
-#' print(result)
-#' summary(result)
+#' result
+#' head(as.data.frame(result, at_risk_only = TRUE))
+#'
+#' \donttest{
+#' # Random forest attacker
+#' result_rf <- rapid(original, synthetic,
+#'                    key_vars = c("age", "gender", "region"),
+#'                    target_var = "income", model_type = "rf", seed = 1)
+#' summary(result_rf)
+#'
+#' # The point rule of earlier versions, with a tolerance of 10 percent
+#' rapid(original, synthetic,
+#'       key_vars = c("age", "gender", "region"), target_var = "income",
+#'       model_type = "rf", num_eval_method = "point", num_epsilon = 0.1)
 #' }
 #'
 #' # RAPID for categorical sensitive variable
@@ -162,9 +225,7 @@
 #'   Y = synthetic,
 #'   key_vars = c("age", "gender", "region"),
 #'   target_var = "health",
-#'   model_type = "rf",
-#'   cat_tau = 1,
-#'   cat_eval_method = "RCS_conditional"
+#'   model_type = "rf"
 #' )
 #' print(result_cat)
 #' }
@@ -199,19 +260,14 @@
 #'     key_vars = c("sex", "age", "edu", "marital", "region"),
 #'     target_var = "income",
 #'     model_type = "rf",
-#'     num_epsilon = 10,           # 10% error threshold
-#'     num_epsilon_type = "percentage",
+#'     num_epsilon = 0.1,          # tolerance band of 10 percent
 #'     num_error_metric = "symmetric",
 #'     verbose = TRUE
 #'   )
 #'
 #'   print(rapid_income)
 #'   summary(rapid_income)
-#'   plot(rapid_income, which = 1:2)
-#'
-#'   # Interpretation:
-#'   # - RAPID score close to 0: low risk (model cannot predict income well)
-#'   # - RAPID score > 0.15: elevated risk (sensitive attribute predictable)
+#'   plot(rapid_income, which = 1)
 #'
 #'   # ------------------------------------------------------------------
 #'   # Example 2: Categorical sensitive variable (smoking status)
@@ -224,8 +280,6 @@
 #'     key_vars = c("sex", "age", "edu", "marital", "income"),
 #'     target_var = "smoke",
 #'     model_type = "rf",
-#'     cat_tau = 1,                # ratio threshold for RCS_conditional
-#'     cat_eval_method = "RCS_conditional",
 #'     verbose = TRUE
 #'   )
 #'
@@ -246,26 +300,21 @@
 #' }
 #' }
 rapid <- function(X, ...) {
+  if (missing(X)) {
+    # Without X the data arrive under their alias names. The default method is
+    # called with the expressions of the caller, so that it can store the call.
+    cl <- sys.call()
+    cl[[1L]] <- rapid.default
+    return(eval(cl, parent.frame()))
+  }
   UseMethod("rapid")
 }
 
 #' @rdname rapid
 #' @export
 rapid.synth_pair <- function(X, ...) {
-  if (is.null(X$key_vars)) {
-    stop("synth_pair must have 'key_vars' set for rapid()")
-  }
-  if (is.null(X$target_var)) {
-    stop("synth_pair must have 'target_var' set for rapid()")
-  }
-
-  rapid.default(
-    X = X$original,
-    Y = X$synthetic,
-    key_vars = X$key_vars,
-    target_var = X$target_var,
-    ...
-  )
+  # The default method unpacks the pair (data, key_vars, target_var)
+  NextMethod()
 }
 
 #' @rdname rapid
@@ -275,32 +324,43 @@ rapid.default <- function(X, Y,
                           target_var,
                           model_type = c("rf", "lm", "cart", "gbm", "logit"),
                           # Numeric-specific
-                          num_epsilon = 10,
-                          num_epsilon_type = c("percentage", "absolute"),
+                          num_eval_method = c("band", "point"),
                           num_error_metric = c("symmetric", "stabilised_relative", "absolute"),
+                          num_epsilon = NULL,
                           num_delta = 0.01,
+                          num_tau = 0.3,
+                          num_dist = c("auto", "grid", "exact"),
+                          num_scale = c("auto", "identity", "log"),
+                          n_quantiles = 100,
                           # Categorical-specific
-                          cat_tau = 1,
-                          cat_eval_method = c("RCS_conditional", "RCS_marginal", "NCE"),
+                          cat_eval_method = c("RCS_marginal", "RCS_conditional", "NCE"),
+                          cat_tau = NULL,
                           # NA handling
                           na_strategy = c("constant", "drop", "median"),
                           na_constant_value = 0,
                           # Output options
-                          return_all_records = TRUE,
                           store_model = FALSE,
+                          store_predictions = TRUE,
                           seed = NULL,
                           verbose = FALSE,
-                          ...) {
+                          ...,
+                          num_epsilon_type,
+                          return_all_records) {
 
   call <- match.call()
+  call[[1L]] <- quote(rapid)
+  given <- names(call)[-1L]
 
-  # Argument matching
-
-  model_type <- match.arg(model_type)
-  num_epsilon_type <- match.arg(num_epsilon_type)
-  num_error_metric <- match.arg(num_error_metric)
-  na_strategy <- match.arg(na_strategy)
-  cat_eval_method <- match.arg(cat_eval_method)
+  # Choices
+  model_type <- .rapid_choice(model_type, .rapid_learner_names, "model_type")
+  num_eval_method <- .rapid_choice(num_eval_method, c("band", "point"), "num_eval_method")
+  num_error_metric <- .rapid_choice(num_error_metric, .rapid_metrics, "num_error_metric")
+  num_dist <- .rapid_choice(num_dist, c("auto", "grid", "exact"), "num_dist")
+  num_scale <- .rapid_choice(num_scale, c("auto", "identity", "log"), "num_scale")
+  cat_eval_method <- .rapid_choice(cat_eval_method,
+                                   c("RCS_marginal", "RCS_conditional", "NCE"),
+                                   "cat_eval_method")
+  na_strategy <- .rapid_choice(na_strategy, c("constant", "drop", "median"), "na_strategy")
 
   # Data arguments (aliases, synth_pair) and arguments for the model
   inputs <- .rapid_inputs(
@@ -309,455 +369,237 @@ rapid.default <- function(X, Y,
     if (missing(target_var)) NULL else target_var,
     list(...)
   )
-  X <- inputs$X
-  Y <- inputs$Y
-  key_vars <- inputs$key_vars
-  target_var <- inputs$target_var
+  .rapid_check_dots(inputs$dots, setdiff(names(formals(rapid.default)), "..."))
+  if (!missing(return_all_records)) {
+    .rapid_warn(c("'return_all_records' is deprecated and ignored: the object always ",
+                  "keeps all records. Use as.data.frame(x, at_risk_only = TRUE) for the ",
+                  "flagged records."), "deprecated")
+  }
 
-  # Check model dependencies
-  .check_rapid_deps(model_type)
-
-  # Set seed
   if (!is.null(seed)) set.seed(seed)
-
-  # Determine if target is categorical
-  target_vec <- X[[target_var]]
-  is_categorical <- is.factor(target_vec) || is.character(target_vec)
-
-  # Model compatibility check
-  if (model_type == "lm" && is_categorical) {
-    stop("Model 'lm' is not suitable for categorical sensitive variables. Use 'rf', 'cart', 'gbm', or 'logit'.")
-  }
-  if (model_type == "logit" && !is_categorical) {
-    stop("Model 'logit' requires a categorical sensitive variable.")
-  }
-  if (model_type == "logit" && is_categorical && nlevels(as.factor(target_vec)) != 2) {
-    stop("Model 'logit' only supports binary classification (2 levels).")
-  }
-
   if (verbose) message("RAPID: Running disclosure risk assessment...")
 
   # Common column types, missing values and factor levels in both data sets
-  prepared <- .rapid_prepare_data(X, Y, key_vars, target_var, na_strategy,
-                                  na_constant_value)
-  X_sub <- prepared$X
-  Y_sub <- prepared$Y
-  if (model_type %in% c("lm", "logit")) .rapid_check_levels(prepared$unseen, model_type)
+  prepared <- .rapid_prepare_data(inputs$X, inputs$Y, inputs$key_vars, inputs$target_var,
+                                  na_strategy, na_constant_value)
+  is_categorical <- prepared$is_categorical
 
-  # Build formula
-  formula <- as.formula(paste(target_var, "~", paste(key_vars, collapse = "+")))
-
-  # Fit model on synthetic data
-  if (verbose) message("  Fitting ", model_type, " model on synthetic data...")
-  fit <- do.call(.fit_rapid_model,
-                 c(list(model_type, formula, Y_sub, X_sub, target_var), inputs$dots))
-
-  # Predict on original data
-  if (verbose) message("  Predicting on original data...")
-  A <- X_sub[[target_var]]
-  B <- .predict_rapid(model_type, fit, X_sub, target_var)
-
-  # Compute model performance metrics
-  model_metrics <- .compute_rapid_metrics(A, B)
-
-  # Evaluate disclosure risk
-  if (verbose) message("  Evaluating disclosure risk...")
-  if (is_categorical) {
-    eval_result <- .evaluate_categorical_rapid(
-      A = A, B = B,
-      original_data = X_sub,
-      cat_tau = cat_tau,
-      cat_eval_method = cat_eval_method,
-      target_var = target_var,
-      return_all_records = return_all_records
-    )
-    threshold_used <- cat_tau
-    method_used <- cat_eval_method
-  } else {
-    eval_result <- .evaluate_numeric_rapid(
-      A = A, B = B,
-      original_data = X_sub,
-      num_epsilon = num_epsilon,
-      num_epsilon_type = num_epsilon_type,
-      num_error_metric = num_error_metric,
-      num_delta = num_delta,
-      return_all_records = return_all_records
-    )
-    threshold_used <- num_epsilon
-    method_used <- paste0(num_error_metric, "_", num_epsilon_type)
+  # Arguments that belong to the other type of target
+  other <- grep(if (is_categorical) "^(num_|n_quantiles$)" else "^cat_", given, value = TRUE)
+  if (length(other) > 0) {
+    .rapid_warn(c("Ignored for a ", if (is_categorical) "categorical" else "numeric",
+                  " target: ", paste(other, collapse = ", "), "."), "ignored_argument")
   }
 
-  # Build result object
-  result <- list(
-    rapid = eval_result$confidence_rate,
-    n_at_risk = eval_result$n_at_risk,
-    pct_at_risk = eval_result$percentage,
-    n_total = nrow(X_sub),
-    method = method_used,
-    threshold = threshold_used,
-    model_type = model_type,
-    model_metrics = model_metrics,
-    model = if (store_model) fit else NULL,
-    formula = formula,
-    records = eval_result$rows_risk_df,
-    key_vars = key_vars,
-    target_var = target_var,
-    is_categorical = is_categorical,
-    error_range = eval_result$error_range,  # NULL for categorical
-    call = call
+  # Attacker and scoring rule
+  learner <- .rapid_learner(model_type, inputs$dots)
+  .learner_check(learner, is_categorical, num_dist,
+                 num_scale = if (is_categorical) "auto" else num_scale)
+  if (!learner$unseen_levels) .rapid_check_levels(prepared$unseen, learner$name)
+  rule <- .rapid_make_rule(
+    is_categorical,
+    num = list(method = num_eval_method, metric = num_error_metric, epsilon = num_epsilon,
+               epsilon_type = if (missing(num_epsilon_type)) NULL else num_epsilon_type,
+               delta = num_delta, tau = num_tau),
+    cat = list(method = cat_eval_method, tau = cat_tau)
   )
 
-  class(result) <- "rapid"
-  return(result)
+  # Fit on the synthetic data, predict the original records
+  if (verbose) message("  Fitting ", learner$name, " model on synthetic data...")
+  attack <- .rapid_attack(prepared$X, prepared$Y, inputs$key_vars, inputs$target_var,
+                          learner, num_dist, num_scale, rule$metric, n_quantiles)
+
+  if (verbose) message("  Evaluating disclosure risk...")
+  .rapid_assess(
+    attack, rule, data = prepared$X,
+    meta = list(key_vars = inputs$key_vars, target_var = inputs$target_var,
+                na = list(strategy = na_strategy, constant = na_constant_value,
+                          dropped = prepared$dropped),
+                call = call),
+    store_model = isTRUE(store_model), store_predictions = isTRUE(store_predictions)
+  )
 }
 
 
 # =============================================================================
-# Internal helper functions
+# The attack and the rapid object
 # =============================================================================
+
+#' Fit the attacker on the synthetic data and predict the original records
+#'
+#' @param X,Y Prepared original and synthetic data (`.rapid_prepare_data()`).
+#' @return A list of class `rapid_attack` with `pred` (probability matrix, or
+#'   `list(point, dist)`), `y` (true values), `learner`, `model`, `formula`,
+#'   `is_categorical` and `attacker` (the line from `.learner_describe()`).
+#' @noRd
+.rapid_attack <- function(X, Y, key_vars, target_var, learner, num_dist = "auto",
+                          num_scale = "auto", metric = "symmetric", n_quantiles = 100) {
+  # The formula lives in the global environment, so that the object does not
+  # keep the data of the calling frame alive.
+  formula <- stats::as.formula(paste(target_var, "~", paste(key_vars, collapse = " + ")),
+                               env = globalenv())
+  y <- X[[target_var]]
+  is_categorical <- is.factor(y)
+  if (is.null(metric)) metric <- "symmetric"
+
+  fit <- .learner_fit(learner, formula, Y, target_var, num_dist, num_scale, metric)
+  point <- .learner_predict(learner, fit, X, target_var)
+  pred <- if (is_categorical) {
+    point
+  } else {
+    list(point = point,
+         dist = .learner_pdist(learner, fit, X, Y, target_var, num_dist, n_quantiles))
+  }
+  structure(
+    list(pred = pred, y = y, learner = learner, model = fit, formula = formula,
+         is_categorical = is_categorical, attacker = .learner_describe(learner, fit)),
+    class = "rapid_attack"
+  )
+}
+
+#' Score an attack under a rule and assemble the rapid object
+#'
+#' The only place where a `rapid` object is put together.
+#'
+#' @param attack A `rapid_attack`.
+#' @param rule A `rapid_rule`.
+#' @param data The prepared original data (one row per scored record).
+#' @param meta `list(key_vars, target_var, na, call)`.
+#' @noRd
+.rapid_assess <- function(attack, rule, data, meta, store_model = FALSE,
+                          store_predictions = TRUE) {
+  sc <- .rule_score(rule, attack$pred, attack$y, attack$y)
+  score <- sc[[rule$score_var]]
+  at_risk <- .rule_flag(rule, score)
+  n <- length(at_risk)
+  rec <- .rapid_records(data, attack, sc, at_risk)
+
+  # The model is kept once and only on request
+  model <- attack$model
+  attack["model"] <- list(NULL)
+
+  validate_rapid(new_rapid(list(
+    rapid = sum(at_risk) / n,
+    n_at_risk = sum(at_risk),
+    pct_at_risk = 100 * sum(at_risk) / n,
+    n_total = n,
+    rule = rule,
+    method = rule$method,
+    threshold = rule$threshold,
+    score = score,
+    baseline = sc$b,
+    at_risk = at_risk,
+    records = rec$records,
+    record_cols = rec$cols,
+    attack = if (store_predictions) attack,
+    model = if (store_model) model,
+    model_type = attack$learner$name,
+    attacker = attack$attacker,
+    model_metrics = .compute_rapid_metrics(
+      attack$y, if (attack$is_categorical) attack$pred else attack$pred$point),
+    formula = attack$formula,
+    key_vars = meta$key_vars,
+    target_var = meta$target_var,
+    is_categorical = attack$is_categorical,
+    na = meta$na,
+    call = meta$call
+  )))
+}
+
+# Record table: the prepared data, the true value (numeric targets), the columns
+# of the rule and the flag. A column whose name is taken by a variable gets the
+# suffix ".rapid"; `cols` maps the plain names to the names in the table.
+.rapid_records <- function(data, attack, sc, at_risk) {
+  extra <- c(if (!attack$is_categorical) list(original_value = attack$y),
+             as.list(sc), list(at_risk = at_risk))
+  plain <- names(extra)
+  actual <- ifelse(plain %in% names(data), paste0(plain, ".rapid"), plain)
+  names(extra) <- actual
+  records <- cbind(data, as.data.frame(extra, stringsAsFactors = FALSE))
+  list(records = records, cols = stats::setNames(actual, plain))
+}
+
+# A record column by its plain name
+.rapid_col <- function(x, name) x$records[[x$record_cols[[name]]]]
+
+.rapid_fields <- c("rapid", "n_at_risk", "pct_at_risk", "n_total", "rule", "method",
+                   "threshold", "score", "baseline", "at_risk", "records", "record_cols",
+                   "attack", "model", "model_type", "attacker", "model_metrics", "formula",
+                   "key_vars", "target_var", "is_categorical", "na", "call", "version")
+
+#' Constructor of the rapid class
+#' @param fields Named list of the fields of the object.
+#' @noRd
+new_rapid <- function(fields) {
+  fields$version <- utils::packageVersion("riskutility")
+  structure(fields, class = "rapid")
+}
+
+#' Validator of the rapid class
+#' @return The object, if it is consistent; a classed error otherwise.
+#' @noRd
+validate_rapid <- function(x) {
+  missing_fields <- setdiff(.rapid_fields, names(x))
+  if (length(missing_fields) > 0) {
+    .rapid_abort(c("Not a valid rapid object: missing field(s) ",
+                   paste(missing_fields, collapse = ", "), "."), "object")
+  }
+  if (!inherits(x$rule, "rapid_rule")) {
+    .rapid_abort("Not a valid rapid object: 'rule' is not a scoring rule.", "object")
+  }
+  n <- x$n_total
+  sizes <- c(score = length(x$score), at_risk = length(x$at_risk),
+             records = if (is.data.frame(x$records)) nrow(x$records) else -1L)
+  if (!is.numeric(n) || length(n) != 1 || any(sizes != n)) {
+    .rapid_abort(c("Not a valid rapid object: score, at_risk and records must have ",
+                   "n_total entries."), "object")
+  }
+  x
+}
+
+#' Check what a method on a rapid object needs
+#'
+#' @param x A `rapid` object.
+#' @param what Any of `"version"` (created by this version of the class),
+#'   `"predictions"` (stored attack) and `"model"` (stored model).
+#' @noRd
+.rapid_require <- function(x, what = "version") {
+  if ("version" %in% what && is.null(x$rule)) {
+    .rapid_abort(c("This rapid object was created by riskutility <= 0.2.0 and cannot be ",
+                   "used with this version; re-run rapid()."), "object")
+  }
+  if ("predictions" %in% what && is.null(x$attack)) {
+    .rapid_abort(c("The object does not hold the attacker's predictions; re-run rapid() ",
+                   "with store_predictions = TRUE."), "object")
+  }
+  if ("model" %in% what && is.null(x$model)) {
+    .rapid_abort(c("The object does not hold the fitted model; re-run rapid() with ",
+                   "store_model = TRUE."), "object")
+  }
+  invisible(x)
+}
 
 #' Compute model performance metrics
 #' @noRd
 .compute_rapid_metrics <- function(A, B) {
   if (is.factor(A)) {
     # Classification
-    if (is.matrix(B) || is.data.frame(B)) {
-      max_idx <- apply(as.matrix(B), 1, which.max)
-      pred_class <- colnames(B)[max_idx]
-      pred_class <- factor(pred_class, levels = levels(A))
-    } else {
-      pred_class <- B
-    }
-    accuracy <- mean(pred_class == A, na.rm = TRUE)
-    return(list(accuracy = accuracy))
-  } else {
-    # Regression
-    mae <- mean(abs(A - B), na.rm = TRUE)
-    rmse <- sqrt(mean((A - B)^2, na.rm = TRUE))
-    rmae <- mae / mean(abs(A), na.rm = TRUE)
-    rrmse <- rmse / sd(A, na.rm = TRUE)
-    return(list(mae = mae, rmse = rmse, rmae = rmae, rrmse = rrmse))
+    pred_class <- factor(colnames(B)[max.col(as.matrix(B), ties.method = "first")],
+                         levels = levels(A))
+    return(list(accuracy = mean(pred_class == A, na.rm = TRUE)))
   }
+  # Regression
+  mae <- mean(abs(A - B), na.rm = TRUE)
+  rmse <- sqrt(mean((A - B)^2, na.rm = TRUE))
+  rmae <- mae / mean(abs(A), na.rm = TRUE)
+  rrmse <- rmse / sd(A, na.rm = TRUE)
+  list(mae = mae, rmse = rmse, rmae = rmae, rrmse = rrmse)
 }
 
-#' Evaluate numeric attribute inference risk
-#' @noRd
-.evaluate_numeric_rapid <- function(A, B, original_data,
-                                    num_epsilon, num_epsilon_type,
-                                    num_error_metric, num_delta,
-                                    return_all_records) {
-
-  if (!is.numeric(num_epsilon) || num_epsilon <= 0) {
-    stop("`num_epsilon` must be a positive number.")
-  }
-  if (!is.numeric(num_delta) || num_delta <= 0) {
-    stop("`num_delta` must be a positive number.")
-  }
-
-  if (num_epsilon_type == "percentage") {
-    error_values <- switch(num_error_metric,
-      symmetric = {
-        err <- 2 * abs(A - B) / (abs(A) + abs(B) + 2 * num_delta)
-        err * 100
-      },
-      stabilised_relative = {
-        err <- abs(A - B) / (abs(A) + num_delta)
-        err * 100
-      },
-      absolute = {
-        stop("Percentage-based threshold is not meaningful for absolute error metric. Use num_epsilon_type = 'absolute'.")
-      }
-    )
-    metric_name <- paste0(num_error_metric, "_error_pct")
-  } else {
-    error_values <- abs(A - B)
-    metric_name <- "absolute_error"
-  }
-
-  # For numeric: at_risk when prediction error is BELOW threshold
-  # Low error means the model can accurately predict the sensitive attribute = disclosure risk
-  at_risk <- error_values < num_epsilon
-
-  result_df <- data.frame(
-    original_data,
-    original_value = A,
-    predicted_value = B,
-    error_metric = error_values,
-    threshold = num_epsilon,
-    threshold_type = num_epsilon_type,
-    at_risk = at_risk
-  )
-  colnames(result_df)[colnames(result_df) == "error_metric"] <- metric_name
-
-  # Store full error range before filtering (for plotting)
-  error_range <- range(error_values, na.rm = TRUE)
-
-  if (!return_all_records) {
-    result_df <- result_df[result_df$at_risk, , drop = FALSE]
-  }
-
-  list(
-    confidence_rate = sum(at_risk) / length(at_risk),
-    n_at_risk = sum(at_risk),
-    percentage = 100 * sum(at_risk) / length(at_risk),
-    rows_risk_df = result_df,
-    error_range = error_range
-  )
-}
-
-#' Evaluate categorical attribute inference risk
-#' @noRd
-.evaluate_categorical_rapid <- function(A, B, original_data,
-                                        cat_tau, cat_eval_method,
-                                        target_var, return_all_records) {
-
-  true_labels <- A
-  predicted_probs <- B
-
-  if (!is.factor(true_labels)) {
-    stop("true_labels must be a factor for categorical evaluation.")
-  }
-  if (is.data.frame(predicted_probs)) {
-    predicted_probs <- as.matrix(predicted_probs)
-  }
-
-  # g_i: predicted probability for the true class
-  g_i <- predicted_probs[cbind(
-    seq_len(nrow(predicted_probs)),
-    match(as.character(true_labels), colnames(predicted_probs))
-  )]
-
-  if (cat_eval_method == "RCS_conditional") {
-    # Class-conditional baseline
-    baseline_by_class <- sapply(unique(as.character(true_labels)), function(k) {
-      mean(predicted_probs[which(as.character(true_labels) == k), k], na.rm = TRUE)
-    })
-    names(baseline_by_class) <- unique(as.character(true_labels))
-    b_i <- baseline_by_class[as.character(true_labels)]
-    r_i <- g_i / b_i
-    at_risk <- r_i > cat_tau
-    confidence_rate <- sum(at_risk, na.rm = TRUE) / length(at_risk)
-
-    result_df <- data.frame(
-      original_data,
-      predicted_class = colnames(predicted_probs)[max.col(predicted_probs)],
-      true_prob = g_i,
-      baseline = b_i,
-      relative_score = r_i,
-      threshold = cat_tau,
-      at_risk = at_risk
-    )
-
-  } else if (cat_eval_method == "RCS_marginal") {
-    # Marginal baseline
-    marginal_freq <- prop.table(table(original_data[[target_var]]))
-    b_i <- as.numeric(marginal_freq[as.character(true_labels)])
-    max_improvement <- 1 - b_i
-    normalized_gain <- (g_i - b_i) / max_improvement
-    at_risk <- normalized_gain > cat_tau
-    confidence_rate <- sum(at_risk, na.rm = TRUE) / length(at_risk)
-
-    result_df <- data.frame(
-      original_data,
-      predicted_class = colnames(predicted_probs)[max.col(predicted_probs)],
-      true_prob = g_i,
-      baseline = b_i,
-      normalized_gain = normalized_gain,
-      threshold = cat_tau,
-      at_risk = at_risk
-    )
-
-  } else { # NCE
-    ce <- -log(pmax(g_i, 1e-10))
-    n_classes <- ncol(predicted_probs)
-    max_entropy <- log(n_classes)
-    normalized_ce <- ce / max_entropy
-    risk_score <- 1 - normalized_ce
-    at_risk <- risk_score > cat_tau
-    confidence_rate <- sum(at_risk, na.rm = TRUE) / length(at_risk)
-
-    result_df <- data.frame(
-      original_data,
-      predicted_class = colnames(predicted_probs)[max.col(predicted_probs)],
-      true_prob = g_i,
-      risk_score = risk_score,
-      threshold = cat_tau,
-      at_risk = at_risk
-    )
-  }
-
-  if (!return_all_records) {
-    result_df <- result_df[result_df$at_risk, , drop = FALSE]
-  }
-
-  list(
-    confidence_rate = confidence_rate,
-    n_at_risk = sum(at_risk, na.rm = TRUE),
-    percentage = 100 * confidence_rate,
-    rows_risk_df = result_df
-  )
-}
-
-
-# =============================================================================
-# S3 Methods
-# =============================================================================
-
-#' Print method for rapid objects
-#'
-#' @param x an object of class "rapid"
-#' @param ... additional arguments (ignored)
-#' @return The input object, invisibly.
-#' @export
-print.rapid <- function(x, ...) {
-  cat("RAPID Disclosure Risk Assessment\n")
-  cat("=================================\n")
-  cat("Model:", x$model_type, "\n")
-  cat("Method:", x$method, "\n")
-  cat("Key variables:", paste(x$key_vars, collapse = ", "), "\n")
-  cat("Target variable:", x$target_var, "\n\n")
-
-  cat("Risk Assessment:\n")
-  cat("  RAPID (confidence rate):", sprintf("%.4f", x$rapid), "\n")
-  cat("  Records at risk:", x$n_at_risk, "/", x$n_total,
-      sprintf("(%.1f%%)", x$pct_at_risk), "\n")
-  cat("  Threshold:", x$threshold, "\n\n")
-
-  cat("Model Performance:\n")
-  if (x$is_categorical) {
-    cat("  Accuracy:", sprintf("%.4f", x$model_metrics$accuracy), "\n")
-  } else {
-    cat("  MAE:", sprintf("%.2f", x$model_metrics$mae), "\n")
-    cat("  RMSE:", sprintf("%.2f", x$model_metrics$rmse), "\n")
-  }
-
-  invisible(x)
-}
-
-#' Summary method for rapid objects
-#'
-#' @param object an object of class "rapid"
-#' @param ... additional arguments (ignored)
-#' @return A list of summary statistics for the corresponding object.
-#' @export
-summary.rapid <- function(object, ...) {
-  summ <- list(
-    rapid = object$rapid,
-    n_at_risk = object$n_at_risk,
-    pct_at_risk = object$pct_at_risk,
-    n_total = object$n_total,
-    method = object$method,
-    threshold = object$threshold,
-    model_type = object$model_type,
-    model_metrics = object$model_metrics,
-    is_categorical = object$is_categorical,
-    key_vars = object$key_vars,
-    target_var = object$target_var,
-    risk_level = if (object$rapid < 0.05) "LOW" else if (object$rapid < 0.15) "MEDIUM" else "HIGH"
-  )
-  class(summ) <- "summary.rapid"
-  summ
-}
-
-#' Print method for summary.rapid objects
-#'
-#' @param x an object of class "summary.rapid"
-#' @param ... additional arguments (ignored)
-#' @return The input object, invisibly.
-#' @export
-print.summary.rapid <- function(x, ...) {
-  cat("Summary: RAPID Disclosure Risk Assessment\n")
-  cat("==========================================\n\n")
-
-  cat("Configuration:\n")
-  cat("  Model:", x$model_type, "\n")
-  cat("  Method:", x$method, "\n")
-  cat("  Threshold:", x$threshold, "\n")
-  cat("  Key variables:", paste(x$key_vars, collapse = ", "), "\n")
-  cat("  Target variable:", x$target_var, "\n\n")
-
-  cat("Risk Assessment:\n")
-  cat("  RAPID score:", sprintf("%.4f", x$rapid), "\n")
-  cat("  Records at risk:", x$n_at_risk, "/", x$n_total,
-      sprintf("(%.2f%%)", x$pct_at_risk), "\n")
-  cat("  Risk level:", x$risk_level, "\n\n")
-
-  cat("Model Performance:\n")
-  if (x$is_categorical) {
-    cat("  Accuracy:", sprintf("%.4f (%.1f%%)", x$model_metrics$accuracy,
-                              100 * x$model_metrics$accuracy), "\n")
-  } else {
-    cat("  MAE:", sprintf("%.4f", x$model_metrics$mae), "\n")
-    cat("  RMSE:", sprintf("%.4f", x$model_metrics$rmse), "\n")
-    cat("  Relative MAE:", sprintf("%.4f", x$model_metrics$rmae), "\n")
-    cat("  Relative RMSE:", sprintf("%.4f", x$model_metrics$rrmse), "\n")
-  }
-
-  cat("\nInterpretation Guidelines:\n")
-  if (x$risk_level == "LOW") {
-    cat("  Low risk: Synthetic data provides good privacy protection.\n")
-  } else if (x$risk_level == "MEDIUM") {
-    cat("  Medium risk: Some records may be at risk. Review the at-risk records.\n")
-  } else {
-    cat("  High risk: Significant disclosure risk detected. Consider additional protection.\n")
-  }
-
-  invisible(x)
-}
 
 # =============================================================================
 # Internal plot helpers
 # =============================================================================
-
-#' Extract Variable Importance from RAPID Model
-#'
-#' @param model Fitted model object from rapid()
-#' @param model_type Character string: "rf", "cart", "gbm", "lm", or "logit"
-#' @return Named numeric vector of variable importances, or NULL
-#' @noRd
-.extract_variable_importance <- function(model, model_type) {
-  switch(model_type,
-    rf = {
-      if (inherits(model, "ranger")) {
-        imp <- tryCatch(ranger::importance(model), error = function(e) NULL)
-        if (is.null(imp)) {
-          message("Variable importance not available. ",
-                  "Ensure the ranger model was fitted with importance enabled.")
-          return(NULL)
-        }
-        imp
-      } else {
-        NULL
-      }
-    },
-    cart = {
-      if (inherits(model, "rpart")) {
-        model$variable.importance
-      } else {
-        NULL
-      }
-    },
-    gbm = {
-      if (inherits(model, "xgb.Booster")) {
-        imp_matrix <- xgboost::xgb.importance(model = model)
-        imp <- imp_matrix$Gain
-        names(imp) <- imp_matrix$Feature
-        imp
-      } else {
-        NULL
-      }
-    },
-    lm = {
-      coefs <- stats::coef(model)[-1]
-      abs(coefs) / sum(abs(coefs))
-    },
-    logit = {
-      coefs <- stats::coef(model)[-1]
-      abs(coefs) / sum(abs(coefs))
-    },
-    NULL
-  )
-}
 
 #' Plot QI Variable Importance Barplot
 #'
@@ -766,12 +608,9 @@ print.summary.rapid <- function(x, ...) {
 #' @return Invisible NULL
 #' @noRd
 .plot_qi_importance <- function(x, top_n = 15) {
-  if (is.null(x$model)) {
-    stop("Model not stored. Re-run rapid() with store_model = TRUE to use this plot.",
-         call. = FALSE)
-  }
-
-  imp <- .extract_variable_importance(x$model, x$model_type)
+  .rapid_require(x, c("version", "model"))
+  learner <- if (!is.null(x$attack)) x$attack$learner else .rapid_learner(x$model_type)
+  imp <- .learner_importance(learner, x$model)
 
   if (is.null(imp) || length(imp) == 0) {
     message("Variable importance not available for model type: ", x$model_type)
@@ -1019,8 +858,7 @@ print.summary.rapid <- function(x, ...) {
   records <- x$records
 
   if (is.null(records) || !("at_risk" %in% names(records))) {
-    stop("Records with at_risk column required. ",
-         "Run rapid() with return_all_records = TRUE.", call. = FALSE)
+    .rapid_abort("Records with at_risk column required.", "object")
   }
 
   if (all(records$at_risk) || !any(records$at_risk)) {
@@ -1070,8 +908,7 @@ print.summary.rapid <- function(x, ...) {
   records <- x$records
 
   if (is.null(records) || !("at_risk" %in% names(records))) {
-    stop("Records with at_risk column required. ",
-         "Run rapid() with return_all_records = TRUE.", call. = FALSE)
+    .rapid_abort("Records with at_risk column required.", "object")
   }
 
   if (all(records$at_risk) || !any(records$at_risk)) {
@@ -1126,93 +963,48 @@ print.summary.rapid <- function(x, ...) {
 #' Plot Threshold Sensitivity Curve
 #'
 #' @param x A rapid object
-#' @param tau_range Range of tau values for categorical targets
-#' @param epsilon_range Range of epsilon values for numeric targets
+#' @param tau_range Thresholds for rules that flag scores above the threshold
+#' @param epsilon_range Tolerances for the point rule
 #' @return Invisible NULL
 #' @noRd
 .plot_threshold_sensitivity <- function(x, tau_range = seq(0, 1, by = 0.05),
                                         epsilon_range = seq(0, 1, by = 0.05)) {
-  records <- x$records
+  scores <- x$score[is.finite(x$score)]
 
-  if (nrow(records) == 0) {
+  if (length(scores) == 0) {
     message("No records available for threshold sensitivity plot.")
     return(invisible(NULL))
   }
 
-  if (x$is_categorical) {
-    # Determine score column
-    if ("normalized_gain" %in% names(records)) {
-      scores <- records$normalized_gain
-    } else if ("relative_score" %in% names(records)) {
-      scores <- records$relative_score
-    } else if ("risk_score" %in% names(records)) {
-      scores <- records$risk_score
-    } else {
-      scores <- records$true_prob
+  if (x$rule$direction == "below") {
+    # The score is an error; a record is at risk below the tolerance
+    thresholds <- epsilon_range
+    if (identical(epsilon_range, seq(0, 1, by = 0.05)) && max(scores) > 1) {
+      # Errors in the units of the target (absolute metric)
+      thresholds <- seq(0, max(scores), length.out = 21)
     }
-
-    rapid_values <- vapply(tau_range, function(tau) {
-      sum(scores > tau) / length(scores)
-    }, numeric(1))
-
-    plot(tau_range, rapid_values,
-         type = "l", lwd = 2, col = "blue",
-         xlab = "Threshold (tau)",
-         ylab = "RAPID (Proportion at Risk)",
-         main = "Threshold Sensitivity Curve",
-         ylim = c(0, 1))
-
-    current_tau <- x$threshold
-    current_rapid <- x$rapid
-    points(current_tau, current_rapid, pch = 19, col = "red", cex = 1.5)
-    text(current_tau, current_rapid,
-         paste0("tau = ", current_tau, "\nRAPID = ", round(current_rapid, 3)),
-         pos = 4, col = "red")
-    grid()
-
+    rapid_values <- vapply(thresholds, function(eps) mean(scores < eps), numeric(1))
+    xlab_text <- "Tolerance (epsilon)"
+    label <- "epsilon"
   } else {
-    # Numeric: determine error column and scale
-    if ("symmetric_error_pct" %in% names(records)) {
-      errors <- records$symmetric_error_pct
-      is_pct <- TRUE
-    } else if ("stabilised_relative_error_pct" %in% names(records)) {
-      errors <- records$stabilised_relative_error_pct
-      is_pct <- TRUE
-    } else {
-      errors <- records$absolute_error
-      is_pct <- FALSE
-    }
-
-    if (is_pct) {
-      # Default range for percentage: 0 to 100
-      if (identical(epsilon_range, seq(0, 1, by = 0.05))) {
-        epsilon_range <- seq(0, 100, by = 5)
-      }
-      xlab_text <- "Error Threshold (epsilon, %)"
-    } else {
-      xlab_text <- "Error Threshold (epsilon)"
-    }
-
-    rapid_values <- vapply(epsilon_range, function(eps) {
-      sum(errors < eps) / length(errors)
-    }, numeric(1))
-
-    plot(epsilon_range, rapid_values,
-         type = "l", lwd = 2, col = "blue",
-         xlab = xlab_text,
-         ylab = "RAPID (Proportion at Risk)",
-         main = "Threshold Sensitivity Curve",
-         ylim = c(0, 1))
-
-    current_eps <- x$threshold
-    current_rapid <- x$rapid
-    points(current_eps, current_rapid, pch = 19, col = "red", cex = 1.5)
-    text(current_eps, current_rapid,
-         paste0("epsilon = ", round(current_eps, 3),
-                "\nRAPID = ", round(current_rapid, 3)),
-         pos = 4, col = "red")
-    grid()
+    thresholds <- tau_range
+    rapid_values <- vapply(thresholds, function(tau) mean(scores > tau), numeric(1))
+    xlab_text <- "Threshold (tau)"
+    label <- "tau"
   }
+
+  plot(thresholds, rapid_values,
+       type = "l", lwd = 2, col = "blue",
+       xlab = xlab_text,
+       ylab = "RAPID (Proportion at Risk)",
+       main = "Threshold Sensitivity Curve",
+       ylim = c(0, 1))
+
+  points(x$threshold, x$rapid, pch = 19, col = "red", cex = 1.5)
+  text(x$threshold, x$rapid,
+       paste0(label, " = ", round(x$threshold, 3), "\nRAPID = ", round(x$rapid, 3)),
+       pos = 4, col = "red")
+  graphics::grid()
 
   invisible(NULL)
 }
@@ -1247,10 +1039,11 @@ print.summary.rapid <- function(x, ...) {
 #'   Must be columns present in the records data frame. Uses ggplot2 for faceted plots.
 #' @param bins integer, number of histogram bins (default: 30)
 #' @param tau_range numeric vector of tau thresholds for the sensitivity curve
-#'   (plot 3, categorical targets). Default \code{seq(0, 1, by = 0.05)}.
+#'   (plot 3, rules that flag scores above the threshold). Default
+#'   \code{seq(0, 1, by = 0.05)}.
 #' @param epsilon_range numeric vector of epsilon thresholds for the sensitivity curve
-#'   (plot 3, numeric targets). Default \code{seq(0, 1, by = 0.05)};
-#'   automatically adjusted to \code{seq(0, 100, by = 5)} for percentage-based metrics.
+#'   (plot 3, point rule). Default \code{seq(0, 1, by = 0.05)}; for errors in
+#'   the units of the target (absolute metric) the range of the errors is used.
 #' @param formula optional formula for QI attribution plot (plot 5), e.g.,
 #'   \code{at_risk ~ age * gender}. If NULL, uses main effects of all key variables.
 #' @param top_n integer, maximum number of variables/terms to show in importance (plot 4),
@@ -1259,9 +1052,9 @@ print.summary.rapid <- function(x, ...) {
 #' @details
 #' \strong{Plot 1 -- Risk Distribution:}
 #' Histogram of risk scores colored by at-risk status. The red dashed line indicates
-#' the threshold. For categorical targets, higher scores indicate higher risk. For
-#' numeric targets, lower prediction errors indicate higher risk (accurate predictions
-#' imply disclosure).
+#' the threshold. Higher scores indicate higher risk, except under the point rule
+#' for numeric targets, where lower prediction errors indicate higher risk
+#' (accurate predictions imply disclosure).
 #'
 #' \strong{Plot 2 -- Prediction Scatter (numeric only):}
 #' Scatter plot of predicted vs actual values, colored by at-risk status.
@@ -1315,8 +1108,6 @@ print.summary.rapid <- function(x, ...) {
 #'                 key_vars = c("age", "gender", "education"),
 #'                 target_var = "health",
 #'                 model_type = "rf",
-#'                 cat_tau = 1,
-#'                 return_all_records = TRUE,
 #'                 store_model = TRUE)
 #'
 #' # Risk distribution histogram (default)
@@ -1355,6 +1146,8 @@ plot.rapid <- function(x, y = NULL, ...,
                        formula = NULL,
                        top_n = 15) {
 
+  .rapid_require(x, "version")
+
   # Dispatch to specialized plot helpers for which = 3, 4, 5, 6
   if (3 %in% which) {
     return(.plot_threshold_sensitivity(x, tau_range = tau_range,
@@ -1375,62 +1168,28 @@ plot.rapid <- function(x, y = NULL, ...,
 
   records <- x$records
 
-  # Check if we have all records (needed for proper visualization)
-  if (nrow(records) == 0) {
-    message("No records to plot. Run rapid() with return_all_records = TRUE for full distribution.")
+  # Score column and labels come from the rule
+  score_var <- x$record_cols[[x$rule$score_var]]
+  x_label <- x$rule$score_label
+  main_title <- paste(x_label, "Distribution")
+  # TRUE: a record is at risk below the threshold (the score is an error)
+  below <- x$rule$direction == "below"
+
+  keep <- is.finite(x$score)
+  if (!any(keep)) {
+    message("No finite scores to plot.")
     return(invisible(NULL))
   }
-
-  # Determine score variable and labels based on method
-  if (x$is_categorical) {
-    if ("normalized_gain" %in% names(records)) {
-      score_var <- "normalized_gain"
-      main_title <- "Normalized Gain Distribution"
-      x_label <- "Normalized Gain"
-    } else if ("relative_score" %in% names(records)) {
-      score_var <- "relative_score"
-      main_title <- "Relative Score Distribution"
-      x_label <- "Relative Score"
-    } else if ("risk_score" %in% names(records)) {
-      score_var <- "risk_score"
-      main_title <- "Risk Score Distribution"
-      x_label <- "Risk Score"
-    } else {
-      score_var <- "true_prob"
-      main_title <- "True Probability Distribution"
-      x_label <- "Probability"
-    }
-  } else {
-    if ("symmetric_error_pct" %in% names(records)) {
-      score_var <- "symmetric_error_pct"
-      x_label <- "Symmetric Error (%)"
-    } else if ("stabilised_relative_error_pct" %in% names(records)) {
-      score_var <- "stabilised_relative_error_pct"
-      x_label <- "Stabilised Relative Error (%)"
-    } else {
-      score_var <- "absolute_error"
-      x_label <- "Absolute Error"
-    }
-    main_title <- "Prediction Error Distribution"
-  }
-
-  scores <- records[[score_var]]
+  if (!all(keep)) records <- records[keep, , drop = FALSE]
+  scores <- x$score[keep]
 
   # Calculate x-axis limits
-  # Use stored error_range (from full data) if available, otherwise use current data range
-  score_range <- range(scores, na.rm = TRUE)
-  full_range <- if (!is.null(x$error_range)) x$error_range else score_range
+  score_range <- range(scores)
+  full_range <- if (below) c(0, score_range[2]) else score_range
 
   if (is.character(xlim)) {
     xlim_values <- switch(xlim,
-      "full" = {
-        # For numeric variables, use the full error range from all records
-        if (!x$is_categorical && !is.null(x$error_range)) {
-          c(0, x$error_range[2])
-        } else {
-          full_range
-        }
-      },
+      "full" = full_range,
       "zero_to_one" = c(0, 1),
       "threshold_to_one" = c(x$threshold, 1),
       full_range  # default to full
@@ -1441,46 +1200,29 @@ plot.rapid <- function(x, y = NULL, ...,
     xlim_values <- full_range
   }
 
-  # Calculate at-risk percentage using stored totals (not nrow which may be filtered)
   pct_at_risk <- x$pct_at_risk
   n_at_risk <- x$n_at_risk
   n_total <- x$n_total
-
-  # Check if we have all records or just at-risk records
-  have_all_records <- nrow(records) == n_total
-
-  # Warn if we don't have all records (distribution will be incomplete)
-  if (!have_all_records) {
-    warning("Only at-risk records are available for plotting. ",
-            "'Not at Risk' values cannot be shown.\n",
-            "To see the complete distribution, run rapid() with return_all_records = TRUE.",
-            call. = FALSE)
-  }
+  risk_labels <- paste0(c("At Risk (", "Not at Risk ("),
+                        if (below) c("< ", ">= ") else c("> ", "<= "),
+                        format(x$threshold), ")")
 
   # Use ggplot2 for faceted plots
   if (!is.null(facet_by) && show[1]) {
     # Check facet variables exist
     missing_vars <- setdiff(facet_by, names(records))
     if (length(missing_vars) > 0) {
-      stop(paste("Facet variables not found in records:", paste(missing_vars, collapse = ", ")))
+      .rapid_abort(c("Facet variables not found in records: ",
+                     paste(missing_vars, collapse = ", "), "."), "input")
     }
 
     # Create facet variable (combine if multiple)
     if (length(facet_by) == 1) {
       records$facet_var <- records[[facet_by]]
-      facet_label <- facet_by
     } else {
       records$facet_var <- interaction(records[, facet_by, drop = FALSE], sep = " / ")
-      facet_label <- paste(facet_by, collapse = " / ")
     }
-
-    # Calculate per-facet statistics
-    facet_stats <- stats::aggregate(
-      at_risk ~ facet_var,
-      data = records,
-      FUN = function(x) sprintf("%.1f%% at risk", 100 * mean(x))
-    )
-    names(facet_stats)[2] <- "label"
+    records$at_risk <- x$at_risk[keep]
 
     # Build ggplot
     p <- ggplot2::ggplot(records, ggplot2::aes(x = .data[[score_var]])) +
@@ -1498,7 +1240,7 @@ plot.rapid <- function(x, y = NULL, ...,
       ) +
       ggplot2::scale_fill_manual(
         values = c("FALSE" = "steelblue", "TRUE" = "coral"),
-        labels = c("Not at Risk", "At Risk"),
+        labels = c("FALSE" = "Not at Risk", "TRUE" = "At Risk"),
         name = "Status"
       ) +
       ggplot2::facet_wrap(~ facet_var, scales = "free_y") +
@@ -1529,19 +1271,18 @@ plot.rapid <- function(x, y = NULL, ...,
     # Create histogram breaks that span the xlim range
     break_min <- min(xlim_values[1], score_range[1])
     break_max <- max(xlim_values[2], score_range[2])
+    if (break_max <= break_min) break_max <- break_min + 1
     breaks_seq <- seq(break_min, break_max, length.out = bins + 1)
 
     # Compute histogram
     h <- hist(scores, breaks = breaks_seq, plot = FALSE)
 
     # Color bars based on whether they're in the at-risk region
-    # For categorical: at_risk when score >= threshold (high confidence = risk)
-    # For numeric: at_risk when error < threshold (low error = disclosure risk)
-    if (x$is_categorical) {
-      bar_colors <- ifelse(h$mids >= x$threshold, "coral", "steelblue")
+    bar_colors <- if (below) {
+      # Low error means an accurate prediction, hence disclosure risk
+      ifelse(h$mids < x$threshold, "coral", "steelblue")
     } else {
-      # For numeric: error < threshold means at-risk (accurate predictions = disclosure risk)
-      bar_colors <- ifelse(h$mids < x$threshold, "coral", "steelblue")
+      ifelse(h$mids >= x$threshold, "coral", "steelblue")
     }
 
     # Plot histogram with explicit xlim (don't pass ... to avoid xlim conflict)
@@ -1562,29 +1303,14 @@ plot.rapid <- function(x, y = NULL, ...,
            adj = c(1, 1), cex = 0.9, font = 2)
     }
 
-    # Legend with clearer labels for numeric
-    # Only show "Not at Risk" in legend if those records exist
-    if (x$is_categorical) {
-      legend("topleft",
-             legend = c("At Risk", "Not at Risk", "Threshold"),
-             fill = c("coral", "steelblue", NA),
-             border = c("white", "white", NA),
-             col = c(NA, NA, "red"),
-             lty = c(NA, NA, 2),
-             lwd = c(NA, NA, 2),
-             cex = 0.8)
-    } else {
-      legend("topright",
-             legend = c(sprintf("At Risk (error < %.0f%%)", x$threshold),
-                        sprintf("Not at Risk (error >= %.0f%%)", x$threshold),
-                        "Threshold"),
-             fill = c("coral", "steelblue", NA),
-             border = c("white", "white", NA),
-             col = c(NA, NA, "red"),
-             lty = c(NA, NA, 2),
-             lwd = c(NA, NA, 2),
-             cex = 0.8)
-    }
+    legend(if (below) "topright" else "topleft",
+           legend = c(risk_labels, "Threshold"),
+           fill = c("coral", "steelblue", NA),
+           border = c("white", "white", NA),
+           col = c(NA, NA, "red"),
+           lty = c(NA, NA, 2),
+           lwd = c(NA, NA, 2),
+           cex = 0.8)
   }
 
   if (show[2] && !x$is_categorical) {
@@ -1592,26 +1318,24 @@ plot.rapid <- function(x, y = NULL, ...,
     # Plot not-at-risk points first (background), then at-risk points on top
     col_at_risk <- adjustcolor("coral", alpha.f = 0.6)
     col_not_risk <- adjustcolor("steelblue", alpha.f = 0.6)
+    actual <- .rapid_col(x, "original_value")
+    predicted <- .rapid_col(x, "predicted_value")
 
     # Initialize empty plot
-    plot(range(records$original_value), range(records$predicted_value),
+    plot(range(actual), range(predicted),
          type = "n",
          main = "Predicted vs Actual Values",
          xlab = "Actual Value", ylab = "Predicted Value")
 
     # Plot not-at-risk points first (in background)
-    not_at_risk_idx <- !records$at_risk
-    if (any(not_at_risk_idx)) {
-      points(records$original_value[not_at_risk_idx],
-             records$predicted_value[not_at_risk_idx],
+    if (any(!x$at_risk)) {
+      points(actual[!x$at_risk], predicted[!x$at_risk],
              col = col_not_risk, pch = 19, cex = 0.7)
     }
 
     # Plot at-risk points on top
-    at_risk_idx <- records$at_risk
-    if (any(at_risk_idx)) {
-      points(records$original_value[at_risk_idx],
-             records$predicted_value[at_risk_idx],
+    if (any(x$at_risk)) {
+      points(actual[x$at_risk], predicted[x$at_risk],
              col = col_at_risk, pch = 19, cex = 0.7)
     }
 
@@ -1628,9 +1352,7 @@ plot.rapid <- function(x, y = NULL, ...,
     }
 
     legend("bottomright",
-           legend = c(sprintf("At Risk (error < %.0f%%)", x$threshold),
-                      sprintf("Not at Risk (error >= %.0f%%)", x$threshold),
-                      "Perfect Prediction"),
+           legend = c("At Risk", "Not at Risk", "Perfect Prediction"),
            col = c(col_at_risk, col_not_risk, "darkgray"),
            pch = c(19, 19, NA), lty = c(NA, NA, 2), lwd = c(NA, NA, 2),
            cex = 0.8)

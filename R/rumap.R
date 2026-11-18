@@ -318,8 +318,7 @@ rumap.default <- function(X,
     if ("rapid" %in% risk_measures) {
       tryCatch({
         res <- rapid(original, Y, key_vars = key_vars, target_var = target_var,
-                     model_type = "lm", return_all_records = FALSE,
-                     store_model = FALSE, verbose = FALSE)
+                     model_type = "lm", store_model = FALSE, verbose = FALSE)
         risk_results[i, "rapid"] <- res$rapid
       }, error = function(e) {
         warning(paste("rapid failed for", sdg_name, ":", e$message))

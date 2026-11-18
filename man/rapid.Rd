@@ -16,25 +16,37 @@ rapid(X, ...)
   key_vars,
   target_var,
   model_type = c("rf", "lm", "cart", "gbm", "logit"),
-  num_epsilon = 10,
-  num_epsilon_type = c("percentage", "absolute"),
+  num_eval_method = c("band", "point"),
   num_error_metric = c("symmetric", "stabilised_relative", "absolute"),
+  num_epsilon = NULL,
   num_delta = 0.01,
-  cat_tau = 1,
-  cat_eval_method = c("RCS_conditional", "RCS_marginal", "NCE"),
+  num_tau = 0.3,
+  num_dist = c("auto", "grid", "exact"),
+  num_scale = c("auto", "identity", "log"),
+  n_quantiles = 100,
+  cat_eval_method = c("RCS_marginal", "RCS_conditional", "NCE"),
+  cat_tau = NULL,
   na_strategy = c("constant", "drop", "median"),
   na_constant_value = 0,
-  return_all_records = TRUE,
   store_model = FALSE,
+  store_predictions = TRUE,
   seed = NULL,
   verbose = FALSE,
-  ...
+  ...,
+  num_epsilon_type,
+  return_all_records
 )
 }
 \arguments{
 \item{X}{data frame of original data, or a \code{\link{synth_pair}} object}
 
-\item{...}{additional arguments passed to model fitting functions}
+\item{...}{additional arguments passed to the model fitting function
+(\code{ranger::ranger}, \code{stats::lm}, \code{rpart::rpart},
+\code{xgboost::xgb.train} parameters and \code{nrounds}, \code{stats::glm}).
+For "cart", \code{prune = FALSE} keeps the tree as grown. The old argument
+names \code{original_data}, \code{synthetic_data}, \code{quasi_identifiers}
+and \code{sensitive_attribute} are accepted as aliases of the first four
+arguments. A misspelled argument of \code{rapid()} is an error.}
 
 \item{Y}{data frame of synthetic data (not needed if X is a synth_pair)}
 
@@ -42,112 +54,166 @@ rapid(X, ...)
 
 \item{target_var}{character, name of the sensitive target variable}
 
-\item{model_type}{character, model type for inference: "rf" (random forest,
+\item{model_type}{character, the attacker model: "rf" (random forest,
 default), "lm" (linear model), "cart" (decision tree), "gbm" (gradient
-boosting), or "logit" (logistic regression, binary only)}
+boosting), or "logit" (logistic regression, two classes only)}
 
-\item{num_epsilon}{numeric threshold for continuous attributes. For percentage-based
-metrics (default), specify as percentage (e.g., 5 for 5\\%). For absolute error,
-specify in units of the sensitive attribute.}
+\item{num_eval_method}{character, rule for a numeric target: "band"
+(default) compares the probability the attacker puts into the tolerance band
+around the true value with the share of original values in that band;
+"point" flags a record when the error of the point prediction is below the
+tolerance (the rule of riskutility <= 0.2.0)}
 
-\item{num_epsilon_type}{character, threshold type: "percentage" (default) or "absolute"}
+\item{num_error_metric}{character, error metric that defines the tolerance
+band: "symmetric" (default), "stabilised_relative", or "absolute"}
 
-\item{num_error_metric}{character, error metric for continuous variables:
-"symmetric" (default, recommended), "stabilised_relative", or "absolute"}
+\item{num_epsilon}{numeric tolerance. For the two relative metrics it is a
+proportion (default 0.1, that is 10 percent). For the absolute metric it is
+given in the units of the target and has no default. A relative tolerance of
+1 or more is read as percent, with a warning.}
 
-\item{num_delta}{numeric, smoothing constant for percentage-based metrics (default: 0.01)}
+\item{num_delta}{numeric, smoothing constant of the relative metrics (default: 0.01)}
 
-\item{cat_tau}{numeric threshold for categorical risk. Interpretation depends on method:
-\itemize{
-\item For RCS_conditional: ratio threshold (default 1, typically 1--1.25)
-\item For RCS_marginal: normalized gain threshold (typically 0.3)
-\item For NCE: risk score threshold (typically 0.5--0.7)
-}}
+\item{num_tau}{numeric threshold on the normalized gain of a numeric target
+under the band rule (default: 0.3)}
 
-\item{cat_eval_method}{character, method for categorical evaluation:
-"RCS_conditional" (default), "RCS_marginal", or "NCE"}
+\item{num_dist}{character, how the attacker's predictive distribution of a
+numeric target is evaluated: "auto" (default) uses the exact probability
+where the model provides one (normal or lognormal for "lm", the training
+values in the leaf for "cart") and a grid of quantiles for "rf" and "gbm";
+"grid" uses \code{n_quantiles} quantiles for all models}
 
-\item{na_strategy}{character, strategy for NA values in sensitive attribute:
-"constant" (default), "drop", or "median"}
+\item{num_scale}{character, working scale of the linear model for a numeric
+target: "identity", "log", or "auto" (default), which takes the log scale
+when the error metric is relative, all synthetic target values are positive
+and the log model has the higher Gaussian likelihood on the original scale.
+On the log scale the point prediction is the predictive median.}
+
+\item{n_quantiles}{integer, number of quantiles of a grid distribution (default: 100)}
+
+\item{cat_eval_method}{character, rule for a categorical target:
+"RCS_marginal" (default, normalized gain over the marginal class share),
+"RCS_conditional" (ratio to the class-conditional mean probability), or
+"NCE" (normalized cross-entropy)}
+
+\item{cat_tau}{numeric threshold for a categorical target. The default
+depends on the method: 0.3 for RCS_marginal, 1 for RCS_conditional, 0.5 for NCE.}
+
+\item{na_strategy}{character, strategy for NA values in a numeric sensitive
+attribute: "constant" (default), "drop", or "median". Missing values of a
+categorical variable become the level "missing".}
 
 \item{na_constant_value}{numeric, value for constant NA imputation (default: 0)}
-
-\item{return_all_records}{logical, if TRUE (default) return all records with risk status;
-if FALSE return only at-risk records}
 
 \item{store_model}{logical, if TRUE store the fitted model object in the result
 (needed for \code{plot(result, which = 4)} variable importance plot). Default FALSE.}
 
+\item{store_predictions}{logical, if TRUE (default) the result keeps the
+attacker's predictions, so that it can be tested and rescored without
+fitting the model again}
+
 \item{seed}{integer, random seed for reproducibility (default: NULL)}
 
 \item{verbose}{logical, print diagnostic messages (default: FALSE)}
+
+\item{num_epsilon_type}{deprecated. "percentage" reads \code{num_epsilon} as
+percent, "absolute" selects the absolute error metric.}
+
+\item{return_all_records}{deprecated and ignored: the result always holds all
+records. Use \code{as.data.frame(x, at_risk_only = TRUE)} for the flagged ones.}
 }
 \value{
 An object of class "rapid" containing:
 \itemize{
-\item rapid: the confidence rate (proportion of records at risk)
-\item n_at_risk: number of records at risk
-\item pct_at_risk: percentage of records at risk
-\item method: evaluation method used (categorical) or "numeric"
-\item threshold: threshold used (cat_tau or num_epsilon)
-\item model_type: model type used
+\item rapid: the proportion of records at risk
+\item n_at_risk, pct_at_risk, n_total: number and percentage of records at
+risk, number of scored records
+\item rule: the scoring rule; method and threshold are copies of its
+method and threshold
+\item score, baseline, at_risk: per record, the score that is compared with
+the threshold, the marginal baseline (NULL for NCE) and the flag
+\item records: the prepared original data with the columns of the rule
+(band rule: predicted_value, band_lo, band_hi, g, b, r; point rule:
+predicted_value, error, b; RCS_marginal: predicted_class, g, b, r;
+RCS_conditional: predicted_class, g, b, ratio; NCE: predicted_class, g,
+nce) and at_risk, for all records. Here g is the attacker's confidence,
+b the baseline and r the normalized gain (g - b) / (1 - b). A column whose
+name is already used by a variable gets the suffix ".rapid".
+\item attack: the attacker's predictions (NULL if store_predictions = FALSE)
+\item model: the fitted model object (only if store_model = TRUE)
+\item model_type, attacker: the model and a line with the settings that
+drive its result (number of trees and node size, number of leaves, scale)
 \item model_metrics: model performance (accuracy for categorical, MAE/RMSE for numeric)
-\item model: the fitted model object (only if store_model=TRUE, otherwise NULL)
-\item formula: the model formula used
-\item records: data frame of at-risk records (or all records if return_all_records=TRUE)
-\item key_vars, target_var: input parameters
-\item call: the function call
+\item formula, key_vars, target_var, is_categorical, na, call, version
 }
 }
 \description{
-Assesses inferential disclosure risk for a sensitive variable in synthetic data
-using the RAPID metric. This function trains a predictive model on synthetic data
-using quasi-identifiers, then evaluates attribute inference risk by scoring the
-model on the original data.
+Assesses the inferential disclosure risk of a sensitive variable in synthetic
+or anonymized data. An attacker model is trained on the released data to
+predict the sensitive variable from the quasi-identifiers and is then applied
+to the original records. A record is at risk when the attacker is confident
+about its true value well beyond what the marginal distribution of the
+sensitive variable already gives away. RAPID is the share of such records.
 }
 \details{
 RAPID (Risk of Attribute Prediction-Induced Disclosure) measures disclosure risk
 by training a predictive model on synthetic data and evaluating how well it can
-predict the sensitive attribute in the original data. High prediction accuracy
-indicates potential disclosure risk.
+predict the sensitive attribute in the original data.
 
 Unlike CAP-based methods (DCAP, TCAP) which use exact or fuzzy matching, RAPID
 uses machine learning models to capture more complex relationships between
 quasi-identifiers and sensitive attributes.
 
 \strong{For categorical sensitive variables:}
-Three evaluation methods are available:
 \itemize{
-\item \code{RCS_conditional} (default): Measures if an observation is an outlier
-within its class using class-conditional baseline.
-\item \code{RCS_marginal}: Measures if the attribute can be inferred
-better than the marginal baseline rate. Uses normalized gain.
+\item \code{RCS_marginal} (default): the attacker's probability of the true
+class, g, is compared with the share of that class in the original data, b.
+The record is flagged when the normalized gain (g - b) / (1 - b) exceeds
+\code{cat_tau}.
+\item \code{RCS_conditional}: ratio of g to its mean among the records of
+the same class.
 \item \code{NCE}: Normalized Cross-Entropy, measures information leakage.
 }
 
 \strong{For continuous sensitive variables:}
-Risk is measured by the proportion of records for which prediction errors fall
-below a threshold. Three error metrics are available:
-\itemize{
-\item \code{symmetric} (recommended): Symmetric percentage error, treats predicted
-and true values equally.
-\item \code{stabilised_relative}: Stabilised relative error.
-\item \code{absolute}: Raw absolute error (use with num_epsilon_type = "absolute").
-}
-}
-\section{Threshold Selection Guidelines}{
+The band rule (default) is the continuous counterpart of \code{RCS_marginal}.
+The tolerance band of a record holds all values whose error against the true
+value is below \code{num_epsilon}. g is the probability the attacker's
+predictive distribution puts into the band, b the share of original values in
+it, and the record is flagged when (g - b) / (1 - b) exceeds \code{num_tau}.
+Where the band holds all original values (b = 1) the gain is 0. The point
+rule flags a record when the error of the point prediction is below the
+tolerance. It also flags records whose value is easy to guess without any
+model, which is why it is no longer the default.
 
-\strong{Categorical sensitive variables:}
+The band is defined by one of three error metrics:
 \itemize{
-\item RCS_conditional: \code{cat_tau = 1} (default)
-\item RCS_marginal: \code{cat_tau = 0.3}
-\item NCE: \code{cat_tau = 0.5-0.7}
+\item \code{symmetric} (recommended): symmetric relative error, treats predicted
+and true values equally.
+\item \code{stabilised_relative}: stabilised relative error.
+\item \code{absolute}: absolute error in the units of the target.
 }
-\strong{Continuous sensitive variables:}
-\itemize{
-\item symmetric: \code{num_epsilon = 5-10} (percentage)
-\item absolute: \code{num_epsilon} depends on domain/scale
+
+\strong{Attacker models:} The result depends on how sharp the attacker's
+predictive distribution is, so the settings that drive it are part of the
+result (\code{attacker}) and of the printed output. The tree of "cart" is
+grown with \code{cp = 0}, \code{minbucket = 5}, \code{xval = 10} and pruned at
+the smallest cross-validated error; the three values can be overridden and
+\code{prune = FALSE} keeps the tree as grown. Cross-validation is random, so
+set \code{seed} for a reproducible tree. To reproduce the results of the RAPID
+paper and of the RAPID package use \code{num_dist = "grid"},
+\code{num_scale = "identity"} and, for "cart", \code{prune = FALSE, cp = 0.01,
+minsplit = 20, minbucket = 7} (the defaults of rpart).
 }
+\section{Changes in 0.3.0}{
+
+The defaults changed: numeric targets use the band rule with \code{num_tau =
+0.3} and a tolerance of 10 percent (before: the point rule), categorical
+targets use \code{RCS_marginal} with \code{cat_tau = 0.3} (before:
+\code{RCS_conditional} with \code{cat_tau = 1}). A relative tolerance is a
+proportion (before: percent). The old rules remain available through
+\code{num_eval_method = "point"} and \code{cat_eval_method =
+"RCS_conditional"}.
 }
 
 \section{Comparison with CAP Methods}{
@@ -167,9 +233,9 @@ n <- 200
 original <- data.frame(
   age = sample(20:70, n, replace = TRUE),
   gender = factor(sample(c("M", "F"), n, replace = TRUE)),
-  region = factor(sample(c("N", "S", "E", "W"), n, replace = TRUE)),
-  income = round(rnorm(n, 50000, 10000))
+  region = factor(sample(c("N", "S", "E", "W"), n, replace = TRUE))
 )
+original$income <- round(20000 + 600 * original$age + rnorm(n, 0, 5000))
 
 # Synthetic version with some noise
 synthetic <- data.frame(
@@ -179,19 +245,28 @@ synthetic <- data.frame(
   income = round(original$income * runif(n, 0.9, 1.1))
 )
 
-# RAPID for continuous sensitive variable
-\donttest{
+# RAPID for a continuous sensitive variable (band rule, linear model)
 result <- rapid(
   X = original,
   Y = synthetic,
   key_vars = c("age", "gender", "region"),
   target_var = "income",
-  model_type = "rf",
-  num_epsilon = 10,
-  verbose = TRUE
+  model_type = "lm"
 )
-print(result)
-summary(result)
+result
+head(as.data.frame(result, at_risk_only = TRUE))
+
+\donttest{
+# Random forest attacker
+result_rf <- rapid(original, synthetic,
+                   key_vars = c("age", "gender", "region"),
+                   target_var = "income", model_type = "rf", seed = 1)
+summary(result_rf)
+
+# The point rule of earlier versions, with a tolerance of 10 percent
+rapid(original, synthetic,
+      key_vars = c("age", "gender", "region"), target_var = "income",
+      model_type = "rf", num_eval_method = "point", num_epsilon = 0.1)
 }
 
 # RAPID for categorical sensitive variable
@@ -206,9 +281,7 @@ result_cat <- rapid(
   Y = synthetic,
   key_vars = c("age", "gender", "region"),
   target_var = "health",
-  model_type = "rf",
-  cat_tau = 1,
-  cat_eval_method = "RCS_conditional"
+  model_type = "rf"
 )
 print(result_cat)
 }
@@ -243,19 +316,14 @@ if (requireNamespace("synthpop", quietly = TRUE) &&
     key_vars = c("sex", "age", "edu", "marital", "region"),
     target_var = "income",
     model_type = "rf",
-    num_epsilon = 10,           # 10\% error threshold
-    num_epsilon_type = "percentage",
+    num_epsilon = 0.1,          # tolerance band of 10 percent
     num_error_metric = "symmetric",
     verbose = TRUE
   )
 
   print(rapid_income)
   summary(rapid_income)
-  plot(rapid_income, which = 1:2)
-
-  # Interpretation:
-  # - RAPID score close to 0: low risk (model cannot predict income well)
-  # - RAPID score > 0.15: elevated risk (sensitive attribute predictable)
+  plot(rapid_income, which = 1)
 
   # ------------------------------------------------------------------
   # Example 2: Categorical sensitive variable (smoking status)
@@ -268,8 +336,6 @@ if (requireNamespace("synthpop", quietly = TRUE) &&
     key_vars = c("sex", "age", "edu", "marital", "income"),
     target_var = "smoke",
     model_type = "rf",
-    cat_tau = 1,                # ratio threshold for RCS_conditional
-    cat_eval_method = "RCS_conditional",
     verbose = TRUE
   )
 
@@ -300,6 +366,7 @@ Visualization for Synthetic Data. \emph{Journal of Official Statistics}.
 
 Other rapid: 
 \code{\link{confint.rapid}()},
+\code{\link{rapid_methods}},
 \code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_synthesizer_cv}()},
 \code{\link{rapid_test}()},

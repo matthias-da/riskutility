@@ -72,6 +72,7 @@
 confint.rapid <- function(object, parm = NULL, level = 0.95,
                           method = c("wilson", "wald", "bootstrap"),
                           n_bootstrap = 1000, seed = NULL, ...) {
+  .rapid_require(object, "version")
   method <- match.arg(method)
 
   p <- object$rapid
@@ -94,10 +95,8 @@ confint.rapid <- function(object, parm = NULL, level = 0.95,
 
     bootstrap = {
       if (!is.null(seed)) set.seed(seed)
-      at_risk <- object$records$at_risk
-      boot_props <- vapply(seq_len(n_bootstrap), function(i) {
-        mean(sample(at_risk, replace = TRUE))
-      }, numeric(1))
+      # Resampling the n flags with replacement gives a binomial count
+      boot_props <- stats::rbinom(n_bootstrap, n, p) / n
       stats::quantile(boot_props, probs = c(alpha / 2, 1 - alpha / 2),
                       names = FALSE)
     }

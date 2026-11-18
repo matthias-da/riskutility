@@ -177,6 +177,10 @@ test_that("a new threshold replaces the old one, and the tolerance of the point 
   point <- .rule_set_threshold(.rapid_rule("point", 0.1, "symmetric", delta = 0.01), 0.2)
   expect_identical(point$threshold, 0.2)
   expect_identical(point$epsilon, 0.2)
+  # Built from flat arguments: the tolerance is the threshold of the point rule
+  flat <- .rapid_rule("point", 0.3, "symmetric", 0.1, 0.01)
+  expect_identical(flat$threshold, 0.1)
+  expect_identical(flat$epsilon, 0.1)
 })
 
 test_that("an unknown method is a classed error", {

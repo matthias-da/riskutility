@@ -53,11 +53,12 @@ Must be columns present in the records data frame. Uses ggplot2 for faceted plot
 \item{bins}{integer, number of histogram bins (default: 30)}
 
 \item{tau_range}{numeric vector of tau thresholds for the sensitivity curve
-(plot 3, categorical targets). Default \code{seq(0, 1, by = 0.05)}.}
+(plot 3, rules that flag scores above the threshold). Default
+\code{seq(0, 1, by = 0.05)}.}
 
 \item{epsilon_range}{numeric vector of epsilon thresholds for the sensitivity curve
-(plot 3, numeric targets). Default \code{seq(0, 1, by = 0.05)};
-automatically adjusted to \code{seq(0, 100, by = 5)} for percentage-based metrics.}
+(plot 3, point rule). Default \code{seq(0, 1, by = 0.05)}; for errors in
+the units of the target (absolute metric) the range of the errors is used.}
 
 \item{formula}{optional formula for QI attribution plot (plot 5), e.g.,
 \code{at_risk ~ age * gender}. If NULL, uses main effects of all key variables.}
@@ -76,9 +77,9 @@ Six plot types are available via the \code{which} parameter.
 \details{
 \strong{Plot 1 -- Risk Distribution:}
 Histogram of risk scores colored by at-risk status. The red dashed line indicates
-the threshold. For categorical targets, higher scores indicate higher risk. For
-numeric targets, lower prediction errors indicate higher risk (accurate predictions
-imply disclosure).
+the threshold. Higher scores indicate higher risk, except under the point rule
+for numeric targets, where lower prediction errors indicate higher risk
+(accurate predictions imply disclosure).
 
 \strong{Plot 2 -- Prediction Scatter (numeric only):}
 Scatter plot of predicted vs actual values, colored by at-risk status.
@@ -129,8 +130,6 @@ result <- rapid(original, synthetic,
                 key_vars = c("age", "gender", "education"),
                 target_var = "health",
                 model_type = "rf",
-                cat_tau = 1,
-                return_all_records = TRUE,
                 store_model = TRUE)
 
 # Risk distribution histogram (default)

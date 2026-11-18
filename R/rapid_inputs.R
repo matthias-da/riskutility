@@ -32,6 +32,23 @@
   ))
 }
 
+# ---- Choices ---------------------------------------------------------------------
+
+#' Match an argument against its choices, with a classed error
+#'
+#' Like `match.arg()`: the untouched default (all choices) gives the first one,
+#' partial matching is allowed.
+#' @noRd
+.rapid_choice <- function(arg, choices, name) {
+  if (length(arg) > 1 && identical(arg, choices)) return(choices[1])
+  i <- if (is.character(arg) && length(arg) == 1) pmatch(arg, choices) else NA
+  if (is.na(i)) {
+    .rapid_abort(c("'", name, "' must be one of: ",
+                   paste0("\"", choices, "\"", collapse = ", "), "."), "input")
+  }
+  choices[i]
+}
+
 # ---- Data arguments ------------------------------------------------------------
 
 # Old argument names (RAPID paper, RAPID package) and the names used here
@@ -403,11 +420,4 @@
     epsilon <- epsilon / 100
   }
   list(metric = metric, epsilon = epsilon)
-}
-
-#' Default flag threshold of an evaluation method
-#' @noRd
-.rapid_default_tau <- function(method) {
-  switch(method, band = 0.3, RCS_marginal = 0.3, RCS_conditional = 1, NCE = 0.5,
-         .rapid_abort(c("No default threshold for the method '", method, "'."), "input"))
 }

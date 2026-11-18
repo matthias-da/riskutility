@@ -172,23 +172,16 @@ rapid_threshold_select <- function(original_data, synthetic_data,
 
   # ---- Compute full rapid object at recommended threshold ----
   if (!is.na(threshold_star)) {
-    rapid_args <- list(
-      X = original_data, Y = synthetic_data,
-      key_vars = quasi_identifiers,
-      target_var = sensitive_attribute,
-      model_type = model_type,
+    observed_rapid <- .rapid_compat_observed(
+      prep$is_categorical, original_data, synthetic_data,
+      quasi_identifiers, sensitive_attribute, model_type,
+      cat_tau = threshold_star, num_epsilon = threshold_star,
       cat_eval_method = cat_eval_method,
       num_error_metric = num_error_metric,
       num_epsilon_type = num_epsilon_type,
       num_delta = num_delta,
-      seed = seed, verbose = FALSE
+      seed = seed, ...
     )
-    if (prep$is_categorical) {
-      rapid_args$cat_tau <- threshold_star
-    } else {
-      rapid_args$num_epsilon <- threshold_star
-    }
-    observed_rapid <- do.call(rapid, c(rapid_args, list(...)))
   } else {
     observed_rapid <- NULL
   }

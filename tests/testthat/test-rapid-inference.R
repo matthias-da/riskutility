@@ -43,7 +43,7 @@ test_that("confint.rapid() returns correct structure for all methods", {
   d <- .make_test_data()
   r <- rapid(X = d$original, Y = d$synthetic,
              key_vars = c("age", "gender"), target_var = "income",
-             model_type = "lm", num_epsilon = 10, verbose = FALSE)
+             model_type = "lm", num_epsilon = 0.1, verbose = FALSE)
 
   for (method in c("wald", "wilson", "bootstrap")) {
     ci <- confint(r, method = method, n_bootstrap = 200, seed = 1)
@@ -57,11 +57,23 @@ test_that("confint.rapid() returns correct structure for all methods", {
   }
 })
 
+test_that("bootstrap interval is a proper interval", {
+  o <- sim_numeric(150)
+  r <- rapid(o, noisy_copy(o), key_vars = c("x1", "x2"), target_var = "y",
+             model_type = "lm")
+  expect_true(r$rapid > 0 && r$rapid < 1)
+  ci <- confint(r, method = "bootstrap", n_bootstrap = 2000, seed = 1)
+  expect_true(ci[1, 1] > 0 && ci[1, 2] < 1)
+  expect_true(ci[1, 1] < r$rapid && r$rapid < ci[1, 2])
+  # Close to the Wilson interval
+  expect_equal(unname(ci[1, ]), unname(confint(r)[1, ]), tolerance = 0.1)
+})
+
 test_that("confint.rapid() Wilson interval stays in [0, 1]", {
   d <- .make_test_data()
   r <- rapid(X = d$original, Y = d$synthetic,
              key_vars = c("age", "gender"), target_var = "income",
-             model_type = "lm", num_epsilon = 10, verbose = FALSE)
+             model_type = "lm", num_epsilon = 0.1, verbose = FALSE)
 
   ci <- confint(r, method = "wilson")
   expect_true(ci[1, 1] >= 0)
@@ -72,7 +84,7 @@ test_that("confint.rapid() respects level parameter", {
   d <- .make_test_data()
   r <- rapid(X = d$original, Y = d$synthetic,
              key_vars = c("age", "gender"), target_var = "income",
-             model_type = "lm", num_epsilon = 10, verbose = FALSE)
+             model_type = "lm", num_epsilon = 0.1, verbose = FALSE)
 
   ci90 <- confint(r, method = "wilson", level = 0.90)
   ci99 <- confint(r, method = "wilson", level = 0.99)
@@ -302,7 +314,7 @@ test_that("rapid_synthesizer_cv() works with a simple synthesizer", {
     seed = 1,
     verbose = FALSE,
     model_type = "lm",
-    num_epsilon = 10
+    num_epsilon = 0.1
   )
 
   expect_s3_class(cv, "rapid_cv")
@@ -339,7 +351,7 @@ test_that("rapid_synthesizer_cv() returns details when requested", {
     seed = 1,
     verbose = FALSE,
     model_type = "lm",
-    num_epsilon = 10
+    num_epsilon = 0.1
   )
 
   expect_true(!is.null(cv$cv_details))
@@ -371,7 +383,7 @@ test_that("print.rapid_cv() runs without error", {
     seed = 1,
     verbose = FALSE,
     model_type = "lm",
-    num_epsilon = 10
+    num_epsilon = 0.1
   )
 
   expect_output(print(cv), "Cross-Validation Results")

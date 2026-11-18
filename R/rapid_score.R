@@ -113,6 +113,30 @@
 
 # ---- Rules -------------------------------------------------------------------
 
+# Properties of each rule. This table and the `.rule_score()` methods are the
+# only places that know the rules by name.
+.rapid_rule_spec <- function(method) {
+  switch(as.character(method)[1],
+    band = list(score_var = "r", direction = "above", gain = TRUE, numeric = TRUE,
+                score_label = "Normalized Gain", default = 0.3),
+    point = list(score_var = "error", direction = "below", gain = FALSE, numeric = TRUE,
+                 score_label = "Prediction Error", default = NULL),
+    RCS_marginal = list(score_var = "r", direction = "above", gain = TRUE, numeric = FALSE,
+                        score_label = "Normalized Gain", default = 0.3),
+    RCS_conditional = list(score_var = "ratio", direction = "above", gain = FALSE,
+                           numeric = FALSE, score_label = "Relative Score", default = 1),
+    NCE = list(score_var = "nce", direction = "above", gain = FALSE, numeric = FALSE,
+               score_label = "Risk Score", default = 0.5),
+    .rapid_abort(c("Unknown evaluation method '", method, "'. Use \"band\" or \"point\" ",
+                   "for a numeric target and \"RCS_marginal\", \"RCS_conditional\" or ",
+                   "\"NCE\" for a categorical one."), "input")
+  )
+}
+
+#' Default flag threshold of an evaluation method
+#' @noRd
+.rapid_default_tau <- function(method) .rapid_rule_spec(method)$default
+
 #' Scoring rule
 #'
 #' @param method `"band"`, `"point"`, `"RCS_marginal"`, `"RCS_conditional"` or
@@ -125,33 +149,34 @@
 #'   threshold), `direction` (`"above"` or `"below"`) and `gain` (is the score a
 #'   normalised gain over a marginal baseline).
 #' @noRd
-.rapid_rule <- function(method, threshold, metric = NULL, epsilon = NULL, delta = NULL) {
-  spec <- switch(as.character(method)[1],
-    band = list(score_var = "r", direction = "above", gain = TRUE, numeric = TRUE),
-    point = list(score_var = "error", direction = "below", gain = FALSE, numeric = TRUE),
-    RCS_marginal = list(score_var = "r", direction = "above", gain = TRUE, numeric = FALSE),
-    RCS_conditional = list(score_var = "ratio", direction = "above", gain = FALSE,
-                           numeric = FALSE),
-    NCE = list(score_var = "nce", direction = "above", gain = FALSE, numeric = FALSE),
-    .rapid_abort(c("Unknown evaluation method '", method, "'. Use \"band\" or \"point\" ",
-                   "for a numeric target and \"RCS_marginal\", \"RCS_conditional\" or ",
-                   "\"NCE\" for a categorical one."), "input")
-  )
+.rapid_rule <- function(method, threshold = NULL, metric = NULL, epsilon = NULL,
+                        delta = NULL) {
+  spec <- .rapid_rule_spec(method)
+  if (is.null(threshold)) threshold <- spec$default
+
+  # Where the score is the error itself (point rule), the threshold is the
+  # tolerance: a given tolerance takes the place of the threshold.
+  tolerance_is_threshold <- spec$numeric && spec$direction == "below"
+  if (tolerance_is_threshold && !is.null(epsilon)) threshold <- epsilon
   if (!is.numeric(threshold) || length(threshold) != 1 || is.na(threshold)) {
     .rapid_abort("The threshold of a rule must be a single number.", "input")
   }
   rule <- list(method = method, threshold = threshold,
                metric = NULL, epsilon = NULL, delta = NULL,
-               score_var = spec$score_var, direction = spec$direction, gain = spec$gain)
+               score_var = spec$score_var, direction = spec$direction, gain = spec$gain,
+               score_label = spec$score_label)
   if (spec$numeric) {
     if (is.null(metric) || !metric %in% .rapid_metrics) {
       .rapid_abort(c("A numeric rule needs an error metric: ",
                      paste(.rapid_metrics, collapse = ", "), "."), "input")
     }
+    if (is.null(delta)) delta <- 0.01
+    if (!is.numeric(delta) || length(delta) != 1 || is.na(delta) || delta < 0) {
+      .rapid_abort("'num_delta' must be a single non-negative number.", "input")
+    }
     rule["metric"] <- list(metric)
-    rule["delta"] <- list(if (is.null(delta)) 0.01 else delta)
-    # For the point rule the threshold is the tolerance itself.
-    rule["epsilon"] <- list(if (spec$direction == "below") threshold else epsilon)
+    rule["delta"] <- list(delta)
+    rule["epsilon"] <- list(if (tolerance_is_threshold) threshold else epsilon)
     if (!is.numeric(rule$epsilon) || length(rule$epsilon) != 1 || is.na(rule$epsilon) ||
         rule$epsilon <= 0) {
       .rapid_abort("The tolerance of a numeric rule must be a single positive number.",
@@ -159,6 +184,21 @@
     }
   }
   structure(rule, class = c(paste0("rapid_rule_", method), "rapid_rule"))
+}
+
+#' Build the rule from the flat arguments of `rapid()`
+#'
+#' @param is_categorical Type of the target.
+#' @param num,cat Lists of the numeric (`method, metric, epsilon, epsilon_type,
+#'   delta, tau`) and categorical (`method, tau`) arguments.
+#' @noRd
+.rapid_make_rule <- function(is_categorical, num, cat) {
+  if (is_categorical) {
+    tau <- if (is.null(cat$tau)) .rapid_default_tau(cat$method) else cat$tau
+    return(.rapid_rule(cat$method, tau))
+  }
+  tol <- .rapid_resolve_tolerance(num$metric, num$epsilon, num$epsilon_type)
+  .rapid_rule(num$method, num$tau, tol$metric, tol$epsilon, num$delta)
 }
 
 #' Flag records by comparing their score with the threshold of the rule

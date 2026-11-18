@@ -165,7 +165,6 @@ rapid_synthesizer_cv <- function(original_data,
       Y = synth,
       key_vars = quasi_identifiers,
       target_var = sensitive_attribute,
-      return_all_records = return_all_records,
       seed = NULL, verbose = FALSE,
       ...
     )
