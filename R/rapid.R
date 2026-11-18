@@ -13,7 +13,9 @@
 #' @param target_var character, name of the sensitive target variable
 #' @param model_type character, the attacker model: "rf" (random forest,
 #'   default), "lm" (linear model), "cart" (decision tree), "gbm" (gradient
-#'   boosting), or "logit" (logistic regression, two classes only)
+#'   boosting), "logit" (logistic regression, two classes only), or "lookup" (one
+#'   fully grown tree that reads off the synthetic records sharing the key
+#'   values; read its excess over the chance level, not RAPID itself)
 #' @param num_eval_method character, rule for a numeric target: "band"
 #'   (default) compares the probability the attacker puts into the tolerance band
 #'   around the true value with the share of original values in that band;
@@ -32,7 +34,9 @@
 #'   numeric target is evaluated: "auto" (default) uses the exact probability
 #'   where the model provides one (normal or lognormal for "lm", the training
 #'   values in the leaf for "cart") and a grid of quantiles for "rf" and "gbm";
-#'   "grid" uses \code{n_quantiles} quantiles for all models
+#'   "grid" uses \code{n_quantiles} quantiles for all models; "exact" uses the
+#'   exact probability also for "rf" (the training values in the terminal nodes
+#'   of the forest) and is not available for "gbm"
 #' @param num_scale character, working scale of the linear model for a numeric
 #'   target: "identity", "log", or "auto" (default), which takes the log scale
 #'   when the error metric is relative, all synthetic target values are positive
@@ -337,7 +341,7 @@ rapid.synth_pair <- function(X, ...) {
 rapid.default <- function(X, Y,
                           key_vars,
                           target_var,
-                          model_type = c("rf", "lm", "cart", "gbm", "logit"),
+                          model_type = c("rf", "lm", "cart", "gbm", "logit", "lookup"),
                           # Numeric-specific
                           num_eval_method = c("band", "point"),
                           num_error_metric = c("symmetric", "stabilised_relative", "absolute"),
@@ -539,7 +543,8 @@ rapid.default <- function(X, Y,
   }
   structure(
     list(pred = pred, y = y, learner = learner, model = fit, formula = formula,
-         is_categorical = is_categorical, attacker = .learner_describe(learner, fit)),
+         is_categorical = is_categorical, attacker = .learner_describe(learner, fit),
+         note = learner$note),
     class = "rapid_attack"
   )
 }
@@ -602,6 +607,7 @@ rapid.default <- function(X, Y,
     model = if (store_model) model,
     model_type = attack$learner$name,
     attacker = attack$attacker,
+    note = attack$note,
     model_metrics = .compute_rapid_metrics(
       attack$y, if (attack$is_categorical) attack$pred else attack$pred$point),
     formula = attack$formula,

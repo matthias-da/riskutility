@@ -55,7 +55,7 @@ format.rapid <- function(x, digits = 3, ...) {
     paste0("Rule: ", format(x$rule)),
     paste0("RAPID = ", formatC(x$rapid, digits = digits, format = "f"), ": ", x$n_at_risk,
            " of ", x$n_total, " records at risk"),
-    chance, indistinct,
+    chance, indistinct, x$note,
     "Next: summary(), plot(), confint(), rapid_test()"
   )
 }

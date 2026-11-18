@@ -9,7 +9,7 @@
 
 .rapid_has_package <- function(pkg) requireNamespace(pkg, quietly = TRUE)
 
-.rapid_learner_names <- c("rf", "lm", "cart", "gbm", "logit")
+.rapid_learner_names <- c("rf", "lm", "cart", "gbm", "logit", "lookup")
 
 # Arguments that travel through `...` but belong to a learner, not to its
 # backend function. A learner lists those it understands in `options`.
@@ -23,23 +23,29 @@
 #' @return A list of class `c("rapid_learner_<name>", "rapid_learner")` with
 #'   `name`, `args`, `requires` (packages), `targets` (supported target types),
 #'   `dists` (supported `num_dist` values), `options` (learner arguments it
-#'   understands: `"num_scale"`, `"prune"`) and `unseen_levels` (can it predict
-#'   a record with a factor level that the training data never contained).
+#'   understands: `"num_scale"`, `"prune"`), `unseen_levels` (can it predict
+#'   a record with a factor level that the training data never contained) and
+#'   `note` (a line the print of a `rapid` object adds, or `NULL`).
 #' @noRd
 .rapid_learner <- function(model_type, user_args = list()) {
   if (inherits(model_type, "rapid_learner")) return(model_type)
   both <- c("numeric", "categorical")
   spec <- switch(if (is.character(model_type) && length(model_type) == 1) model_type else "",
-    rf = list(requires = "ranger", targets = both, dists = c("auto", "grid"),
+    rf = list(requires = "ranger", targets = both, dists = c("auto", "grid", "exact"),
               options = character(0), unseen_levels = TRUE),
-    lm = list(requires = character(0), targets = "numeric", dists = c("auto", "grid"),
-              options = "num_scale", unseen_levels = FALSE),
-    cart = list(requires = "rpart", targets = both, dists = c("auto", "grid"),
+    lm = list(requires = character(0), targets = "numeric",
+              dists = c("auto", "grid", "exact"), options = "num_scale",
+              unseen_levels = FALSE),
+    cart = list(requires = "rpart", targets = both, dists = c("auto", "grid", "exact"),
                 options = "prune", unseen_levels = TRUE),
     gbm = list(requires = "xgboost", targets = both, dists = c("auto", "grid"),
                options = character(0), unseen_levels = TRUE),
     logit = list(requires = character(0), targets = "categorical", dists = character(0),
                  options = character(0), unseen_levels = FALSE),
+    lookup = list(requires = "ranger", targets = both, dists = c("auto", "exact"),
+                  options = character(0), unseen_levels = TRUE,
+                  note = paste("Lookup attacker: read the excess over the chance level,",
+                               "not RAPID itself.")),
     .rapid_abort(c("Unknown model_type. Use one of: ",
                    paste0("\"", .rapid_learner_names, "\"", collapse = ", "), "."), "model")
   )
@@ -191,6 +197,24 @@
 
 # ---- Random forest (ranger) ----------------------------------------------------------
 
+.ranger_predict <- function(fit, newdata) {
+  p <- stats::predict(fit, data = newdata)$predictions
+  levels <- attr(fit, "y_levels")
+  if (is.null(levels)) as.numeric(p) else .learner_probs(p, levels)
+}
+
+# Terminal nodes of the records, one column per tree
+.ranger_leaves <- function(fit, data) {
+  stats::predict(fit, data = data, type = "terminalNodes")$predictions
+}
+
+# Exact predictive distribution of a forest: the training values that share a
+# terminal node with the record, averaged over the trees
+.forest_pdist <- function(fit, newdata, train, target_var) {
+  .pdist_forest(.ranger_leaves(fit, newdata), .ranger_leaves(fit, train),
+                train[[target_var]])
+}
+
 #' @exportS3Method .learner_fit rapid_learner_rf
 #' @noRd
 .learner_fit.rapid_learner_rf <- function(learner, formula, data, target_var,
@@ -209,15 +233,14 @@
 #' @exportS3Method .learner_predict rapid_learner_rf
 #' @noRd
 .learner_predict.rapid_learner_rf <- function(learner, fit, newdata, target_var) {
-  p <- stats::predict(fit, data = newdata)$predictions
-  levels <- attr(fit, "y_levels")
-  if (is.null(levels)) as.numeric(p) else .learner_probs(p, levels)
+  .ranger_predict(fit, newdata)
 }
 
 #' @exportS3Method .learner_pdist rapid_learner_rf
 #' @noRd
 .learner_pdist.rapid_learner_rf <- function(learner, fit, newdata, train, target_var,
                                             num_dist = "auto", n_quantiles = 100) {
+  if (num_dist == "exact") return(.forest_pdist(fit, newdata, train, target_var))
   probs <- .pdist_probs(n_quantiles)
   if (is.null(fit$random.node.values)) {
     .rapid_abort(c("The forest was fitted without quantreg = TRUE, so it has no ",
@@ -595,4 +618,81 @@
     out[i] <- (findInterval(hi[i], v, left.open = TRUE) - findInterval(lo[i], v)) / length(v)
   }
   out
+}
+
+#' Predictive distribution of a forest: Meinshausen weights
+#'
+#' Per tree the record has the training values of its terminal node, each with
+#' weight 1 over the node size; the mass of a band is the mean over the trees
+#' of the weight inside it. All training values in the node count, in-bag or not.
+#' @param leaf_new,leaf_train Terminal node ids, `n x T` and `m x T`.
+#' @param y_train The `m` training values.
+#' @noRd
+.pdist_forest <- function(leaf_new, leaf_train, y_train) {
+  leaf_new <- as.matrix(leaf_new)
+  leaf_train <- as.matrix(leaf_train)
+  ys <- sort(unique(y_train))
+  width <- length(ys) + 1
+  rank <- match(y_train, ys)
+  # One sorted composite key (node, rank of the value) per tree
+  keys <- lapply(seq_len(ncol(leaf_train)), function(t) sort(leaf_train[, t] * width + rank))
+  structure(list(leaf = leaf_new, keys = keys, ys = ys, width = width, n = nrow(leaf_new)),
+            class = c("rapid_pdist_forest", "rapid_pdist"))
+}
+
+#' @exportS3Method .pdist_mass rapid_pdist_forest
+#' @noRd
+.pdist_mass.rapid_pdist_forest <- function(pd, lo, hi) {
+  lo <- rep_len(lo, pd$n)
+  hi <- rep_len(hi, pd$n)
+  # Values below hi and values up to lo: the band is open
+  k_hi <- findInterval(hi, pd$ys, left.open = TRUE)
+  k_lo <- findInterval(lo, pd$ys)
+  total <- numeric(pd$n)
+  for (t in seq_along(pd$keys)) {
+    keys <- pd$keys[[t]]
+    base <- pd$leaf[, t] * pd$width
+    below <- findInterval(base, keys)
+    size <- findInterval(base + pd$width, keys) - below
+    inside <- findInterval(base + k_hi, keys) - findInterval(base + k_lo, keys)
+    total <- total + ifelse(size > 0, pmax(inside, 0) / size, 0)
+  }
+  total / length(pd$keys)
+}
+
+# ---- Lookup attacker (one fully grown tree) -------------------------------------------------
+
+#' @exportS3Method .learner_fit rapid_learner_lookup
+#' @noRd
+.learner_fit.rapid_learner_lookup <- function(learner, formula, data, target_var,
+                                              num_dist = "auto", num_scale = "auto",
+                                              metric = "symmetric") {
+  y <- data[[target_var]]
+  data <- .learner_drop_unused(data, target_var)
+  n_keys <- length(attr(stats::terms(formula, data = data), "term.labels"))
+  defaults <- list(formula = formula, data = data, probability = is.factor(y),
+                   num.trees = 1, replace = FALSE, sample.fraction = 1, min.node.size = 1,
+                   mtry = n_keys)
+  fit <- do.call(ranger::ranger, utils::modifyList(defaults, learner$args))
+  .learner_tag(fit, y)
+}
+
+#' @exportS3Method .learner_predict rapid_learner_lookup
+#' @noRd
+.learner_predict.rapid_learner_lookup <- function(learner, fit, newdata, target_var) {
+  .ranger_predict(fit, newdata)
+}
+
+#' @exportS3Method .learner_pdist rapid_learner_lookup
+#' @noRd
+.learner_pdist.rapid_learner_lookup <- function(learner, fit, newdata, train, target_var,
+                                                num_dist = "auto", n_quantiles = 100) {
+  .forest_pdist(fit, newdata, train, target_var)
+}
+
+#' @exportS3Method .learner_describe rapid_learner_lookup
+#' @noRd
+.learner_describe.rapid_learner_lookup <- function(learner, fit) {
+  n_leaves <- sum(ranger::treeInfo(fit, tree = 1)$terminal)
+  paste0("lookup: 1 fully grown tree, ", n_leaves, " leaves")
 }

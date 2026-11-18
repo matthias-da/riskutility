@@ -15,7 +15,7 @@ rapid(X, ...)
   Y,
   key_vars,
   target_var,
-  model_type = c("rf", "lm", "cart", "gbm", "logit"),
+  model_type = c("rf", "lm", "cart", "gbm", "logit", "lookup"),
   num_eval_method = c("band", "point"),
   num_error_metric = c("symmetric", "stabilised_relative", "absolute"),
   num_epsilon = NULL,
@@ -59,7 +59,9 @@ arguments. A misspelled argument of \code{rapid()} is an error.}
 
 \item{model_type}{character, the attacker model: "rf" (random forest,
 default), "lm" (linear model), "cart" (decision tree), "gbm" (gradient
-boosting), or "logit" (logistic regression, two classes only)}
+boosting), "logit" (logistic regression, two classes only), or "lookup" (one
+fully grown tree that reads off the synthetic records sharing the key
+values; read its excess over the chance level, not RAPID itself)}
 
 \item{num_eval_method}{character, rule for a numeric target: "band"
 (default) compares the probability the attacker puts into the tolerance band
@@ -84,7 +86,9 @@ under the band rule (default: 0.3)}
 numeric target is evaluated: "auto" (default) uses the exact probability
 where the model provides one (normal or lognormal for "lm", the training
 values in the leaf for "cart") and a grid of quantiles for "rf" and "gbm";
-"grid" uses \code{n_quantiles} quantiles for all models}
+"grid" uses \code{n_quantiles} quantiles for all models; "exact" uses the
+exact probability also for "rf" (the training values in the terminal nodes
+of the forest) and is not available for "gbm"}
 
 \item{num_scale}{character, working scale of the linear model for a numeric
 target: "identity", "log", or "auto" (default), which takes the log scale

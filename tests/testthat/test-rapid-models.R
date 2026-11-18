@@ -95,7 +95,7 @@ test_that("a class absent from the synthetic data has probability 0", {
 })
 
 test_that("every learner declares targets, dists and requires", {
-  for (m in c("rf", "lm", "cart", "gbm", "logit")) {
+  for (m in c("rf", "lm", "cart", "gbm", "logit", "lookup")) {
     l <- .rapid_learner(m)
     expect_s3_class(l, c(paste0("rapid_learner_", m), "rapid_learner"), exact = TRUE)
     expect_identical(l$name, m)
@@ -123,8 +123,7 @@ test_that("unsupported combinations are classed errors", {
   expect_s3_class(err, "rapid_error_model")
   for (m in c("rf", "cart", "gbm")) expect_match(conditionMessage(err), m)
 
-  expect_error(.learner_check(.rapid_learner("rf"), FALSE, "exact"),
-               class = "rapid_error_model")
+  expect_silent(.learner_check(.rapid_learner("rf"), FALSE, "exact"))
   expect_silent(.learner_check(.rapid_learner("rf"), FALSE, "grid"))
   expect_silent(.learner_check(.rapid_learner("rf"), TRUE, "auto"))
 })
@@ -438,4 +437,118 @@ test_that("a missing backend package is a classed error", {
     expect_match(conditionMessage(err), "install.packages", fixed = TRUE)
   }
   expect_silent(.learner_check(.rapid_learner("lm"), FALSE, "auto"))
+})
+
+# ---- Exact forest confidence and the lookup attacker ---------------------------------------
+
+test_that("forest mass equals brute-force weights", {
+  o <- sim_numeric(60)
+  s <- noisy_copy(o)
+  a <- attack_fit("rf", o, s, args = list(num.trees = 20), num_dist = "exact")
+  pd <- pdist_of(a, "exact")
+  expect_s3_class(pd, c("rapid_pdist_forest", "rapid_pdist"), exact = TRUE)
+  lo <- o$y - 4
+  hi <- o$y + 4
+  leaf_new <- stats::predict(a$fit, a$X, type = "terminalNodes")$predictions
+  leaf_train <- stats::predict(a$fit, a$Y, type = "terminalNodes")$predictions
+  brute <- vapply(seq_len(nrow(o)), function(i) {
+    mean(vapply(seq_len(ncol(leaf_new)), function(t) {
+      v <- s$y[leaf_train[, t] == leaf_new[i, t]]
+      mean(v > lo[i] & v < hi[i])
+    }, numeric(1)))
+  }, numeric(1))
+  expect_equal(.pdist_mass(pd, lo, hi), brute)
+  expect_true(any(brute > 0 & brute < 1))
+})
+
+test_that("forest mass is deterministic for a fixed forest", {
+  o <- sim_numeric(60)
+  s <- noisy_copy(o)
+  a <- attack_fit("rf", o, s, args = list(num.trees = 20), num_dist = "exact")
+  m1 <- .pdist_mass(pdist_of(a, "exact"), o$y - 4, o$y + 4)
+  m2 <- .pdist_mass(pdist_of(a, "exact"), o$y - 4, o$y + 4)
+  expect_identical(m1, m2)
+})
+
+test_that("exact is accepted for rf, lm and cart", {
+  skip_if_not_installed("rpart")
+  expect_silent(.learner_check(.rapid_learner("lm"), FALSE, "exact"))
+  expect_silent(.learner_check(.rapid_learner("cart"), FALSE, "exact"))
+})
+
+test_that("exact is refused for gbm", {
+  skip_if_not_installed("xgboost")
+  expect_error(.learner_check(.rapid_learner("gbm"), FALSE, "exact"),
+               class = "rapid_error_model")
+})
+
+test_that("a copied release is found", {
+  set.seed(7)
+  n <- 300
+  o <- data.frame(x1 = stats::rnorm(n), x2 = stats::rnorm(n), y = stats::rnorm(n))
+  r <- rapid(o, o, key_vars = c("x1", "x2"), target_var = "y", model_type = "lookup",
+             n_perm = 0)
+  expect_gt(r$rapid, 0.95)
+  expect_true(all(.rapid_col(r, "g") == 1))
+  oc <- sim_categorical(n)
+  rc <- rapid(oc, oc, key_vars = c("x1", "x2"), target_var = "y", model_type = "lookup",
+              n_perm = 0)
+  expect_gt(rc$rapid, 0.95)
+})
+
+test_that("without information the lookup attacker stays at its chance level", {
+  o <- sim_numeric(300, seed = 3, signal = 0)
+  s <- sim_numeric(300, seed = 4, signal = 0)
+  r <- rapid(o, s, key_vars = c("x1", "x2"), target_var = "y", model_type = "lookup",
+             n_perm = 20, seed = 1)
+  expect_lt(abs(r$rapid - r$chance), 0.05)
+})
+
+test_that("lookup mass equals the share of leaf values in the band", {
+  o <- sim_numeric(100)
+  s <- noisy_copy(o)
+  a <- attack_fit("lookup", o, s)
+  pd <- pdist_of(a)
+  expect_s3_class(pd, c("rapid_pdist_forest", "rapid_pdist"), exact = TRUE)
+  lo <- o$y - 5
+  hi <- o$y + 5
+  leaf_new <- stats::predict(a$fit, a$X, type = "terminalNodes")$predictions[, 1]
+  leaf_train <- stats::predict(a$fit, a$Y, type = "terminalNodes")$predictions[, 1]
+  brute <- vapply(seq_len(nrow(o)), function(i) {
+    v <- s$y[leaf_train == leaf_new[i]]
+    mean(v > lo[i] & v < hi[i])
+  }, numeric(1))
+  expect_equal(.pdist_mass(pd, lo, hi), brute)
+  expect_identical(pdist_of(a, "exact")$n, pd$n)
+})
+
+test_that("grid is refused for lookup", {
+  l <- .rapid_learner("lookup")
+  expect_error(.learner_check(l, FALSE, "grid"), class = "rapid_error_model")
+  expect_silent(.learner_check(l, FALSE, "exact"))
+  expect_silent(.learner_check(l, TRUE, "auto"))
+  expect_null(.learner_importance(l, attack_fit("lookup", sim_numeric(50),
+                                                noisy_copy(sim_numeric(50)))$fit))
+})
+
+test_that("lookup describes itself and takes user arguments", {
+  o <- sim_numeric(50)
+  a <- attack_fit("lookup", o, noisy_copy(o))
+  expect_match(.learner_describe(a$learner, a$fit),
+               "^lookup: 1 fully grown tree, [0-9]+ leaves$")
+  expect_equal(a$fit$mtry, 2)
+  expect_equal(attack_fit("lookup", o, noisy_copy(o), args = list(mtry = 1))$fit$mtry, 1)
+})
+
+test_that("print() tells the user to read the excess", {
+  o <- sim_numeric(80)
+  s <- noisy_copy(o)
+  r <- rapid(o, s, key_vars = c("x1", "x2"), target_var = "y", model_type = "lookup",
+             n_perm = 3, seed = 1)
+  expect_match(format(r),
+               "Lookup attacker: read the excess over the chance level, not RAPID itself.",
+               fixed = TRUE, all = FALSE)
+  r2 <- rapid(o, s, key_vars = c("x1", "x2"), target_var = "y", model_type = "lm",
+              n_perm = 3, seed = 1)
+  expect_false(any(grepl("Lookup attacker", format(r2))))
 })
