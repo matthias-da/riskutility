@@ -64,7 +64,8 @@
 #' @param store_predictions logical, if TRUE (default) the result keeps the
 #'   attacker's predictions, so that it can be tested and rescored without
 #'   fitting the model again
-#' @param seed integer, random seed for reproducibility (default: NULL)
+#' @param seed integer, random seed for reproducibility (default: NULL). The fit
+#'   and the permutations are each started from the seed.
 #' @param verbose logical, print diagnostic messages (default: FALSE)
 #' @param ... additional arguments passed to the model fitting function
 #'   (\code{ranger::ranger}, \code{stats::lm}, \code{rpart::rpart},
@@ -420,6 +421,9 @@ rapid.default <- function(X, Y,
                           learner, num_dist, num_scale, scoring$rule$metric, n_quantiles)
 
   if (verbose) message("  Evaluating disclosure risk...")
+  # The permutations start from the seed as well, so that update() without a
+  # refit draws the same permutations as a fresh call
+  if (!is.null(seed)) set.seed(seed)
   .rapid_assess(
     attack, scoring$rule, data = prepared$X,
     meta = list(key_vars = inputs$key_vars, target_var = inputs$target_var,

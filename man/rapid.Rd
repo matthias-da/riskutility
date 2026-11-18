@@ -128,7 +128,8 @@ the threshold under \code{threshold_rule = "permutation"} (default: 0.95)}
 attacker's predictions, so that it can be tested and rescored without
 fitting the model again}
 
-\item{seed}{integer, random seed for reproducibility (default: NULL)}
+\item{seed}{integer, random seed for reproducibility (default: NULL). The fit
+and the permutations are each started from the seed.}
 
 \item{verbose}{logical, print diagnostic messages (default: FALSE)}
 

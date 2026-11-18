@@ -31,7 +31,7 @@
       RAPID of 'y' given 2 quasi-identifiers (x1, x2), attacker cart: 5 leaves, pruned by cross-validation
       Rule: RCS_marginal: gain over the marginal baseline > 0.3
       RAPID = 0.560: 84 of 150 records at risk
-      Chance level = 0.335 (10 permutations)
-      Excess = 0.225
+      Chance level = 0.341 (10 permutations)
+      Excess = 0.219
       Next: summary(), plot(), confint(), rapid_test()
 

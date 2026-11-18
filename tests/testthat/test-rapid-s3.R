@@ -207,3 +207,25 @@ test_that("update() with a new error metric rescores a learner without a working
   expect_identical(u$rapid, fresh$rapid)
   expect_identical(u$at_risk, fresh$at_risk)
 })
+
+test_that("update() draws the same permutations as a fresh call with a random learner", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "rf", seed = 1)
+  fresh <- rapid(o, s, qi, "y", model_type = "rf", num_tau = 0.5, seed = 1)
+  u <- update(r, num_tau = 0.5)
+  expect_identical(u$chance_rates, fresh$chance_rates)
+  expect_identical(u$chance, fresh$chance)
+  expect_identical(u$excess, fresh$excess)
+})
+
+test_that("update() to a permutation threshold equals a fresh call with a random learner", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "rf", seed = 1)
+  fresh <- rapid(o, s, qi, "y", model_type = "rf", threshold_rule = "permutation", seed = 1)
+  u <- update(r, threshold_rule = "permutation")
+  expect_identical(u$rule$threshold, fresh$rule$threshold)
+  expect_identical(u$rapid, fresh$rapid)
+  expect_identical(u$at_risk, fresh$at_risk)
+})
