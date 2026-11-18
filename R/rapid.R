@@ -326,8 +326,8 @@
 #' link between the quasi-identifiers and the target. An excess of 0.2 means
 #' that 20 percent of the records are flagged in addition to those that the
 #' same predictions flag when they are matched with true values at random,
-#' that is, the release lets the attacker single out one record in five
-#' beyond chance. \code{\link{rapid_test}()} gives a p-value for the excess.
+#' that is, the release lets the attacker infer the sensitive value of one
+#' record in five beyond chance. \code{\link{rapid_test}()} gives a p-value for the excess.
 #'
 #' @section Choosing tolerance and threshold:
 #' The tolerance \eqn{\varepsilon}{epsilon} says when a guess counts as a

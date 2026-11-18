@@ -128,7 +128,7 @@ and RAPID counts as significant when \eqn{p \le \alpha}{p <= alpha}. The
 null hypothesis is that the predictions carry no information about which true
 value belongs to which record. The test holds the fitted attacker fixed, so
 it is exact given that attacker, and a significant result says that this
-attacker's predictions single out records beyond chance.
+attacker infers the sensitive value of more records than chance allows.
 
 The mean of the \eqn{R_b} is the chance level \eqn{\pi_0}{pi0}, and the
 Wald statistic \eqn{z = (R - \pi_0) / \sqrt{\pi_0 (1 - \pi_0) / n}}{z = (R -
