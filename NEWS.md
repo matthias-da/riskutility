@@ -17,6 +17,12 @@ Several defaults change reported values. Each item below gives the call that rep
 * For a categorical target the default rule is the gain over the marginal baseline
   (`cat_eval_method = "RCS_marginal"`, `cat_tau = 0.3`), as in the paper. The 0.2.0 rule is
   `rapid(X, Y, kv, tv, cat_eval_method = "RCS_conditional")` (its default `cat_tau` stays 1).
+* A threshold on a gain (`num_tau` under the band rule, `cat_tau` under `RCS_marginal`, also
+  through `update()`) must be at least 0 and below 1. Another value is an error of class
+  `rapid_error_input`. A gain is at most 1, so a threshold of 1 or more flags no record, and a
+  negative threshold flags records on which the attacker does worse than the marginal
+  distribution. A 0.2.0 call with `cat_tau = 1` is therefore an error that names its rule, `rapid(X,
+  Y, kv, tv, cat_tau = 1, cat_eval_method = "RCS_conditional")`.
 * The tolerance `num_epsilon` of the relative error metrics is a proportion (default 0.1, that
   is 10 %), as in the paper. `num_epsilon = 10` is now `num_epsilon = 0.1`. A relative tolerance
   of 1 or more is still read as percent, with a warning.

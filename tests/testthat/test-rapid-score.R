@@ -183,6 +183,22 @@ test_that("a new threshold replaces the old one, and the tolerance of the point 
   expect_identical(flat$epsilon, 0.1)
 })
 
+test_that("a gain threshold outside [0, 1) is a classed input error", {
+  for (tau in c(1, 1.5, -0.1, -3)) {
+    expect_error(.rapid_rule("band", tau, "symmetric", 0.1, 0.01), regexp = "num_tau",
+                 class = "rapid_error_input")
+    expect_error(.rapid_rule("RCS_marginal", tau), regexp = "cat_tau",
+                 class = "rapid_error_input")
+  }
+  expect_identical(.rapid_rule("band", 0, "symmetric", 0.1, 0.01)$threshold, 0)
+  expect_identical(.rapid_rule("RCS_marginal", 0.99)$threshold, 0.99)
+  # Rules without a gain keep their own range
+  expect_identical(.rapid_rule("RCS_conditional", 1.25)$threshold, 1.25)
+  expect_identical(.rapid_rule("NCE", 1)$threshold, 1)
+  # A threshold set later (grids, permutation calibration) is not checked
+  expect_identical(.rule_set_threshold(.rapid_rule("RCS_marginal", 0.3), 1)$threshold, 1)
+})
+
 test_that("an unknown method is a classed error", {
   expect_error(.rapid_rule("foo", 0.3), class = "rapid_error_input")
   expect_error(.rapid_band_bounds(1, "foo", 0.1, 0.01), class = "rapid_error_input")

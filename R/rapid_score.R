@@ -118,11 +118,16 @@
 .rapid_rule_spec <- function(method) {
   switch(as.character(method)[1],
     band = list(score_var = "r", direction = "above", gain = TRUE, numeric = TRUE,
-                score_label = "Normalized Gain", default = 0.3),
+                score_label = "Normalized Gain", default = 0.3, tau_arg = "num_tau"),
     point = list(score_var = "error", direction = "below", gain = FALSE, numeric = TRUE,
                  score_label = "Prediction Error", default = NULL),
     RCS_marginal = list(score_var = "r", direction = "above", gain = TRUE, numeric = FALSE,
-                        score_label = "Normalized Gain", default = 0.3),
+                        score_label = "Normalized Gain", default = 0.3, tau_arg = "cat_tau",
+                        # A threshold of 1 or more belongs to the rule of 0.2.0
+                        above_one = c(" cat_tau = 1 was the default of cat_eval_method = ",
+                                      "\"RCS_conditional\", the rule of riskutility 0.2.0. ",
+                                      "Add cat_eval_method = \"RCS_conditional\" for that ",
+                                      "rule.")),
     RCS_conditional = list(score_var = "ratio", direction = "above", gain = FALSE,
                            numeric = FALSE, score_label = "Relative Score", default = 1),
     NCE = list(score_var = "nce", direction = "above", gain = FALSE, numeric = FALSE,
@@ -160,6 +165,13 @@
   if (tolerance_is_threshold && !is.null(epsilon)) threshold <- epsilon
   if (!is.numeric(threshold) || length(threshold) != 1 || is.na(threshold)) {
     .rapid_abort("The threshold of a rule must be a single number.", "input")
+  }
+  # A gain is at most 1, so a threshold of 1 or more flags nothing, and a
+  # negative one flags records on which the attacker does worse than the baseline
+  if (spec$gain && (threshold < 0 || threshold >= 1)) {
+    .rapid_abort(c("'", spec$tau_arg, "' is a threshold on a gain between 0 and 1 and must ",
+                   "be at least 0 and below 1, not ", format(threshold), ".",
+                   if (threshold >= 1) spec$above_one), "input")
   }
   rule <- list(method = method, threshold = threshold,
                metric = NULL, epsilon = NULL, delta = NULL,

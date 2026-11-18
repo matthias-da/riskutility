@@ -105,6 +105,26 @@ test_that("rapid() works with RCS_conditional method", {
   expect_equal(result$method, "RCS_conditional")
 })
 
+test_that("a gain threshold of 1 or more is refused, and cat_tau = 1 names the 0.2.0 rule", {
+  o <- sim_categorical(100)
+  s <- noisy_copy(o, seed = 2)
+  err <- expect_error(rapid(o, s, c("x1", "x2"), "y", model_type = "rf", cat_tau = 1,
+                            n_perm = 0),
+                      class = "rapid_error_input")
+  expect_match(conditionMessage(err), "cat_eval_method = \"RCS_conditional\"", fixed = TRUE)
+  expect_s3_class(rapid(o, s, c("x1", "x2"), "y", model_type = "rf", cat_tau = 1,
+                        cat_eval_method = "RCS_conditional", n_perm = 0), "rapid")
+  on <- sim_numeric(100)
+  sn <- noisy_copy(on, seed = 2)
+  for (tau in c(1, 1.5, -3)) {
+    expect_error(rapid(on, sn, c("x1", "x2"), "y", model_type = "lm", num_tau = tau,
+                       n_perm = 0),
+                 regexp = "num_tau", class = "rapid_error_input")
+  }
+  r <- rapid(on, sn, c("x1", "x2"), "y", model_type = "lm", n_perm = 0)
+  expect_error(update(r, num_tau = 1), regexp = "num_tau", class = "rapid_error_input")
+})
+
 test_that("rapid() works with NCE method", {
   skip_if_not_installed("ranger")
 

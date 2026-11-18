@@ -95,8 +95,12 @@ tolerance of 1 or more is read as percent, with a warning of class
 relative metrics (default 0.01)}
 
 \item{num_tau}{numeric, threshold \eqn{\tau}{tau} on the normalized gain of a
-continuous target under the band rule (default 0.3). The point rule ignores
-it: there the tolerance is the threshold.}
+continuous target under the band rule (default 0.3), at least 0 and below
+\enumerate{
+\item A value outside this range is an error of class
+\code{"rapid_error_input"}. The point rule ignores it: there the tolerance is
+the threshold.
+}}
 
 \item{num_dist}{character, how the predictive distribution of a continuous
 target is represented: \code{"auto"} (default), \code{"grid"} or
@@ -124,7 +128,9 @@ See the section "The measure".}
 
 \item{cat_tau}{numeric, threshold for a categorical target. The default
 depends on the rule: 0.3 for \code{RCS_marginal}, 1 for
-\code{RCS_conditional}, 0.5 for \code{NCE}.}
+\code{RCS_conditional}, 0.5 for \code{NCE}. Under \code{RCS_marginal} it
+is a threshold on a gain and must be at least 0 and below 1, otherwise an
+error of class \code{"rapid_error_input"} names the rule of 0.2.0.}
 
 \item{na_strategy}{character, treatment of missing values of a continuous
 target: \code{"constant"} (default, replaced by \code{na_constant_value}),
@@ -539,6 +545,10 @@ Calls of riskutility 0.2.0 and the call that gives the same rule now:
     = 2} is now \code{num_error_metric = "absolute", num_epsilon = 2}.}
 \item{Categorical target, default}{\code{rapid(X, Y, kv, tv)} is now
 \code{rapid(X, Y, kv, tv, cat_eval_method = "RCS_conditional")}.}
+\item{Categorical target, threshold 1}{\code{rapid(X, Y, kv, tv, cat_tau =
+    1)} is now an error, because the default rule \code{RCS_marginal} takes a
+threshold below 1. The 0.2.0 rule is \code{rapid(X, Y, kv, tv, cat_tau = 1,
+    cat_eval_method = "RCS_conditional")}.}
 \item{Linear model}{\code{model_type = "lm"} is now \code{model_type =
     "lm", num_scale = "identity"}.}
 \item{Tree}{\code{model_type = "cart"} is now \code{model_type = "cart",
