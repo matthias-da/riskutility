@@ -158,3 +158,82 @@ print.summary.rapid <- function(x, ...) {
 
   invisible(x)
 }
+
+#' Update a rapid object
+#'
+#' Changes arguments of the call that created a \code{rapid} object. When all
+#' changed arguments only affect how the attack is scored (\code{num_eval_method},
+#' \code{num_error_metric}, \code{num_epsilon}, \code{num_delta}, \code{num_tau},
+#' \code{cat_eval_method}, \code{cat_tau}, \code{n_perm}, \code{threshold_rule},
+#' \code{perm_level}, \code{seed}) and the object holds the attacker's
+#' predictions, the stored attack is scored again under the new rule and the
+#' model is not fitted again. Any other argument, among them the model
+#' arguments, \code{num_scale}, \code{num_dist} and \code{prune}, refits: the
+#' changed call is evaluated in the caller's frame, as
+#' \code{\link[stats]{update}} does.
+#'
+#' A rescored object equals the result of the changed call, except where the
+#' fit depends on a changed argument: under \code{num_scale = "auto"} the
+#' working scale of the linear model depends on the error metric, which a
+#' rescored object keeps from the first fit.
+#'
+#' @param object an object of class "rapid"
+#' @param ... arguments of \code{\link{rapid}} to change, as \code{name = value}
+#' @param evaluate logical, if FALSE return the changed call instead of evaluating it
+#' @return A \code{rapid} object whose \code{call} holds the changed arguments,
+#'   or the changed call if \code{evaluate = FALSE}.
+#' @examples
+#' set.seed(1)
+#' X <- data.frame(age = sample(20:60, 100, replace = TRUE))
+#' X$income <- 20000 + 600 * X$age + rnorm(100, 0, 3000)
+#' Y <- X
+#' Y$income <- Y$income + rnorm(100, 0, 2000)
+#' r <- rapid(X, Y, key_vars = "age", target_var = "income", model_type = "lm")
+#' update(r, num_tau = 0.5)                  # rescored, no refit
+#' update(r, num_eval_method = "point")      # rescored, no refit
+#' update(r, num_tau = 0.5, evaluate = FALSE)
+#' @importFrom stats update
+#' @family rapid
+#' @export
+update.rapid <- function(object, ..., evaluate = TRUE) {
+  .rapid_require(object, "version")
+  extras <- match.call(expand.dots = FALSE)$...
+  if (length(extras) > 0 && (is.null(names(extras)) || any(!nzchar(names(extras))))) {
+    .rapid_abort("Every argument of update() must be named.", "input")
+  }
+
+  # Change the stored call (as stats::update.default does)
+  call <- object$call
+  if (length(extras) > 0) {
+    existing <- names(extras) %in% names(call)
+    for (a in names(extras)[existing]) call[[a]] <- extras[[a]]
+    if (any(!existing)) call <- as.call(c(as.list(call), extras[!existing]))
+  }
+  if (!isTRUE(evaluate)) return(call)
+
+  env <- parent.frame()
+  if (!all(names(extras) %in% .rapid_scoring_args) || is.null(object$attack)) {
+    return(eval(call, env))
+  }
+
+  # Rescore: the scoring arguments of the changed call, the defaults of rapid() otherwise
+  defaults <- formals(rapid.default)
+  value <- function(name) {
+    if (name %in% names(call)) eval(call[[name]], env)
+    else if (name %in% names(defaults)) eval(defaults[[name]])
+  }
+  scoring <- .rapid_scoring(
+    object$is_categorical, names(call)[-1L],
+    num_eval_method = value("num_eval_method"), num_error_metric = value("num_error_metric"),
+    num_epsilon = value("num_epsilon"),
+    num_epsilon_type = if ("num_epsilon_type" %in% names(call)) value("num_epsilon_type"),
+    num_delta = value("num_delta"), num_tau = value("num_tau"),
+    cat_eval_method = value("cat_eval_method"), cat_tau = value("cat_tau"),
+    n_perm = value("n_perm"), threshold_rule = value("threshold_rule"),
+    perm_level = value("perm_level")
+  )
+  seed <- value("seed")
+  if (!is.null(seed)) set.seed(seed)
+  .rapid_rescore(object, scoring$rule, scoring$n_perm, scoring$threshold_rule,
+                 scoring$perm_level, call)
+}

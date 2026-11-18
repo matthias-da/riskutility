@@ -125,3 +125,54 @@ test_that("the object does not carry the calling environment", {
   x <- lm_object()
   expect_identical(environment(x$formula), globalenv())
 })
+
+# ---- update() ----------------------------------------------------------------------
+
+test_that("update() with a new threshold does not refit and equals a fresh call", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "lm", seed = 1)
+  fresh <- rapid(o, s, qi, "y", model_type = "lm", num_tau = 0.5, seed = 1)
+  local_mocked_bindings(.learner_fit = function(...) stop("refit"))
+  u <- update(r, num_tau = 0.5)
+  expect_identical(u$rapid, fresh$rapid)
+  expect_identical(u$at_risk, fresh$at_risk)
+  expect_identical(u$rule$threshold, fresh$rule$threshold)
+  expect_identical(u$chance_rates, fresh$chance_rates)
+  expect_identical(u$records, fresh$records)
+  expect_identical(u$call$num_tau, 0.5)
+  expect_false(identical(u$rapid, r$rapid))
+})
+
+test_that("update() switches between band and point without refit", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "lm", seed = 1)
+  fresh <- rapid(o, s, qi, "y", model_type = "lm", num_eval_method = "point", seed = 1)
+  local_mocked_bindings(.learner_fit = function(...) stop("refit"))
+  p <- update(r, num_eval_method = "point")
+  expect_s3_class(p$rule, "rapid_rule_point")
+  expect_identical(p$rapid, fresh$rapid)
+  expect_identical(p$at_risk, fresh$at_risk)
+  back <- update(p, num_eval_method = "band")
+  expect_s3_class(back$rule, "rapid_rule_band")
+  expect_identical(back$at_risk, r$at_risk)
+  expect_identical(back$rapid, r$rapid)
+})
+
+test_that("update() with a model argument refits", {
+  skip_if_not_installed("rpart")
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "lm", seed = 1)
+  expect_identical(update(r, model_type = "cart")$model_type, "cart")
+  # A rescored object keeps the new scoring arguments in its call
+  u <- update(r, num_tau = 0.5)
+  refit <- update(u, model_type = "cart")
+  expect_identical(refit$model_type, "cart")
+  expect_identical(refit$rule$threshold, 0.5)
+  # Without stored predictions every update refits
+  np <- rapid(o, s, qi, "y", model_type = "lm", seed = 1, store_predictions = FALSE)
+  expect_identical(update(np, num_tau = 0.5)$rule$threshold, 0.5)
+  expect_identical(update(r, num_tau = 0.5, evaluate = FALSE)$num_tau, 0.5)
+})

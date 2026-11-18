@@ -371,15 +371,9 @@ rapid.default <- function(X, Y,
 
   # Choices
   model_type <- .rapid_choice(model_type, .rapid_learner_names, "model_type")
-  num_eval_method <- .rapid_choice(num_eval_method, c("band", "point"), "num_eval_method")
-  num_error_metric <- .rapid_choice(num_error_metric, .rapid_metrics, "num_error_metric")
   num_dist <- .rapid_choice(num_dist, c("auto", "grid", "exact"), "num_dist")
   num_scale <- .rapid_choice(num_scale, c("auto", "identity", "log"), "num_scale")
-  cat_eval_method <- .rapid_choice(cat_eval_method,
-                                   c("RCS_marginal", "RCS_conditional", "NCE"),
-                                   "cat_eval_method")
   na_strategy <- .rapid_choice(na_strategy, c("constant", "drop", "median"), "na_strategy")
-  threshold_rule <- .rapid_choice(threshold_rule, c("fixed", "permutation"), "threshold_rule")
 
   # Data arguments (aliases, synth_pair) and arguments for the model
   inputs <- .rapid_inputs(
@@ -403,6 +397,68 @@ rapid.default <- function(X, Y,
                                   na_strategy, na_constant_value)
   is_categorical <- prepared$is_categorical
 
+  # Scoring rule and permutation settings
+  scoring <- .rapid_scoring(
+    is_categorical, given,
+    num_eval_method = num_eval_method, num_error_metric = num_error_metric,
+    num_epsilon = num_epsilon,
+    num_epsilon_type = if (missing(num_epsilon_type)) NULL else num_epsilon_type,
+    num_delta = num_delta, num_tau = num_tau,
+    cat_eval_method = cat_eval_method, cat_tau = cat_tau,
+    n_perm = n_perm, threshold_rule = threshold_rule, perm_level = perm_level
+  )
+
+  # Attacker
+  learner <- .rapid_learner(model_type, inputs$dots)
+  .learner_check(learner, is_categorical, num_dist,
+                 num_scale = if (is_categorical) "auto" else num_scale)
+  if (!learner$unseen_levels) .rapid_check_levels(prepared$unseen, learner$name)
+
+  # Fit on the synthetic data, predict the original records
+  if (verbose) message("  Fitting ", learner$name, " model on synthetic data...")
+  attack <- .rapid_attack(prepared$X, prepared$Y, inputs$key_vars, inputs$target_var,
+                          learner, num_dist, num_scale, scoring$rule$metric, n_quantiles)
+
+  if (verbose) message("  Evaluating disclosure risk...")
+  .rapid_assess(
+    attack, scoring$rule, data = prepared$X,
+    meta = list(key_vars = inputs$key_vars, target_var = inputs$target_var,
+                na = list(strategy = na_strategy, constant = na_constant_value,
+                          dropped = prepared$dropped),
+                call = call),
+    store_model = isTRUE(store_model), store_predictions = isTRUE(store_predictions),
+    n_perm = scoring$n_perm, threshold_rule = scoring$threshold_rule,
+    perm_level = scoring$perm_level
+  )
+}
+
+# Arguments of rapid() that change only how the attack is scored. update()
+# rescores the stored attack when it is given nothing else.
+.rapid_scoring_args <- c("num_eval_method", "num_error_metric", "num_epsilon", "num_delta",
+                         "num_tau", "cat_eval_method", "cat_tau", "n_perm", "threshold_rule",
+                         "perm_level", "seed")
+
+#' Scoring rule and permutation settings from the arguments of rapid()
+#'
+#' Shared by `rapid.default()` and `update.rapid()`, so that a rescored object
+#' gets the rule a fresh call would get (choices, tolerance resolution, default
+#' thresholds, deprecation warnings, warnings on arguments of the other type of
+#' target).
+#'
+#' @param is_categorical Type of the target.
+#' @param given Names of the arguments given in the call.
+#' @return `list(rule, n_perm, threshold_rule, perm_level)`.
+#' @noRd
+.rapid_scoring <- function(is_categorical, given, num_eval_method, num_error_metric,
+                           num_epsilon, num_epsilon_type, num_delta, num_tau,
+                           cat_eval_method, cat_tau, n_perm, threshold_rule, perm_level) {
+  num_eval_method <- .rapid_choice(num_eval_method, c("band", "point"), "num_eval_method")
+  num_error_metric <- .rapid_choice(num_error_metric, .rapid_metrics, "num_error_metric")
+  cat_eval_method <- .rapid_choice(cat_eval_method,
+                                   c("RCS_marginal", "RCS_conditional", "NCE"),
+                                   "cat_eval_method")
+  threshold_rule <- .rapid_choice(threshold_rule, c("fixed", "permutation"), "threshold_rule")
+
   # Arguments that belong to the other type of target
   other <- grep(if (is_categorical) "^(num_|n_quantiles$)" else "^cat_", given, value = TRUE)
   if (length(other) > 0) {
@@ -410,33 +466,39 @@ rapid.default <- function(X, Y,
                   " target: ", paste(other, collapse = ", "), "."), "ignored_argument")
   }
 
-  # Attacker and scoring rule
-  learner <- .rapid_learner(model_type, inputs$dots)
-  .learner_check(learner, is_categorical, num_dist,
-                 num_scale = if (is_categorical) "auto" else num_scale)
-  if (!learner$unseen_levels) .rapid_check_levels(prepared$unseen, learner$name)
   rule <- .rapid_make_rule(
     is_categorical,
     num = list(method = num_eval_method, metric = num_error_metric, epsilon = num_epsilon,
-               epsilon_type = if (missing(num_epsilon_type)) NULL else num_epsilon_type,
-               delta = num_delta, tau = num_tau),
+               epsilon_type = num_epsilon_type, delta = num_delta, tau = num_tau),
     cat = list(method = cat_eval_method, tau = cat_tau)
   )
   .rapid_check_perm(n_perm, threshold_rule, perm_level, rule)
+  list(rule = rule, n_perm = n_perm, threshold_rule = threshold_rule, perm_level = perm_level)
+}
 
-  # Fit on the synthetic data, predict the original records
-  if (verbose) message("  Fitting ", learner$name, " model on synthetic data...")
-  attack <- .rapid_attack(prepared$X, prepared$Y, inputs$key_vars, inputs$target_var,
-                          learner, num_dist, num_scale, rule$metric, n_quantiles)
+#' Prepared original data of a rapid object
+#'
+#' The record table is the prepared data followed by the columns of the rule.
+#' @noRd
+.rapid_data <- function(x) {
+  x$records[, seq_len(ncol(x$records) - length(x$record_cols)), drop = FALSE]
+}
 
-  if (verbose) message("  Evaluating disclosure risk...")
+#' Score the stored attack of a rapid object under a new rule
+#'
+#' @param x A `rapid` object with stored predictions.
+#' @param rule A `rapid_rule`.
+#' @param n_perm,threshold_rule,perm_level Permutation settings.
+#' @param call The call stored in the result.
+#' @noRd
+.rapid_rescore <- function(x, rule, n_perm, threshold_rule, perm_level, call) {
+  .rapid_require(x, c("version", "predictions"))
+  attack <- x$attack
+  attack["model"] <- list(x$model)
   .rapid_assess(
-    attack, rule, data = prepared$X,
-    meta = list(key_vars = inputs$key_vars, target_var = inputs$target_var,
-                na = list(strategy = na_strategy, constant = na_constant_value,
-                          dropped = prepared$dropped),
-                call = call),
-    store_model = isTRUE(store_model), store_predictions = isTRUE(store_predictions),
+    attack, rule, data = .rapid_data(x),
+    meta = list(key_vars = x$key_vars, target_var = x$target_var, na = x$na, call = call),
+    store_model = !is.null(x$model), store_predictions = TRUE,
     n_perm = n_perm, threshold_rule = threshold_rule, perm_level = perm_level
   )
 }
