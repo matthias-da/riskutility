@@ -128,7 +128,8 @@ test_that("holdout and newdata are prepared like X", {
   expect_equal(r$holdout$records$y[1:3], c(0, 0, 0))
   r <- rapid(o, s, qi, "y", model_type = "lm", holdout = h, na_strategy = "median",
              n_perm = 0, store_model = TRUE)
-  expect_equal(r$holdout$records$y[1], stats::median(h$y, na.rm = TRUE))
+  # Imputed with the median of the original values, as X
+  expect_equal(r$holdout$records$y[1:3], rep(stats::median(o$y), 3))
   expect_identical(nrow(predict(r, h)), 30L)
   # Categorical quasi-identifier: a level unknown to the attacker is refused
   oc <- o
@@ -176,4 +177,50 @@ test_that("predict() reproduces the records with tree learners and exact distrib
   r <- rapid(o, s, qi, "y", model_type = "rf", num_dist = "exact", store_model = TRUE,
              n_perm = 0, seed = 1)
   expect_equal(predict(r, o), as.data.frame(r))
+})
+
+test_that("a missing target of one new record is handled as in X or refused", {
+  o <- sim_numeric(120)
+  o$y[1:2] <- NA
+  s <- noisy_copy(sim_numeric(120), seed = 2)
+  h <- data.frame(x1 = 0, x2 = 0, y = NA_real_)
+  fit <- function(strategy, ...) {
+    rapid(o, s, qi, "y", model_type = "lm", holdout = h, na_strategy = strategy,
+          n_perm = 2, seed = 1, store_model = TRUE, ...)
+  }
+  # median: the median of the original values, for the holdout and predict()
+  r <- fit("median")
+  med <- stats::median(o$y, na.rm = TRUE)
+  expect_identical(r$holdout$n, 1L)
+  expect_equal(r$holdout$records$y, med)
+  expect_false(anyNA(r$holdout$records$r))
+  expect_equal(predict(r, h)$y, med)
+  expect_false(anyNA(predict(r, h)$r))
+  # constant: the constant
+  r <- fit("constant", na_constant_value = 70)
+  expect_equal(r$holdout$records$y, 70)
+  expect_equal(predict(r, h)$y, 70)
+  # drop: nothing is left, which is an error
+  expect_error(fit("drop"), regexp = "no records left", class = "rapid_error_input")
+  r <- rapid(o, s, qi, "y", model_type = "lm", na_strategy = "drop", n_perm = 0,
+             store_model = TRUE)
+  expect_error(predict(r, h), regexp = "no records left", class = "rapid_error_input")
+  # no imputation value: refused
+  expect_error(fit("constant", na_constant_value = NA), regexp = "cannot be imputed",
+               class = "rapid_error_input")
+
+  # Categorical target: the level "missing", known only if X or Y had it
+  oc <- sim_categorical(120)
+  sc <- noisy_copy(oc, seed = 2)
+  hc <- data.frame(x1 = 0, x2 = 0, y = factor(NA, levels = levels(oc$y)))
+  expect_error(rapid(oc, sc, qi, "y", model_type = "rf", holdout = hc, n_perm = 0),
+               regexp = "missing", class = "rapid_error_levels")
+  rc <- rapid(oc, sc, qi, "y", model_type = "rf", n_perm = 0, store_model = TRUE)
+  expect_error(predict(rc, hc), regexp = "missing", class = "rapid_error_levels")
+  oc$y[1:5] <- NA
+  rc <- rapid(oc, sc, qi, "y", model_type = "rf", holdout = hc, n_perm = 0, seed = 1,
+              store_model = TRUE)
+  expect_identical(as.character(rc$holdout$records$y), "missing")
+  expect_equal(rc$holdout$records$b, 5 / 120)
+  expect_identical(as.character(predict(rc, hc)$y), "missing")
 })

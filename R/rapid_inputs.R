@@ -225,9 +225,11 @@
 #' column types, handles missing values and gives all factors the same levels in
 #' both sets (levels of the original data first).
 #'
-#' @return `list(X, Y, is_categorical, dropped, unseen)`: `dropped` are the row
-#'   indices of `X` removed by `na_strategy = "drop"`, `unseen` a named list of
-#'   the quasi-identifier levels that occur in `X` but not in `Y`.
+#' @return `list(X, Y, is_categorical, dropped, unseen, na_value)`: `dropped` are
+#'   the row indices of `X` removed by `na_strategy = "drop"`, `unseen` a named
+#'   list of the quasi-identifier levels that occur in `X` but not in `Y`,
+#'   `na_value` the value a missing numeric target of `X` gets (`NULL` for
+#'   `"drop"` and for a categorical target), used again for new records.
 #' @noRd
 .rapid_prepare_data <- function(X, Y, key_vars, target_var, na_strategy,
                                 na_constant_value) {
@@ -248,6 +250,11 @@
   } else {
     integer(0)
   }
+  na_value <- if (!is_categorical) {
+    switch(na_strategy,
+           constant = na_constant_value,
+           median = stats::median(X[[target_var]], na.rm = TRUE))
+  }
   na <- .handle_sensitive_na(X, Y, target_var, na_strategy, na_constant_value)
   X <- .handle_qi_na(na$original, key_vars)
   Y <- .handle_qi_na(na$synthetic, key_vars)
@@ -264,7 +271,8 @@
   }
   Y <- .ensure_levels(Y, X, target_var, key_vars)
 
-  list(X = X, Y = Y, is_categorical = is_categorical, dropped = dropped, unseen = unseen)
+  list(X = X, Y = Y, is_categorical = is_categorical, dropped = dropped, unseen = unseen,
+       na_value = na_value)
 }
 
 #' Prepare new records (a holdout, the newdata of predict()) like the original data
@@ -276,7 +284,8 @@
 #'
 #' @param data Data frame of new records.
 #' @param train The prepared synthetic data the attacker was fitted on.
-#' @param na `list(strategy, constant)` as stored in a `rapid` object.
+#' @param na `list(strategy, constant, value)` as stored in a `rapid` object;
+#'   `value` is the value a missing numeric target of `X` got.
 #' @param learner The attacker; levels it cannot predict are refused.
 #' @param name Name of the data in messages.
 #' @param need_target Must the data hold the target?
@@ -308,12 +317,27 @@
         sort(unique(data[[v]])))
   }
 
-  # Missing values as for X (train has none left, so only `data` changes)
-  if (has_target) {
-    data <- .handle_sensitive_na(data, train, target_var, na$strategy, na$constant)$original
-    if (nrow(data) == 0) {
-      .rapid_abort(c("'", name, "' has no records left after removing missing target ",
-                     "values."), "input")
+  # Missing target values as for X, with the value X got (never a statistic of
+  # the new records). A categorical target gets the level "missing", which the
+  # level check below refuses unless X or Y had it.
+  y <- if (has_target) data[[target_var]]
+  if (anyNA(y)) {
+    if (is.factor(y)) {
+      data <- .handle_sensitive_na(data, train, target_var, na$strategy,
+                                   na$constant)$original
+    } else if (na$strategy == "drop") {
+      data <- data[!is.na(y), , drop = FALSE]
+      if (nrow(data) == 0) {
+        .rapid_abort(c("'", name, "' has no records left after removing missing target ",
+                       "values."), "input")
+      }
+    } else {
+      if (is.null(na$value) || is.na(na$value)) {
+        .rapid_abort(c("The missing target values of '", name, "' cannot be imputed: the ",
+                       "original data give no ", na$strategy, " value. Remove these ",
+                       "records or use na_strategy = \"drop\"."), "input")
+      }
+      data[[target_var]][is.na(y)] <- na$value
     }
   }
   data <- .handle_qi_na(data, key_vars)

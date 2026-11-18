@@ -438,7 +438,8 @@ rapid.default <- function(X, Y,
   if (is.null(holdout)) holdout <- inputs$holdout
   if (!is.null(holdout)) {
     holdout <- .rapid_prepare_new(holdout, prepared$Y, inputs$key_vars, inputs$target_var,
-                                  list(strategy = na_strategy, constant = na_constant_value),
+                                  list(strategy = na_strategy, constant = na_constant_value,
+                                       value = prepared$na_value),
                                   learner, "holdout")$data
   }
 
@@ -456,7 +457,7 @@ rapid.default <- function(X, Y,
     attack, scoring$rule, data = prepared$X,
     meta = list(key_vars = inputs$key_vars, target_var = inputs$target_var,
                 na = list(strategy = na_strategy, constant = na_constant_value,
-                          dropped = prepared$dropped),
+                          value = prepared$na_value, dropped = prepared$dropped),
                 call = call),
     store_model = isTRUE(store_model), store_predictions = isTRUE(store_predictions),
     n_perm = scoring$n_perm, threshold_rule = scoring$threshold_rule,
