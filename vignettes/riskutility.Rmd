@@ -232,8 +232,9 @@ released data. DCAP provides an aggregate measure; TCAP gives per-record
 risk scores. See Section \@ref(sec-cap).
 
 **ML-based (RAPID).** Risk of Attribute Prediction-Induced Disclosure
-[@thees2026beyond] trains predictive models on the released data and evaluates
-them on the original. Accurate predictions indicate information leakage. RAPID
+[@templ2026rapid] trains predictive models on the released data and evaluates
+them on the original. A record is at risk when the model puts clearly more
+probability on its true sensitive value than the marginal distribution does. RAPID
 captures complex non-linear relationships and variable interactions that the
 CAP matching approach may miss. See Section \@ref(sec-rapid).
 
@@ -357,10 +358,11 @@ The package follows four design principles:
 
 3. **Minimal core dependencies.** Frequency-based privacy models, CAP
    metrics, and distance-based measures require only base R, data.table, and
-   ggplot2. ML-based methods require optional packages --- ranger for random
-   forests in RAPID, xgboost for gradient boosting, and rpart for
-   classification trees. These are loaded conditionally via
-   `requireNamespace()` and produce informative error messages when absent.
+   ggplot2. ML-based methods use ranger for the random forests of RAPID, which
+   is imported, and the optional packages xgboost for gradient boosting and
+   rpart for classification trees. The optional packages are loaded
+   conditionally via `requireNamespace()` and produce informative error
+   messages when absent.
 
 4. **Integration over competition.** Rather than reimplementing synthesis or
    anonymization, the package provides `from_synthpop()`, `from_simPop()`,
@@ -643,53 +645,59 @@ knitr::kable(cap,
 
 ## ML-Based Risk: RAPID {#sec-rapid}
 
-Risk of Attribute Prediction-Induced Disclosure [@thees2026beyond] takes a
-fundamentally different approach to attribute disclosure. Instead of matching
+Risk of Attribute Prediction-Induced Disclosure [@templ2026rapid] takes a
+different approach to attribute disclosure. Instead of matching
 quasi-identifiers, RAPID trains a predictive model $\hat{f}$ on the released
-data $(Y_{\mathcal{K}}, Y_s)$ and evaluates its predictions on the original
-data: $\hat{s}_i = \hat{f}(X_{\mathcal{K},i})$. For numeric targets, a
-record is *at risk* when the prediction error falls below a threshold
-$\epsilon$: $e(s_i, \hat{s}_i) < \epsilon$, where $e(\cdot, \cdot)$ is
-a configurable error metric (symmetric percentage error by default). The
-RAPID score is the fraction of at-risk records:
-$\text{RAPID} = n^{-1} \sum_i \mathbf{1}(e(s_i, \hat{s}_i) < \epsilon)$.
-For categorical targets, a different evaluation applies: a record is at risk
-when a gain or ratio score exceeds a threshold.
+data $(Y_{\mathcal{K}}, Y_s)$ and applies it to the quasi-identifiers
+$X_{\mathcal{K},i}$ of the original records. For record $i$ it compares the
+attacker's confidence $g_i$ with a baseline $b_i$. For a categorical target,
+$g_i$ is the predicted probability of the true class $s_i$ and $b_i$ the share
+of that class among the original records. For a numeric target, the true class
+is replaced by the tolerance band $B_i = \{v : e(s_i, v) < \epsilon\}$, where
+$e(\cdot, \cdot)$ is the symmetric relative error by default and
+$\epsilon = 0.1$ (10 %). Then $g_i$ is the probability the attacker's
+predictive distribution puts into $B_i$ and $b_i$ the share of original values
+inside $B_i$. With the normalized gain $r_i = (g_i - b_i) / (1 - b_i)$
+($r_i = 0$ where $b_i = 1$), a record is *at risk* when $r_i > \tau$, and
+$\text{RAPID} = n^{-1} \sum_i \mathbf{1}(r_i > \tau)$. The default threshold is
+$\tau = 0.3$ for both types of target. Every result also reports the chance
+level, the share of records flagged when the same predictions are scored
+against randomly permuted true values (10 permutations by default), and the
+excess of RAPID over it.
 
 ```{r rapid-demo, warning=FALSE}
-rapid_res <- rapid(pair, model_type = "lm")
+rapid_res <- rapid(pair, model_type = "lm", seed = 1)
 summary(rapid_res)
 plot(rapid_res, which = c(1, 3))
 ```
 
-With independently generated synthetic data, we expect the RAPID score to
-be close to the baseline. The threshold sensitivity plot (`which = 3`)
-shows how the at-risk fraction changes across threshold values.
+The synthetic data of the running example are drawn independently of the
+original, so income does not depend on the quasi-identifiers and RAPID stays at
+its chance level. The threshold curve (`which = 3`) shows RAPID and the chance
+level across thresholds.
 
 RAPID complements the CAP family in two ways. First, it captures non-linear
-relationships and variable interactions. Second, it provides inferential tools:
-`rapid_test()` computes a permutation-based $p$-value, `confint()` provides
-bootstrap confidence intervals, and `rapid_threshold_select()` optimizes the
-threshold in a data-driven manner.
+relationships and variable interactions. Second, it comes with inferential tools.
+`rapid_test()` gives a permutation $p$-value and a Wald test against the chance
+level, `confint()` gives Wilson (default), Clopper-Pearson, Wald or bootstrap
+intervals, and `rapid_threshold_select()` chooses the threshold by permutation.
+`rapid_suite()` runs several attackers and reports the worst case, and the
+argument `holdout` separates the risk of the records used for the release from
+that of other records. The vignette `vignette("rapid", package = "riskutility")`
+explains the measure, its result object and the choice of the attacker.
 
 ```{r rapid-models, echo=FALSE}
 models <- data.frame(
-  Model = c("lm", "rf", "cart", "gbm", "logit"),
-  Package = c("stats", "ranger", "rpart", "xgboost", "stats"),
-  Numeric = c("Yes", "Yes", "Yes", "Yes", "No"),
-  Categorical = c("No", "Yes", "Yes", "Yes", "Yes"),
-  Interactions = c("Manual", "Automatic", "Automatic", "Automatic", "Manual"),
+  Model = c("lm", "rf", "cart", "gbm", "logit", "lookup"),
+  Package = c("stats", "ranger", "rpart", "xgboost", "stats", "ranger"),
+  Numeric = c("Yes", "Yes", "Yes", "Yes", "No", "Yes"),
+  Categorical = c("No", "Yes", "Yes", "Yes", "Two classes", "Yes"),
+  Interactions = c("Manual", "Automatic", "Automatic", "Automatic", "Manual",
+                   "Automatic"),
   check.names = FALSE
 )
 knitr::kable(models, caption = "RAPID model backends.")
 ```
-
-| RAPID Score | Risk Level | Interpretation |
-|-------------|------------|----------------|
-| < 0.05 | Low | ML model cannot predict target much better than baseline |
-| 0.05--0.15 | Moderate | Some predictive signal from synthetic data |
-| 0.15--0.30 | Elevated | Significant predictive leakage |
-| > 0.30 | High | Strong evidence of disclosure risk |
 
 
 ## Distance-Based Risk {#sec-distance}
@@ -871,15 +879,15 @@ pair_risky <- synth_pair(original, near_copy,
 
 # Compare key metrics across the two datasets
 comparison <- data.frame(
-  Metric = c("DCAP", "RAPID (lm)", "IMS"),
+  Metric = c("DCAP", "RAPID excess (lookup)", "IMS"),
   Safe = c(
     dcap(pair)$dcap,
-    rapid(pair, model_type = "lm", verbose = FALSE)$rapid,
+    rapid(pair, model_type = "lookup", seed = 1)$excess,
     ims(pair)$ims
   ),
   Risky = c(
     dcap(pair_risky)$dcap,
-    rapid(pair_risky, model_type = "lm", verbose = FALSE)$rapid,
+    rapid(pair_risky, model_type = "lookup", seed = 1)$excess,
     ims(pair_risky)$ims
   )
 )
@@ -888,6 +896,12 @@ comparison$Risky <- round(comparison$Risky, 4)
 knitr::kable(comparison,
              caption = "Cross-family comparison: safe vs. risky synthetic data.")
 ```
+
+For RAPID the table shows the excess of the lookup attacker over its chance
+level. In both releases income does not depend on the quasi-identifiers, so a
+generalising attacker such as the linear model finds nothing to infer in either
+of them. The lookup attacker reads off the released records with the same key
+values and so detects the near-copy.
 
 The near-copy shows elevated risk across all families, but the magnitude
 and interpretation differ. Attribution measures quantify *information

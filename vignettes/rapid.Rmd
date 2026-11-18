@@ -1,0 +1,628 @@
+---
+title: "Attribute disclosure risk with RAPID"
+author:
+  - name: Matthias Templ
+    affiliation: "School of Business, FHNW University of Applied Sciences and Arts Northwestern Switzerland"
+    email: matthias.templ@gmail.com
+    orcid: 0000-0002-8638-5276
+  - name: Oscar Thees
+    affiliation: "School of Business, FHNW University of Applied Sciences and Arts Northwestern Switzerland"
+    orcid: 0009-0001-9378-4988
+abstract: >
+  RAPID (Risk of Attribute Prediction-Induced Disclosure) measures how many
+  records of an original data set an attacker can infer a sensitive value for,
+  using a model fitted on a released synthetic or anonymized data set. This
+  vignette shows how to declare the attack, how to compute RAPID for a
+  categorical and a continuous sensitive variable with `rapid()`, and how to
+  read the result: the chance level, the excess over it, tests and intervals,
+  the choice of the threshold, the choice of the attacker, holdout records,
+  the contribution of each quasi-identifier and the cross-validation of a
+  synthesizer. The last section lists what changed from riskutility 0.2.0.
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+bibliography: references.bib
+vignette: >
+  %\VignetteIndexEntry{Attribute disclosure risk with RAPID}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 6,
+  fig.height = 4,
+  warning = TRUE,
+  message = FALSE
+)
+library(riskutility)
+has_rpart <- requireNamespace("rpart", quietly = TRUE)
+f3 <- function(x) sprintf("%.3f", x)
+pct <- function(x) sprintf("%.1f %%", 100 * x)
+```
+
+# The attack scenario {#sec-scenario}
+
+What does the attacker know, and what does RAPID count? A data holder releases a synthetic or
+anonymized version of a confidential data set. The attacker knows a few variables of some
+persons, the quasi-identifiers (for example age, sex and region), and wants to learn a sensitive
+variable of these persons (for example income or a diagnosis). The attacker fits a prediction
+model on the release, with the sensitive variable as response and the quasi-identifiers as
+predictors, and applies it to the quasi-identifiers of the persons. RAPID is the share of the
+original records for which this model puts clearly more probability on the true sensitive value
+than an attacker who ignores the quasi-identifiers would [@templ2026rapid].
+
+RAPID therefore measures attribute inference under a declared attacker. It does not measure
+re-identification. The attacker never has to find out which released record belongs to which
+person. The result depends on three choices, which together make up the attack scenario: the
+sensitive variable (`target_var`), the quasi-identifiers (`key_vars`) and the attacker model
+(`model_type`). They are the arguments of `rapid()` besides the two data sets.
+
+The running example of this vignette has 400 original records with four quasi-identifiers and
+two sensitive variables, a continuous income and a categorical health status. The release is an
+independent sample from the same model. It contains none of the original records, but it keeps
+the dependence of income and health on the quasi-identifiers.
+
+```{r data}
+simulate <- function(n) {
+  d <- data.frame(
+    age = sample(20:69, n, replace = TRUE),
+    sex = factor(sample(c("F", "M"), n, replace = TRUE)),
+    region = factor(sample(c("north", "south", "east", "west"), n, replace = TRUE)),
+    education = factor(sample(c("basic", "secondary", "tertiary"), n,
+                              replace = TRUE, prob = c(0.3, 0.5, 0.2)))
+  )
+  d$income <- round(exp(10.6 + 0.015 * (d$age - 45) + 0.25 * (d$sex == "M") +
+                        0.4 * (d$education == "tertiary") -
+                        0.25 * (d$education == "basic") + rnorm(n, 0, 0.15)))
+  p_chronic <- plogis(-6 + 0.15 * (d$age - 20))
+  d$health <- factor(ifelse(runif(n) < p_chronic, "chronic",
+                            ifelse(runif(n) < 0.3, "acute", "none")),
+                     levels = c("none", "acute", "chronic"))
+  d
+}
+set.seed(2026)
+orig <- simulate(400)   # the confidential data
+syn  <- simulate(400)   # the release
+kv <- c("age", "sex", "region", "education")
+head(orig, 3)
+```
+
+Region has no effect on either sensitive variable. Income depends on age, sex and education,
+and a chronic condition becomes more frequent with age.
+
+# Categorical target: the paper's toy example {#sec-categorical}
+
+When is a correct guess of a class a disclosure? If 60 % of all records are `healthy`, an
+attacker who always guesses `healthy` is right for 60 % of these records without knowing
+anything about them. RAPID therefore compares the attacker with the marginal distribution of the
+original data. For record $i$ with true class $y_i$ it computes three numbers:
+
+* the confidence $g_i$, the probability the attacker's model gives to the true class $y_i$,
+* the baseline $b_i = n^{-1} \sum_{j=1}^{n} \mathbf{1}(y_j = y_i)$, the share of the true class
+  among the $n$ original records,
+* the normalized gain $r_i = (g_i - b_i) / (1 - b_i)$, with $r_i = 0$ where $b_i = 1$.
+
+A gain of 0 means the attacker does no better than the marginal distribution, a gain of 1 means
+it is certain of the true class. A record is at risk when $r_i > \tau$, and RAPID is the share of
+records at risk. The default threshold is $\tau = 0.3$ (`cat_tau`). The attacker must then cover at
+least 30 % of the distance between the baseline and certainty.
+
+The paper's toy example has three records of the class `healthy`, which holds 60 % of the
+records, so $b_i = 0.6$ for all three. The attacker gives them the probabilities below.
+
+```{r toy-categorical}
+toy <- data.frame(record = 1:3, g = c(0.70, 0.85, 0.55), b = 0.60)
+toy$r <- (toy$g - toy$b) / (1 - toy$b)
+toy$at_risk <- toy$r > 0.3
+toy
+mean(toy$at_risk)
+```
+
+Record 1 gains `r toy$r[1]` of the possible improvement, which is below the threshold. Record 2
+gains `r toy$r[2]` and is at risk. Record 3 does worse than the baseline. RAPID is
+`r f3(mean(toy$at_risk))`.
+
+`rapid()` computes the same quantities for every original record. The rule is
+`cat_eval_method = "RCS_marginal"`, the default. Here the attacker is a random forest, the
+default `model_type = "rf"`.
+
+```{r health}
+r_health <- rapid(orig, syn, key_vars = kv, target_var = "health", seed = 1)
+r_health
+```
+
+The first line names the attack scenario and the attacker with its settings. The second line gives
+the rule. `r r_health$n_at_risk` of the `r r_health$n_total` records are at risk. The two lines on
+the chance level and the excess are explained in [the section on the chance level](#sec-chance).
+The mean confidence and baseline per class show where the risk comes from:
+
+```{r health-by-class}
+aggregate(cbind(g, b, at_risk) ~ health, data = as.data.frame(r_health), FUN = mean)
+```
+
+A chronic condition is rare in the original data, but the release lets the attacker see that it
+is frequent among older persons. The share at risk is therefore highest among persons with a
+chronic condition.
+
+# Continuous target: the band {#sec-continuous}
+
+What counts as a correct guess of an income? An exact hit almost never occurs, so RAPID replaces
+the true class by a tolerance band around the true value $y_i$,
+$$B_i = \{v : e(y_i, v) < \varepsilon\},$$
+the open interval of all values within the tolerance $\varepsilon$ (`num_epsilon`) of $y_i$.
+The default error $e$ is the symmetric relative error
+$e(y, v) = 2|y - v| / (|y| + |v| + 2\delta)$ with the smoothing constant $\delta = 0.01$
+(`num_delta`), and the default tolerance is $\varepsilon = 0.1$, that is 10 %. The confidence
+$g_i$ is now the probability the attacker's predictive distribution puts into $B_i$, and the
+baseline $b_i = n^{-1} \sum_{j} \mathbf{1}(y_j \in B_i)$ is the share of original values that lie
+inside the band. The gain $r_i$ and the flag $r_i > \tau$ are as before, with $\tau = 0.3$
+(`num_tau`). The band of a record depends only on its true value and the tolerance, so its
+baseline is the same for every attacker.
+
+The paper's toy example uses the symmetric error with $\delta = 0$. For a positive true value
+$y$ the band then runs from $y(2 - \varepsilon)/(2 + \varepsilon)$ to
+$y(2 + \varepsilon)/(2 - \varepsilon)$. The attacker's predictive distribution is given by
+100 values, and $g_i$ is the share of them inside the band.
+
+```{r toy-continuous}
+eps <- 0.1
+toy_inc <- data.frame(y = c(50000, 120000, 35000))
+toy_inc$band_lo <- toy_inc$y * (2 - eps) / (2 + eps)
+toy_inc$band_hi <- toy_inc$y * (2 + eps) / (2 - eps)
+toy_inc$g <- c(0.36, 0.60, 0.10)
+toy_inc$b <- c(0.30, 0.05, 0.20)
+toy_inc$r <- (toy_inc$g - toy_inc$b) / (1 - toy_inc$b)
+toy_inc
+```
+
+Only record 2 has a gain above 0.3. Its income is rare. A value drawn from the original incomes
+lands in its band only `r pct(toy_inc$b[2])` of the time, while the attacker places
+`r pct(toy_inc$g[2])` of its distribution there. Record 1 lies near the centre of the
+distribution, where `r pct(toy_inc$b[1])` of all incomes fall inside the band. The attacker puts
+`r pct(toy_inc$g[1])` there, little more than guessing, so the record is not at risk, although a
+point prediction of 47000 would lie inside its band.
+
+For the running example the attacker is a linear model. It is much faster than the default
+random forest and serves the rest of this vignette.
+
+```{r income}
+r_inc <- rapid(orig, syn, key_vars = kv, target_var = "income",
+               model_type = "lm", seed = 1)
+r_inc
+```
+
+The attacker line says that the linear model was fitted to the log of income. The argument
+`num_scale = "auto"` (default) chooses the log scale when the error metric is relative, all
+released values are positive and the log model fits the data better ([the section on the
+attackers](#sec-attackers)). The record table holds the band and the three numbers of every
+record:
+
+```{r income-records}
+head(as.data.frame(r_inc), 4)
+```
+
+For a continuous target the attacker's predictive distribution matters, and it differs by
+model. The linear model gives a normal (or lognormal) distribution, a tree the released values
+in the record's leaf, and a forest the released values in the record's leaves. `num_dist` chooses
+whether $g_i$ is computed exactly from it (`"exact"`) or from 100 quantiles (`"grid"`). The
+default `"auto"` takes the exact value where the attacker has one. The section "Predictive
+distribution per attacker" of `?rapid` gives the details, with the quantile regression forest of
+@Meinshausen_2006_Quantile for the random forest.
+
+# Why the point rule misleads {#sec-point}
+
+Why not simply flag a record when the point prediction lies within the tolerance? This was the
+rule of riskutility 0.2.0, and it is still available as `num_eval_method = "point"`. It has no
+baseline. Near the centre of the distribution many values lie within 10 % of the true value, so
+any prediction near the centre hits the band of many records, whether or not the release carries
+information about the target.
+
+To see this, take a release in which the incomes are shuffled. The quasi-identifiers then say
+nothing about income, and nothing can be inferred.
+
+```{r shuffled}
+syn0 <- syn
+syn0$income <- sample(syn0$income)
+r_band0  <- rapid(orig, syn0, key_vars = kv, target_var = "income",
+                  model_type = "lm", seed = 1)
+r_point0 <- rapid(orig, syn0, key_vars = kv, target_var = "income",
+                  model_type = "lm", num_eval_method = "point", seed = 1)
+r_band0
+r_point0
+```
+
+The band rule flags `r r_band0$n_at_risk` records. The point rule flags
+`r r_point0$n_at_risk` of `r r_point0$n_total` records (RAPID = `r f3(r_point0$rapid)`), and its
+chance level is `r f3(r_point0$chance)`. The same predictions flag as many records when they are
+paired with true values at random. Both prints add that RAPID cannot be distinguished from the
+chance level. A RAPID of `r f3(r_point0$rapid)` from the point rule would have been read as a
+risk in 0.2.0. This is why the band rule is the default since 0.3.0.
+
+# Chance level and excess {#sec-chance}
+
+Is a RAPID of `r pct(r_health$rapid)` for the health status a lot? Some records pass any threshold
+by chance. An attacker with concentrated predictions lands near some true values even when the
+quasi-identifiers say nothing about the target. To measure this part,
+`rapid()` keeps the attacker and its predictions fixed, permutes the true values `n_perm` times
+(default 10) and scores each record's prediction against the value it receives, with the baseline
+of that value. The chance level is the share flagged, averaged over the permutations. Each
+permutation scores all $n$ records, so ten permutations give a stable mean.
+
+The excess is RAPID minus the chance level. For the health status the chance level is
+`r f3(r_health$chance)` and the excess `r f3(r_health$excess)`. For income under the linear model
+RAPID is `r f3(r_inc$rapid)`, the chance level `r f3(r_inc$chance)` and the excess
+`r f3(r_inc$excess)`. The excess says how far the attacker's predictions are aligned with the
+true values beyond random pairing. The print states that RAPID is not distinguishable from the
+chance level when the excess is at most twice the standard deviation of the shares of the
+permutations. [The section on testing](#sec-testing) gives a test.
+
+The histogram of the gains shows both parts. The outline is the average histogram of the
+gains under the permutations, and the dashed line is the threshold.
+
+```{r plot-gain, fig.cap = "Normalized gains of the original records (bars) and under permuted true values (outline), income, linear model."}
+plot(r_inc, which = 1)
+```
+
+The second plot shows each record's confidence against its baseline. Records above the upper line
+$g = b + \tau(1 - b)$ are at risk.
+
+```{r plot-gb, fig.cap = "Confidence g against baseline b per record, income, linear model."}
+plot(r_inc, which = 2)
+```
+
+The baselines of income lie between `r f3(min(r_inc$baseline))` and
+`r f3(max(r_inc$baseline))`. A record in the centre of the distribution needs a higher confidence
+to be at risk than a record with a rare income.
+
+# Working with the result object {#sec-object}
+
+What else does the object hold, and how is it changed? `summary()` adds a confidence interval,
+the share of flagged records among those with rare values, and the accuracy of the attacker.
+
+```{r summary}
+summary(r_inc)
+```
+
+`as.data.frame()` returns the record table, with `at_risk_only = TRUE` only the flagged records.
+`nobs()` gives the number of scored records.
+
+```{r records}
+nobs(r_inc)
+nrow(as.data.frame(r_inc, at_risk_only = TRUE))
+```
+
+`update()` changes arguments. Where only the rule changes, the stored predictions are rescored
+without fitting the model again. Where the attacker changes, the model is refitted. Both give the
+same result as a fresh call with the changed arguments.
+
+```{r update}
+r_strict <- update(r_inc, num_tau = 0.4)
+c(tau_0.3 = r_inc$rapid, tau_0.4 = r_strict$rapid)
+```
+
+With $\tau = 0.4$ RAPID falls from `r f3(r_inc$rapid)` to `r f3(r_strict$rapid)`.
+
+`predict()` applies the attacker to new records, for example persons whose quasi-identifiers an
+attacker might know but who are not in the original data. It needs the fitted model, which the
+object keeps with `store_model = TRUE`. When the new records include the target, they are scored
+with the rule of the object and the baselines of the original values.
+
+```{r predict}
+r_model <- update(r_inc, store_model = TRUE)
+newcomers <- simulate(3)
+predict(r_model, newcomers)[, c("age", "sex", "education", "income",
+                                 "predicted_value", "g", "b", "r", "at_risk")]
+```
+
+# Testing and intervals {#sec-testing}
+
+Is RAPID above its chance level by more than permutation noise? `rapid_test()` permutes the true
+values $B$ times (`n_permutations`, default 199), keeps the fitted attacker and computes RAPID
+$R_b$ for each permutation. With $R$ the observed RAPID, the p-value is
+$p = (1 + \#\{b : R_b \ge R\}) / (1 + B)$. The null hypothesis is that the predictions carry no
+information about which true value belongs to which record. The test holds the attacker fixed,
+so it needs no refit and is exact given that attacker.
+
+```{r test}
+tt <- rapid_test(r_inc, seed = 1)
+tt
+```
+
+The p-value is `r tt$p_value`. With 199 permutations no p-value can be smaller than
+1/200 = 0.005. The print also gives the Wald test with the statistic
+$z = (R - \pi_0) / \sqrt{\pi_0 (1 - \pi_0) / n}$, where $\pi_0$ is the mean of the $R_b$. It needs
+a stable estimate of $\pi_0$, so use at least 999 permutations when you report it.
+
+`confint()` gives an interval for RAPID. It treats the $n$ flags as independent given the fitted
+attacker. The default is the Wilson interval. `method = "clopper-pearson"` gives the exact
+binomial interval, and `"wald"` and `"bootstrap"` are available as well. The interval is for
+RAPID itself. It does not include the uncertainty of the chance level.
+
+```{r confint}
+confint(r_inc)
+confint(r_inc, method = "clopper-pearson")
+```
+
+# Choosing the threshold {#sec-threshold}
+
+How strict should the threshold be? The tolerance $\varepsilon$ says when a guess counts as a
+disclosure. It is a policy choice, made with the target in mind: 10 % is narrow for a target that
+varies over orders of magnitude and wide for one with a small relative spread. The absolute
+metric (`num_error_metric = "absolute"`) takes the tolerance in the units of the target, for
+example 2 years of age, and has no default. The threshold $\tau$ says how much of the possible
+gain the attacker must reach. The paper uses $\tau = 0.3$ as a reference value for both types of
+target.
+
+The curve of RAPID over $\tau$, with the chance level at each $\tau$, shows how the result depends
+on the choice:
+
+```{r plot-curve, fig.cap = "RAPID and chance level against the threshold tau, income, linear model."}
+plot(r_inc, which = 3)
+```
+
+There are two data-driven choices. `threshold_rule = "permutation"` replaces $\tau$ by the
+95 % quantile (`perm_level`) of all permuted gains, so that about 5 % of the records or fewer pass
+it when the predictions carry no information.
+
+```{r perm-threshold}
+r_perm <- update(r_inc, threshold_rule = "permutation")
+r_perm$threshold
+```
+
+Here the permutation threshold is `r f3(r_perm$threshold)`, and RAPID is `r f3(r_perm$rapid)` at
+a chance level of `r f3(r_perm$chance)`. `rapid_threshold_select()` scans a grid of thresholds
+(default 0.05 to 0.95) and compares RAPID at each with the 95 % quantile of its permutation
+distribution. It recommends the largest threshold at which RAPID is still above that quantile,
+the strictest threshold the release still fails.
+
+```{r threshold-select}
+ts <- rapid_threshold_select(r_inc, seed = 1)
+ts
+```
+
+Above $\tau$ = `r ts$threshold_star` no threshold is significant. The gain of a record is below
+its confidence, and the confidence of the linear model never exceeds `r f3(max(r_inc$records$g))`
+here (see the plot of $g$ against $b$). Thresholds near that value flag almost no record. Each
+threshold of the grid is tested on its own, without a correction for testing many. Read the
+recommended threshold as a description, and test the threshold you settle on with `rapid_test()`.
+
+# Inference and reproduction: which attacker answers which question {#sec-attackers}
+
+Does it matter which model the attacker uses? It does, and the attackers answer different
+questions. To see this, consider a second release that is an exact copy of the first 300 original
+records. Records 301 to 400 were not used for it and serve as a holdout in [the section on the
+holdout](#sec-holdout).
+
+```{r copy}
+released <- orig[1:300, ]
+holdout  <- orig[301:400, ]
+attack_copy <- function(...) {
+  rapid(released, released, key_vars = kv, target_var = "income",
+        holdout = holdout, seed = 1, ...)
+}
+fits <- list(
+  lm = attack_copy(model_type = "lm"),
+  rf_node_1 = attack_copy(model_type = "rf", min.node.size = 1),
+  rf_node_5 = attack_copy(model_type = "rf"),
+  rf_node_20 = attack_copy(model_type = "rf", min.node.size = 20),
+  lookup = attack_copy(model_type = "lookup")
+)
+if (has_rpart) fits$cart <- attack_copy(model_type = "cart")
+copy_table <- data.frame(
+  attacker = vapply(fits, function(x) x$attacker, ""),
+  rapid = vapply(fits, function(x) x$rapid, 0),
+  chance = vapply(fits, function(x) x$chance, 0),
+  excess = vapply(fits, function(x) x$excess, 0)
+)
+knitr::kable(copy_table, digits = 3, caption = "RAPID on a copied release.")
+```
+
+*Generalising attackers* learn how the target depends on the quasi-identifiers. The linear model
+has a handful of parameters and cannot reproduce single records. It flags `r f3(fits$lm$rapid)` of
+the copied records and `r f3(fits$lm$holdout$rapid)` of the holdout records, so it cannot tell the
+copied records from the others. The tree of `model_type = "cart"` is pruned by cross-validation,
+so that its leaves describe groups of records. These attackers measure inference from the
+quasi-identifiers, which any release that keeps the dependence allows, for the persons in the
+original data and for others alike. For a continuous target, the linear model works on the scale
+that `num_scale = "auto"` chooses. On the income of this example the identity scale fits worse and
+flags fewer records:
+
+```{r lm-scale}
+update(r_inc, num_scale = "identity")$rapid
+```
+
+The *lookup attacker* (`model_type = "lookup"`) is one fully grown tree that reads off the
+released records with the same key values. It measures whether the release reproduces the values
+of the records. On the copy it flags `r f3(fits$lookup$rapid)` of the records. Its predictions are
+concentrated, so its chance level is high (`r f3(fits$lookup$chance)`), and only its excess can be
+read. The print adds a line that says so.
+
+The *random forest* lies between the two, and where it lies depends on ranger's minimum node size
+`min.node.size`, which `rapid()` leaves at ranger's default and reports in the attacker line.
+With node size 1 it flags `r f3(fits$rf_node_1$rapid)` of the copied records, with node size 20
+it flags `r f3(fits$rf_node_20$rapid)`. `?rapid` has a table of the same comparison for a target
+that does not depend on the quasi-identifiers, where every flag beyond chance comes from a
+reproduced record.
+
+A small RAPID or a small excess under one attacker does not show that the release is safe. It
+shows that this attacker, with these quasi-identifiers and this rule, infers little. A copied
+release looks harmless to the linear model, as the table shows.
+
+# Model suite and worst case {#sec-suite}
+
+Which attacker should be reported? The paper recommends a suite of attackers, summarized by the
+worst case. `rapid_suite()` fits one `rapid()` object per model with the same arguments and seed.
+Its default suite is random forest, pruned tree, gradient boosting and lookup attacker
+(`model_types = c("rf", "cart", "gbm", "lookup")`). Gradient boosting needs the package xgboost
+and the tree needs rpart. A model whose package is missing is skipped with a warning. Here the
+suite runs the models that need no further package:
+
+```{r suite}
+suite <- rapid_suite(orig, syn, key_vars = kv, target_var = "income",
+                     model_types = c("lm", "rf", "lookup"), seed = 1)
+suite
+```
+
+On the independent release the largest RAPID is `r f3(suite$rapid_max)` (`r suite$worst_model`),
+and the largest excess `r f3(suite$excess_max)` (`r suite$worst_model_excess`). With a lookup
+attacker in the suite, compare the models by their excess, as the print says. `rapid_suite(r1, r2)`
+also combines `rapid` objects fitted before, if they share the scenario and the rule.
+
+```{r plot-suite, fig.cap = "RAPID and chance level of each attacker of the suite."}
+plot(suite)
+```
+
+The worst case covers only the attackers in the suite. A small maximum under three attackers is
+no proof that a fourth one would infer as little.
+
+# Holdout and release-specific risk {#sec-holdout}
+
+How much of RAPID is due to the persons whose records were used for the release? The records of
+a holdout come from the same population but were not used to generate the release. `rapid()`
+scores them with the same attacker and rule. Their RAPID measures inference from the
+quasi-identifiers alone, the risk that any faithful release carries for any person of the
+population. The difference `release_specific`, RAPID minus holdout RAPID, is the part that is
+specific to the records behind the release.
+
+```{r holdout}
+fits$lm
+fits$lookup
+```
+
+For the linear model the release-specific part is `r f3(fits$lm$release_specific)`. An attacker
+that cannot reproduce records has a release-specific part near zero, so this value is noise. A
+share near `r f3(fits$lm$holdout$rapid)` estimated from `r fits$lm$holdout$n` records has a
+standard error of about
+`r f3(sqrt(fits$lm$holdout$rapid * (1 - fits$lm$holdout$rapid) / fits$lm$holdout$n))`. The lookup
+attacker flags `r f3(fits$lookup$rapid)` of the copied records and
+`r f3(fits$lookup$holdout$rapid)` of the holdout records. Its release-specific part,
+`r f3(fits$lookup$release_specific)`, is the trace of the copy. A holdout can also be stored in a
+`synth_pair` with `synth_pair(..., holdout = )`.
+
+# Contribution of the quasi-identifiers {#sec-qi}
+
+Which quasi-identifier carries the risk? `rapid_qi_contribution()` removes one quasi-identifier at
+a time from the attacker's knowledge, refits the attacker and records the drop in RAPID and in
+the excess. The argument `groups` drops sets of quasi-identifiers that carry the same
+information together. The chance level of each scenario comes from `n_permutations`
+permutations (default 99).
+
+```{r qi}
+qi <- rapid_qi_contribution(orig, syn, key_vars = kv, target_var = "income",
+                            model_type = "lm", n_permutations = 19, seed = 1)
+qi
+```
+
+Without age or without education the linear model flags no record at all. Without sex RAPID falls
+to `r f3(qi$results$rapid[qi$results$dropped == "sex"])`. Removing region changes almost nothing,
+as the simulation intended. A small drop means that the quasi-identifier is not needed given the
+others. It does not mean that it is harmless on its own. With one release, differences of a few
+thousandths are within the noise of the fit.
+
+# Cross-validation of a synthesizer {#sec-cv}
+
+How risky is a synthesis method, as opposed to one release of it? `rapid_synthesizer_cv()` splits
+the original data into `k` folds (default 5), trains the synthesizer on all folds but one, and
+computes RAPID on the left-out fold. The synthesizer is any function that takes a data frame
+(and optionally a `seed`) and returns a synthetic one. The default is `synthpop::syn()`. Here a
+simple parametric synthesizer stands in for it. It regresses log income on the
+quasi-identifiers and draws new incomes from the fit.
+
+```{r cv}
+parametric_syn <- function(data, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  fit <- lm(log(income) ~ age + sex + education, data = data)
+  data$income <- round(exp(fitted(fit) + rnorm(nrow(data), 0, sigma(fit))))
+  data
+}
+cv <- rapid_synthesizer_cv(orig[, c(kv, "income")], synthesizer = parametric_syn,
+                           key_vars = kv, target_var = "income",
+                           model_type = "lm", seed = 1)
+cv
+```
+
+The folds give a mean RAPID of `r f3(cv$rapid)` with a mean chance level of `r f3(cv$chance)`. The
+interval is a normal interval of the mean of the `r cv$settings$k` fold values and is a rough
+guide with so few folds. The fold values come from records the synthesizer has not seen, so they
+measure the inference that the method transmits, like the holdout in [the section on the
+holdout](#sec-holdout). Once a method is chosen, compute RAPID on the final release.
+
+# Your own attacker {#sec-learner}
+
+What if the attacker you want to declare is not among the built-in ones? `rapid_learner()` builds
+one from functions. `fit(formula, data)` trains it on the release. For a continuous target,
+`predict_point(fit, newdata)` gives a point prediction and `predict_quantiles(fit, newdata, probs)`
+the predictive distribution as quantiles, which the band rule needs. For a categorical target,
+`predict_prob(fit, newdata)` gives the class probabilities. The functions are called with their
+arguments by position, in this order.
+
+The attacker below fits a linear model to the log of the target and takes its predictive
+distribution from the empirical quantiles of the residuals instead of a normal distribution.
+
+```{r learner}
+log_lm <- rapid_learner(
+  "log_lm",
+  fit = function(formula, data) lm(update(formula, log(.) ~ .), data = data),
+  predict_point = function(fit, newdata) exp(predict(fit, newdata)),
+  predict_quantiles = function(fit, newdata, probs) {
+    q <- quantile(residuals(fit), probs, names = FALSE)
+    exp(outer(predict(fit, newdata), q, "+"))
+  }
+)
+r_own <- rapid(orig, syn, key_vars = kv, target_var = "income",
+               model_type = log_lm, seed = 1)
+r_own
+```
+
+It gives RAPID `r f3(r_own$rapid)`, close to the `r f3(r_inc$rapid)` of the built-in linear model
+on the log scale. A user-defined attacker can be used wherever `model_type` is accepted, also in
+`rapid_suite()`, `rapid_qi_contribution()` and `rapid_synthesizer_cv()`.
+
+# Migration from 0.2.0 {#sec-migration}
+
+Which results change, and how do you get the old ones? Release 0.3.0 changes the default rules,
+so a call that ran in 0.2.0 gives a different value now. Each line below gives a call of 0.2.0
+and the call that gives the same rule in 0.3.0 (`?rapid`, section "Changes in 0.3.0").
+
+| 0.2.0 | 0.3.0 equivalent |
+|-------|------------------|
+| `rapid(X, Y, kv, tv)`, continuous target | `rapid(X, Y, kv, tv, num_eval_method = "point", num_epsilon = 0.1)` |
+| `num_epsilon = 10` (percent) | `num_epsilon = 0.1` (proportion) |
+| `num_epsilon_type = "absolute", num_epsilon = 2` | `num_error_metric = "absolute", num_epsilon = 2` |
+| `rapid(X, Y, kv, tv)`, categorical target | `rapid(X, Y, kv, tv, cat_eval_method = "RCS_conditional")` |
+| `model_type = "lm"` | `model_type = "lm", num_scale = "identity"` |
+| `model_type = "cart"` | `model_type = "cart", prune = FALSE, cp = 0.01, minsplit = 20, minbucket = 7` |
+| `return_all_records = FALSE` | `as.data.frame(x, at_risk_only = TRUE)` |
+| `rapid(original_data = X, synthetic_data = Y, quasi_identifiers = kv, sensitive_attribute = tv)` | unchanged, the old names are aliases |
+
+The risk levels LOW, MEDIUM and HIGH of `summary()` are gone. Read the excess over the chance
+level and `rapid_test()` instead. `rumap()` now reports the excess of a random forest attacker,
+`max(0, rapid - chance)`, and `disclosure_report()` passes RAPID when the p-value of
+`rapid_test()` is above `rapid_alpha` (default 0.05). For a release under the point rule,
+`rapid_threshold_select()` now recommends the smallest significant tolerance, which is the
+strictest. `NEWS.md` lists all changes.
+
+The RAPID paper [@templ2026rapid] and the RAPID package of Oscar Thees use the band rule with the
+defaults of this vignette and three settings that differ from the defaults here:
+`num_dist = "grid"` (every predictive distribution as 100 quantiles), `num_scale = "identity"`
+(the linear model on the scale of the target) and, for the tree,
+`prune = FALSE, cp = 0.01, minsplit = 20, minbucket = 7` (the rpart defaults without pruning).
+`minsplit` must be given, because with `minbucket = 7` alone rpart sets `minsplit = 21`.
+
+```{r paper-settings, eval = has_rpart}
+rapid(orig, syn, key_vars = kv, target_var = "income", model_type = "cart",
+      num_dist = "grid", prune = FALSE, cp = 0.01, minsplit = 20, minbucket = 7,
+      seed = 1)
+```
+
+With these settings the results for the linear model and the tree agree with those of the RAPID
+package. The results for the forest and gradient boosting agree up to the random draws of the
+two implementations.
+
+# References {-}
