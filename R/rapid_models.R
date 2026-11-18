@@ -765,8 +765,9 @@
 #' default) needs it, the point rule does not. \code{num_dist = "auto"} and
 #' \code{"grid"} both use these quantiles, and \code{"exact"} is not available.
 #'
-#' The output of the functions is checked (dimensions, names, no \code{NA}),
-#' and a violation is an error of class \code{"rapid_error_model"}. Errors raised
+#' The output of the functions is checked (dimensions, names, no \code{NA},
+#' probabilities between 0 and 1 whose sum per record is at most 1), and a
+#' violation is an error of class \code{"rapid_error_model"}. Errors raised
 #' inside the functions are passed on unchanged. Records with a
 #' quasi-identifier level that the synthetic data do not contain are refused
 #' with an error of class \code{"rapid_error_levels"}, before the functions are
@@ -968,12 +969,27 @@ print.rapid_learner <- function(x, ...) {
                         "must return a matrix with the class names as column names")
   }
   unknown <- setdiff(colnames(P), levels)
-  if (length(unknown) > 0 || anyDuplicated(colnames(P)) > 0) {
-    .learner_bad_output(learner, "predict_prob",
-                        paste0("must have distinct class names of the target as column ",
-                               "names; unknown: ", paste(unknown, collapse = ", ")))
+  duplicated_names <- unique(colnames(P)[duplicated(colnames(P))])
+  if (length(unknown) > 0 || length(duplicated_names) > 0) {
+    .learner_bad_output(learner, "predict_prob", c(
+      "must have distinct class names of the target as column names (",
+      paste(c(if (length(unknown) > 0) paste("unknown:", paste(unknown, collapse = ", ")),
+              if (length(duplicated_names) > 0) {
+                paste("duplicated:", paste(duplicated_names, collapse = ", "))
+              }), collapse = "; "), ")"))
   }
   if (anyNA(P)) .learner_bad_output(learner, "predict_prob", "returned NA")
+  # Probabilities, not scores such as the linear predictor of glm
+  if (any(P < -1e-8 | P > 1 + 1e-8)) {
+    .learner_bad_output(learner, "predict_prob", c(
+      "must return probabilities between 0 and 1, but returned values from ",
+      format(min(P)), " to ", format(max(P)), " (for glm, use predict(type = \"response\"))"))
+  }
+  if (any(rowSums(P) > 1 + 1e-8)) {
+    .learner_bad_output(learner, "predict_prob", c(
+      "must return probabilities whose sum per record is at most 1, but the largest sum is ",
+      format(max(rowSums(P)))))
+  }
   .learner_probs(P, levels)
 }
 

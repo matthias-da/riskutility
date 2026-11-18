@@ -82,8 +82,9 @@ matrix of quantiles. The band rule (\code{num_eval_method = "band"}, the
 default) needs it, the point rule does not. \code{num_dist = "auto"} and
 \code{"grid"} both use these quantiles, and \code{"exact"} is not available.
 
-The output of the functions is checked (dimensions, names, no \code{NA}),
-and a violation is an error of class \code{"rapid_error_model"}. Errors raised
+The output of the functions is checked (dimensions, names, no \code{NA},
+probabilities between 0 and 1 whose sum per record is at most 1), and a
+violation is an error of class \code{"rapid_error_model"}. Errors raised
 inside the functions are passed on unchanged. Records with a
 quasi-identifier level that the synthetic data do not contain are refused
 with an error of class \code{"rapid_error_levels"}, before the functions are

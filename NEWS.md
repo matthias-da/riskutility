@@ -98,7 +98,10 @@ Several defaults change reported values. Each item below gives the call that rep
   and the largest excess with the model that has it. It has `print()`, `summary()`, `plot()`,
   `as.data.frame()` and `[[`.
 * `rapid_learner()` builds a user-defined attacker from a fitting function and prediction
-  functions. It is accepted wherever `model_type` is.
+  functions. It is accepted wherever `model_type` is. The output of the prediction functions is checked.
+  `predict_prob` must return probabilities between 0 and 1 whose sum per record is at most 1, so
+  that scores such as the linear predictor of `glm` are refused with an error of class
+  `rapid_error_model`.
 * `rapid(..., holdout = )` (or the holdout of a `synth_pair`) scores records that were not used
   for the release with the same attacker and rule. The result holds their RAPID, chance level
   and excess (`holdout`) and `release_specific`, RAPID minus holdout RAPID.

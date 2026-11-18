@@ -216,6 +216,33 @@ test_that("a fit function that returns NULL is a classed model error", {
                regexp = "'fit'", class = "rapid_error_model")
 })
 
+test_that("predict_prob must return probabilities", {
+  oc <- sim_categorical(80)
+  prob_learner <- function(values, classes = c("a", "b", "c")) {
+    rapid_learner("p", fit = function(formula, data) 1,
+                  predict_prob = function(fit, newdata) {
+                    matrix(values, nrow(newdata), length(classes), byrow = TRUE,
+                           dimnames = list(NULL, classes))
+                  })
+  }
+  # Scores instead of probabilities (predict() of glm without type = "response")
+  expect_error(rapid(oc, oc, qi, "y", model_type = prob_learner(c(5, -4, 0)), n_perm = 0),
+               regexp = "between 0 and 1", class = "rapid_error_model")
+  expect_error(rapid(oc, oc, qi, "y", model_type = prob_learner(c(0.6, 0.6, 0.6)),
+                     n_perm = 0),
+               regexp = "sum", class = "rapid_error_model")
+  err <- expect_error(rapid(oc, oc, qi, "y", n_perm = 0,
+                            model_type = prob_learner(c(0.2, 0.3, 0.5), c("a", "a", "b"))),
+                      class = "rapid_error_model")
+  expect_match(conditionMessage(err), "duplicated: a", fixed = TRUE)
+  expect_no_match(conditionMessage(err), "unknown: .", fixed = TRUE)
+  # A row sum below 1 is accepted; rounding above 1 as well
+  expect_s3_class(rapid(oc, oc, qi, "y", model_type = prob_learner(c(0.2, 0.2, 0.2)),
+                        n_perm = 0), "rapid")
+  expect_s3_class(rapid(oc, oc, qi, "y", n_perm = 0,
+                        model_type = prob_learner(c(0.2, 0.3, 0.5 + 1e-12))), "rapid")
+})
+
 test_that("a quasi-identifier level the synthetic data lack is the classed level error", {
   o <- sim_numeric(80)
   o$g <- factor(rep(c("u", "v"), 40))
