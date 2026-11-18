@@ -1,15 +1,15 @@
 #' Confidence Intervals for RAPID Risk Estimates
 #'
 #' Computes confidence intervals for the RAPID disclosure risk measure
-#' (proportion of records at risk). Three methods are available: Wald
-#' (normal approximation), Wilson (score interval, recommended), and
-#' bootstrap (percentile).
+#' (proportion of records at risk). Four methods are available: Wald
+#' (normal approximation), Wilson (score interval, recommended),
+#' Clopper-Pearson (exact) and bootstrap (percentile).
 #'
 #' @param object An object of class \code{"rapid"}.
 #' @param parm Unused; included for compatibility with the generic.
 #' @param level Confidence level (default 0.95).
-#' @param method One of \code{"wilson"} (default), \code{"wald"}, or
-#'   \code{"bootstrap"}.
+#' @param method One of \code{"wilson"} (default), \code{"wald"},
+#'   \code{"clopper-pearson"}, or \code{"bootstrap"}.
 #' @param n_bootstrap Number of bootstrap replicates (default 1000).
 #'   Only used when \code{method = "bootstrap"}.
 #' @param seed Optional random seed for the bootstrap.
@@ -27,6 +27,9 @@
 #'     Can produce intervals outside \eqn{[0,1]}.}
 #'   \item{wilson}{Score interval (Wilson, 1927). Has better coverage
 #'     near 0 and 1; recommended as the default.}
+#'   \item{clopper-pearson}{Exact interval from beta quantiles
+#'     (Clopper and Pearson, 1934), equal to \code{binom.test()}; bounds 0 at
+#'     \code{n_at_risk = 0} and 1 at \code{n_at_risk = n_total}. Conservative.}
 #'   \item{bootstrap}{Resamples the \code{at_risk} indicators from
 #'     \code{object$records} and returns percentile confidence limits.
 #'     No model refitting is needed.}
@@ -40,6 +43,9 @@
 #' Wilson, E.B. (1927). Probable Inference, the Law of Succession, and
 #' Statistical Inference. \emph{Journal of the American Statistical Association},
 #' 22(158), 209--212.
+#'
+#' Clopper, C.J. and Pearson, E.S. (1934). The use of confidence or fiducial limits
+#' illustrated in the case of the binomial. \emph{Biometrika}, 26(4), 404--413.
 #'
 #' @seealso \code{\link{rapid}}, \code{\link{rapid_test}}
 #'
@@ -59,6 +65,7 @@
 #'            target_var = "income", model_type = "lm")
 #' confint(r)
 #' confint(r, method = "wald")
+#' confint(r, method = "clopper-pearson")
 #'
 #' \donttest{
 #' # With random forest model and bootstrap CI
@@ -70,10 +77,11 @@
 #'
 #' @export
 confint.rapid <- function(object, parm = NULL, level = 0.95,
-                          method = c("wilson", "wald", "bootstrap"),
+                          method = c("wilson", "wald", "clopper-pearson", "bootstrap"),
                           n_bootstrap = 1000, seed = NULL, ...) {
   .rapid_require(object, "version")
-  method <- match.arg(method)
+  method <- .rapid_choice(method, c("wilson", "wald", "clopper-pearson", "bootstrap"),
+                           "method")
 
   p <- object$rapid
   n <- object$n_total
@@ -91,6 +99,12 @@ confint.rapid <- function(object, parm = NULL, level = 0.95,
       centre <- (p + z^2 / (2 * n)) / denom
       margin <- z * sqrt(p * (1 - p) / n + z^2 / (4 * n^2)) / denom
       c(centre - margin, centre + margin)
+    },
+
+    "clopper-pearson" = {
+      k <- object$n_at_risk
+      c(if (k == 0) 0 else stats::qbeta(alpha / 2, k, n - k + 1),
+        if (k == n) 1 else stats::qbeta(1 - alpha / 2, k + 1, n - k))
     },
 
     bootstrap = {

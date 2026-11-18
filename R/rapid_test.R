@@ -38,6 +38,11 @@
 #'   \item{significant}{Logical; \code{TRUE} if \code{p_value <= alpha}.}
 #'   \item{null_mean, chance}{Mean of the null distribution (the chance level).}
 #'   \item{excess}{\code{rapid - chance}.}
+#'   \item{wald}{List \code{(z, p_value, pi0)}: Wald test of \code{rapid} against the chance
+#'     level \code{pi0 = null_mean}, \eqn{z = (rapid - pi0) / \sqrt{pi0 (1 - pi0) / n}},
+#'     one-sided \code{p_value = 1 - pnorm(z)}; \code{z} and \code{p_value} are \code{NA}
+#'     when \code{pi0} is 0 or 1. It relies on a stable null mean: use
+#'     \code{n_permutations >= 999}.}
 #'   \item{null_sd}{Standard deviation of the null distribution.}
 #'   \item{null_quantiles}{Null quantiles (5, 50, 95 percent).}
 #'   \item{observed_rapid}{The \code{rapid} object that was tested.}
@@ -103,6 +108,7 @@ rapid_test.rapid <- function(X, n_permutations = 199, alpha = 0.05, seed = NULL,
   statistic <- X$rapid
   p_value <- (1 + sum(null >= statistic)) / (1 + n_permutations)
   chance <- mean(null)
+  wald <- .rapid_wald(statistic, chance, X$n_total)
 
   structure(list(
     statistic = statistic,
@@ -115,11 +121,38 @@ rapid_test.rapid <- function(X, n_permutations = 199, alpha = 0.05, seed = NULL,
     null_mean = chance,
     chance = chance,
     excess = statistic - chance,
+    wald = wald,
     null_sd = if (n_permutations > 1) stats::sd(null) else NA_real_,
     null_quantiles = stats::quantile(null, probs = c(0.05, 0.50, 0.95)),
     observed_rapid = X,
     method = "permutation"
   ), class = "rapid_test")
+}
+
+# Wald test of RAPID against the chance level pi0 (the null mean); one-sided. Not defined
+# (NA) when pi0 is 0 or 1.
+.rapid_wald <- function(statistic, pi0, n) {
+  z <- if (is.finite(pi0) && pi0 > 0 && pi0 < 1) {
+    (statistic - pi0) / sqrt(pi0 * (1 - pi0) / n)
+  } else NA_real_
+  list(z = z, p_value = if (is.na(z)) NA_real_ else 1 - stats::pnorm(z), pi0 = pi0)
+}
+
+# Printed lines of the Wald test (and the hint for few permutations)
+.rapid_wald_lines <- function(x, digits = 3) {
+  w <- x$wald
+  if (is.null(w)) return(NULL)
+  out <- if (is.na(w$z)) {
+    "Wald test: not defined (the chance level is 0 or 1)"
+  } else {
+    paste0("Wald test against the chance level: z = ", formatC(w$z, digits = digits,
+           format = "f"), ", one-sided p-value = ", formatC(w$p_value, digits = 4,
+           format = "f"))
+  }
+  if (x$n_permutations < 999) {
+    out <- c(out, "Hint: use n_permutations >= 999 for the Wald test")
+  }
+  out
 }
 
 #' @rdname rapid_test
@@ -150,7 +183,8 @@ format.rapid_test <- function(x, digits = 3, ...) {
     paste0("p-value = ", formatC(x$p_value, digits = 4, format = "f"), " (alpha = ",
            format(x$alpha), "): RAPID is ",
            if (x$significant) "significantly above" else "not significantly above",
-           " the chance level")
+           " the chance level"),
+    .rapid_wald_lines(x, digits)
   )
 }
 
@@ -177,6 +211,7 @@ summary.rapid_test <- function(object, ...) {
     excess = object$excess,
     null_sd = object$null_sd,
     null_quantiles = object$null_quantiles,
+    wald = object$wald,
     effect_size = (object$statistic - object$null_mean) / max(object$null_sd, 1e-10),
     rule = format(object$observed_rapid$rule),
     method = object$method
@@ -203,7 +238,8 @@ format.summary.rapid_test <- function(x, ...) {
     paste0("  Effect size:   ", formatC(x$effect_size, digits = 2, format = "f"),
            " (standardized)"),
     if (x$significant) "Conclusion: RAPID is significantly above the chance level."
-    else "Conclusion: RAPID is not significantly above the chance level."
+    else "Conclusion: RAPID is not significantly above the chance level.",
+    .rapid_wald_lines(x, 4)
   )
 }
 

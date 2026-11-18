@@ -8,7 +8,7 @@
   object,
   parm = NULL,
   level = 0.95,
-  method = c("wilson", "wald", "bootstrap"),
+  method = c("wilson", "wald", "clopper-pearson", "bootstrap"),
   n_bootstrap = 1000,
   seed = NULL,
   ...
@@ -21,8 +21,8 @@
 
 \item{level}{Confidence level (default 0.95).}
 
-\item{method}{One of \code{"wilson"} (default), \code{"wald"}, or
-\code{"bootstrap"}.}
+\item{method}{One of \code{"wilson"} (default), \code{"wald"},
+\code{"clopper-pearson"}, or \code{"bootstrap"}.}
 
 \item{n_bootstrap}{Number of bootstrap replicates (default 1000).
 Only used when \code{method = "bootstrap"}.}
@@ -38,9 +38,9 @@ convention.
 }
 \description{
 Computes confidence intervals for the RAPID disclosure risk measure
-(proportion of records at risk). Three methods are available: Wald
-(normal approximation), Wilson (score interval, recommended), and
-bootstrap (percentile).
+(proportion of records at risk). Four methods are available: Wald
+(normal approximation), Wilson (score interval, recommended),
+Clopper-Pearson (exact) and bootstrap (percentile).
 }
 \details{
 The RAPID score is a sample proportion (number at risk / total).
@@ -54,6 +54,9 @@ i.i.d. Bernoulli, making binomial confidence intervals valid.
 Can produce intervals outside \eqn{[0,1]}.}
 \item{wilson}{Score interval (Wilson, 1927). Has better coverage
 near 0 and 1; recommended as the default.}
+\item{clopper-pearson}{Exact interval from beta quantiles
+(Clopper and Pearson, 1934), equal to \code{binom.test()}; bounds 0 at
+\code{n_at_risk = 0} and 1 at \code{n_at_risk = n_total}. Conservative.}
 \item{bootstrap}{Resamples the \code{at_risk} indicators from
 \code{object$records} and returns percentile confidence limits.
 No model refitting is needed.}
@@ -73,6 +76,7 @@ r <- rapid(X, Y, key_vars = c("age", "sex"),
            target_var = "income", model_type = "lm")
 confint(r)
 confint(r, method = "wald")
+confint(r, method = "clopper-pearson")
 
 \donttest{
 # With random forest model and bootstrap CI
@@ -87,6 +91,9 @@ confint(r2, method = "bootstrap", n_bootstrap = 500)
 Wilson, E.B. (1927). Probable Inference, the Law of Succession, and
 Statistical Inference. \emph{Journal of the American Statistical Association},
 22(158), 209--212.
+
+Clopper, C.J. and Pearson, E.S. (1934). The use of confidence or fiducial limits
+illustrated in the case of the binomial. \emph{Biometrika}, 26(4), 404--413.
 }
 \seealso{
 \code{\link{rapid}}, \code{\link{rapid_test}}

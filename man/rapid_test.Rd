@@ -88,6 +88,11 @@ An object of class \code{"rapid_test"} with components:
 \item{significant}{Logical; \code{TRUE} if \code{p_value <= alpha}.}
 \item{null_mean, chance}{Mean of the null distribution (the chance level).}
 \item{excess}{\code{rapid - chance}.}
+\item{wald}{List \code{(z, p_value, pi0)}: Wald test of \code{rapid} against the chance
+level \code{pi0 = null_mean}, \eqn{z = (rapid - pi0) / \sqrt{pi0 (1 - pi0) / n}},
+one-sided \code{p_value = 1 - pnorm(z)}; \code{z} and \code{p_value} are \code{NA}
+when \code{pi0} is 0 or 1. It relies on a stable null mean: use
+\code{n_permutations >= 999}.}
 \item{null_sd}{Standard deviation of the null distribution.}
 \item{null_quantiles}{Null quantiles (5, 50, 95 percent).}
 \item{observed_rapid}{The \code{rapid} object that was tested.}

@@ -436,3 +436,65 @@ test_that("CV print, summary and plot methods", {
   expect_false(p$visible)
   expect_s3_class(p$value, "ggplot")
 })
+
+# ==========================================================================
+# Wald test and Clopper-Pearson interval
+# ==========================================================================
+
+.wald_fit <- function() {
+  d <- .make_test_data(n = 60)
+  rapid(X = d$original, Y = d$synthetic, key_vars = c("age", "gender"),
+        target_var = "income", model_type = "lm", num_epsilon = 0.5, verbose = FALSE)
+}
+
+test_that("Wald z matches the formula", {
+  r <- .wald_fit()
+  tt <- rapid_test(r, n_permutations = 19, seed = 1)
+  pi0 <- tt$null_mean
+  n <- tt$observed_rapid$n_total
+  z <- (tt$statistic - pi0) / sqrt(pi0 * (1 - pi0) / n)
+  expect_equal(tt$wald$pi0, pi0)
+  expect_equal(tt$wald$z, z)
+  expect_equal(tt$wald$p_value, 1 - stats::pnorm(z))
+  out <- format(tt)
+  expect_true(any(grepl("Wald", out)))
+  expect_true(any(grepl("use n_permutations >= 999 for the Wald test", out, fixed = TRUE)))
+  tt2 <- rapid_test(r, n_permutations = 999, seed = 1)
+  expect_false(any(grepl("use n_permutations >= 999", format(tt2), fixed = TRUE)))
+})
+
+test_that("Wald is NA when the null mean is 0", {
+  r <- .wald_fit()
+  tt <- rapid_test(r, n_permutations = 9, seed = 1)
+  tt$null_mean <- 0
+  tt$wald <- .rapid_wald(tt$statistic, 0, tt$observed_rapid$n_total)
+  expect_true(is.na(tt$wald$z))
+  expect_true(is.na(tt$wald$p_value))
+  expect_true(any(grepl("not defined", format(tt))))
+})
+
+test_that("Clopper-Pearson equals binom.test", {
+  r <- .wald_fit()
+  expect_equal(r$n_at_risk > 0 && r$n_at_risk < r$n_total, TRUE)
+  for (lev in c(0.95, 0.9)) {
+    ci <- confint(r, method = "clopper-pearson", level = lev)
+    ref <- as.numeric(stats::binom.test(r$n_at_risk, r$n_total, conf.level = lev)$conf.int)
+    expect_equal(as.numeric(ci), ref, tolerance = 1e-12)
+  }
+})
+
+test_that("Clopper-Pearson at k = 0 and k = n has bounds 0 and 1", {
+  r <- .wald_fit()
+  r0 <- r
+  r0$n_at_risk <- 0L
+  r0$rapid <- 0
+  ci0 <- confint(r0, method = "clopper-pearson")
+  expect_equal(ci0[1, 1], 0)
+  expect_gt(ci0[1, 2], 0)
+  r1 <- r
+  r1$n_at_risk <- r$n_total
+  r1$rapid <- 1
+  ci1 <- confint(r1, method = "clopper-pearson")
+  expect_equal(ci1[1, 2], 1)
+  expect_lt(ci1[1, 1], 1)
+})
