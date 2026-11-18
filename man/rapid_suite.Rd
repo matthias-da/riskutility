@@ -52,7 +52,7 @@ rapid_suite(X, ...)
 object}
 
 \item{...}{for the data methods, arguments of \code{\link{rapid}} that go to
-every model (for example \code{num_tau}, \code{n_perm}); the old argument
+every model (for example \code{num_tau}, \code{n_perm}). The old argument
 names are accepted. For the \code{rapid} method, further \code{rapid}
 objects.}
 
@@ -64,7 +64,7 @@ objects.}
 
 \item{model_types}{character vector of attacker models, any of
 \code{"rf"}, \code{"lm"}, \code{"cart"}, \code{"gbm"}, \code{"logit"},
-\code{"lookup"} (default \code{c("rf", "cart", "gbm", "lookup")}); a
+\code{"lookup"} (default \code{c("rf", "cart", "gbm", "lookup")}). A
 \code{\link{rapid_learner}()} object, or a list of names and such objects,
 is accepted as well. The models are named by their \code{name}, which must
 be distinct.}
@@ -97,11 +97,17 @@ with \code{n_perm = 0}).}
 fits, and the notes of the models that carry one.}
 }
 \code{suite[["rf"]]} returns the \code{rapid} object of a model.
+\code{format()} returns the printed lines and \code{print()} the object,
+invisibly. \code{summary()} returns an object of class
+\code{"summary.rapid_suite"} that adds \code{n_flagged_all}, the number of
+records flagged by every model. \code{plot()} draws RAPID and the chance
+level of each model and returns the ggplot object, invisibly.
+\code{as.data.frame()} returns \code{results}.
 }
 \description{
 Fits one \code{\link{rapid}} object per attacker model on the same data and
-collects their RAPID, chance level and excess. The RAPID of a suite is
-judged by its worst case, the strongest attacker, not by one model.
+collects their RAPID, chance level and excess. A suite is judged by its
+worst case, the strongest of its attackers (Templ, Thees and Müller, 2026).
 }
 \details{
 Every model is fitted with the arguments in \code{...} and the same
@@ -109,20 +115,20 @@ Every model is fitted with the arguments in \code{...} and the same
 \code{rapid(X, Y, key_vars, target_var, model_type = "rf", ..., seed = seed)}.
 A model whose backend package is not installed, or that does not support the
 type of the target, is skipped with a warning of class
-\code{"rapid_warning_skipped_model"}; if no model is left the call stops with
-an error of class \code{"rapid_error_model"}. Every other error of
+\code{"rapid_warning_skipped_model"}. If no model is left, the call stops
+with an error of class \code{"rapid_error_model"}. Every other error of
 \code{rapid()} is passed on.
 
 The lookup attacker predicts a record from the synthetic records with the
-same quasi-identifiers. Its RAPID is readable only against its chance level,
-so compare the models by \code{excess_max} and \code{worst_model_excess},
-not by \code{rapid_max}, when one is in the suite; the print says so.
+same quasi-identifiers. Its RAPID is readable only against its chance level.
+When it is in the suite, compare the models by \code{excess_max} and
+\code{worst_model_excess}, as the print says.
 
 \code{rapid_suite()} on \code{rapid} objects combines objects that were
 fitted already. They must agree in \code{target_var}, \code{key_vars},
 \code{n_total} and scoring rule (else an error of class
 \code{"rapid_error_object"} names the field). The results are named by the
-names given in \code{...}, or by the \code{model_type} of the object; two
+names given in \code{...}, or by the \code{model_type} of the object. Two
 objects with the same name are an error.
 }
 \examples{
@@ -136,38 +142,57 @@ X$income <- X$income + 500 * X$age
 Y <- X
 Y$income <- Y$income + rnorm(80, 0, 5000)
 
-# The lm attacker only needs base R
-s <- rapid_suite(X, Y, key_vars = c("age", "sex"), target_var = "income",
-                 model_types = "lm", n_perm = 3, seed = 1)
+# From fitted objects: they must share target, key variables, records and rule
+fit_lm <- rapid(X, Y, key_vars = c("age", "sex"), target_var = "income",
+                model_type = "lm", n_perm = 3, seed = 1)
+fit_lookup <- rapid(X, Y, key_vars = c("age", "sex"), target_var = "income",
+                    model_type = "lookup", n_perm = 3, seed = 1)
+s <- rapid_suite(fit_lm, lookup = fit_lookup)
 s
+summary(s)
+as.data.frame(s)
+s[["lookup"]]
+plot(s)
+
+# From the data, here with the linear model and a user-defined attacker
+my_lm <- rapid_learner(
+  "my_lm", fit = stats::lm,
+  predict_point = function(fit, newdata) predict(fit, newdata),
+  predict_quantiles = function(fit, newdata, probs) {
+    p <- predict(fit, newdata, se.fit = TRUE)
+    outer(p$fit, rep(1, length(probs))) +
+      outer(sqrt(p$se.fit^2 + p$residual.scale^2), qnorm(probs))
+  }
+)
+rapid_suite(X, Y, key_vars = c("age", "sex"), target_var = "income",
+            model_types = list("lm", my_lm), n_perm = 3, seed = 1)
 
 \donttest{
-if (requireNamespace("ranger", quietly = TRUE) &&
-    requireNamespace("rpart", quietly = TRUE)) {
-  s <- rapid_suite(X, Y, key_vars = c("age", "sex"), target_var = "income",
-                   model_types = c("rf", "cart", "lookup"), n_perm = 3, seed = 1)
-  summary(s)
-  s[["rf"]]
-  plot(s)
-}
+# The default suite: rf, cart, gbm and lookup (models whose package is
+# missing are skipped with a warning)
+s_all <- rapid_suite(X, Y, key_vars = c("age", "sex"), target_var = "income",
+                     n_perm = 3, seed = 1)
+s_all
 }
 
 }
+\references{
+Templ, M., Thees, O. and Müller, R. (2026). RAPID: Risk of Attribute
+Prediction-Induced Disclosure. Manuscript under review at EPJ Data Science.
+}
 \seealso{
-\code{\link{rapid}}, \code{\link{rapid_test}}
+\code{\link{rapid}}, \code{\link{rapid_learner}},
+\code{\link{rapid_test}}
 
 Other rapid: 
 \code{\link{confint.rapid}()},
-\code{\link{predict.rapid}()},
+\code{\link{plot.rapid}()},
 \code{\link{rapid}()},
 \code{\link{rapid_learner}()},
-\code{\link{rapid_methods}},
 \code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_synthesizer_cv}()},
 \code{\link{rapid_test}()},
-\code{\link{rapid_threshold_select}()},
-\code{\link{summary.rapid}()},
-\code{\link{update.rapid}()}
+\code{\link{rapid_threshold_select}()}
 }
 \author{
 Oscar Thees, Matthias Templ

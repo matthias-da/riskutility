@@ -92,11 +92,23 @@ An object of class \code{"rapid_cv"} with components:
 metrics.}
 \item{rapid, chance, excess}{Means over the folds.}
 \item{rule}{The scoring rule, taken from the first fold.}
-\item{method, threshold, model_type}{Method and threshold of the
-rule and the attacker model.}
-\item{settings}{List of CV settings (\code{k}, \code{stratified},
-etc.).}
+\item{method, threshold, model_type, attacker}{Method and threshold of
+the rule, the attacker model and its settings line, all taken from the
+first fold.}
+\item{settings}{List of the settings: \code{k}, \code{cv_type},
+\code{stratified}, \code{is_categorical}, \code{n_original},
+\code{target_var}, \code{key_vars}.}
 }
+The interval \code{ci_lower}, \code{ci_upper} is the normal interval
+\eqn{\bar R \pm z_{0.975} s / \sqrt{k}}{mean +/- qnorm(0.975) sd / sqrt(k)}
+of the mean of the \eqn{k} fold values, where \eqn{s} is their standard
+deviation. With few folds it is a rough guide.
+\code{format()} returns the printed lines and \code{print()} the object,
+invisibly. \code{summary()} returns an object of class
+\code{"summary.rapid_cv"} with the statistics over the folds and the fold
+table. \code{plot()} draws RAPID and the chance level by fold with the mean
+and its interval and returns the ggplot object, invisibly.
+\code{as.data.frame()} returns \code{folds}.
 }
 \description{
 Evaluates the RAPID disclosure risk of a synthesis method using
@@ -123,8 +135,9 @@ cv <- rapid_synthesizer_cv(df, noisy, key_vars = c("age", "sex"),
                            k = 3, seed = 1)
 cv
 summary(cv)
-\donttest{
+as.data.frame(cv)
 plot(cv)
+\donttest{
 # With synthpop as the synthesizer
 if (requireNamespace("synthpop", quietly = TRUE)) {
   cv <- rapid_synthesizer_cv(
@@ -141,25 +154,21 @@ if (requireNamespace("synthpop", quietly = TRUE)) {
 
 }
 \references{
-Thees, O., Mueller, N., & Templ, M. (2026). Beyond the Trade-off Curve:
-Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and
-Synthetic Data. \emph{Journal of Official Statistics}.
+Templ, M., Thees, O. and Müller, R. (2026). RAPID: Risk of Attribute
+Prediction-Induced Disclosure. Manuscript under review at EPJ Data Science.
 }
 \seealso{
 \code{\link{rapid}}, \code{\link{rapid_test}}
 
 Other rapid: 
 \code{\link{confint.rapid}()},
-\code{\link{predict.rapid}()},
+\code{\link{plot.rapid}()},
 \code{\link{rapid}()},
 \code{\link{rapid_learner}()},
-\code{\link{rapid_methods}},
 \code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_suite}()},
 \code{\link{rapid_test}()},
-\code{\link{rapid_threshold_select}()},
-\code{\link{summary.rapid}()},
-\code{\link{update.rapid}()}
+\code{\link{rapid_threshold_select}()}
 }
 \author{
 Oscar Thees, Matthias Templ

@@ -1,39 +1,220 @@
 # Methods for objects of class "rapid"
 
-#' Basic methods for rapid objects
+#' Methods for rapid objects
 #'
-#' \code{format()} returns the lines that \code{print()} shows: the target, the
-#' quasi-identifiers and the attacker with the settings that drive its result,
-#' the scoring rule, the share of records at risk, and where to go next.
-#' \code{as.data.frame()} returns the record table and \code{nobs()} the number
-#' of scored records.
+#' The methods that work on the result of \code{\link{rapid}()}: printing, the
+#' summary, the record table, the number of records, changing arguments,
+#' applying the attacker to new records and confidence intervals. The plot
+#' method has its own page, \code{\link{plot.rapid}}, and the functions that
+#' test, calibrate and combine fitted objects are \code{\link{rapid_test}()},
+#' \code{\link{rapid_threshold_select}()} and \code{\link{rapid_suite}()}.
 #'
-#' @param x,object an object of class "rapid"
-#' @param digits number of decimal places of the RAPID value
-#' @param row.names \code{NULL} or a character vector of row names
+#' @param x for \code{format()}, \code{print()} and \code{as.data.frame()}: an
+#'   object of class \code{"rapid"} or \code{"summary.rapid"}
+#' @param object an object of class \code{"rapid"}
+#' @param digits number of decimal places (default 3 for a \code{rapid}
+#'   object, 4 for its summary)
+#' @param row.names \code{NULL} or a character vector of row names for the
+#'   record table (ignored for a summary)
 #' @param optional not used
-#' @param at_risk_only logical, if TRUE return only the records at risk
-#' @param ... additional arguments (ignored)
-#' @return \code{format()}: a character vector. \code{print()}: the input
-#'   object, invisibly. \code{as.data.frame()}: a data frame with one row per
-#'   record (see the \code{records} component of \code{\link{rapid}}).
-#'   \code{nobs()}: the number of scored records.
+#' @param at_risk_only logical, if \code{TRUE} return only the records at risk
+#' @param common_share share of records treated as common, between 0 and 1
+#'   (default 0.7). See the section "Summary".
+#' @param level confidence level (default 0.95)
+#' @param newdata data frame with the quasi-identifiers and, optionally, the
+#'   target
+#' @param evaluate logical, if \code{FALSE} return the changed call instead of
+#'   evaluating it
+#' @param parm not used, for compatibility with the generic
+#' @param method interval of \code{confint()}: \code{"wilson"} (default),
+#'   \code{"wald"}, \code{"clopper-pearson"} or \code{"bootstrap"}
+#' @param n_bootstrap number of bootstrap replicates (default 1000), only for
+#'   \code{method = "bootstrap"}
+#' @param seed random seed of the bootstrap (default \code{NULL})
+#' @param ... for \code{update()}: the arguments of \code{\link{rapid}()} to
+#'   change, as \code{name = value}. \code{predict()} takes none and stops with
+#'   an error of class \code{"rapid_error_input"} when given one. Ignored by the
+#'   other methods.
+#'
+#' @section Printing:
+#' \code{format()} returns the lines that \code{print()} shows: the target, the
+#' quasi-identifiers and the attacker with the settings that drive its result
+#' (field \code{attacker}), the rule, RAPID with the number of records at risk,
+#' the chance level and the excess, the result on the holdout and the
+#' release-specific RAPID when there is a holdout, and the note of the lookup
+#' attacker. A line says that RAPID is not distinguishable from the chance
+#' level when the excess is at most twice the standard deviation of the shares
+#' flagged in the permutations.
+#'
+#' @section Summary:
+#' \code{summary()} reports RAPID with its Wilson interval at \code{level}, the
+#' chance level and the excess, how the flagged records are spread over rare
+#' and common values of the target, and the accuracy of the attacker's point
+#' prediction or predicted class. \code{as.data.frame()} of the summary returns
+#' its one-row table, so that the summaries of several releases or rules can be
+#' stacked with \code{rbind()}.
+#'
+#' A record counts as rare when its baseline \eqn{b_i} is below the \code{1 -
+#' common_share} quantile of the baselines of all records. The baseline is that
+#' of the rule. Under the band and the point rule it is the share of original
+#' values inside the record's tolerance band, and under \code{RCS_marginal} the
+#' share of the record's class in the original data. A low baseline then marks a
+#' rare value, where a close guess carries information. Under
+#' \code{RCS_conditional} the baseline is the mean predicted probability of the
+#' true class among the records of that class. A low baseline there marks a
+#' class to which the attacker gives little probability on average, which need
+#' not be a rare class. \code{rare_hit_rate} is the share of flagged records
+#' among the rare ones and \code{rare_rate} the share of all records that are
+#' both flagged and rare. Under \code{NCE}, which has no baseline, both are
+#' \code{NA}.
+#'
+#' @section Record table:
+#' \code{as.data.frame()} returns the field \code{records}: one row per scored
+#' record with the prepared target and quasi-identifiers, the true value of a
+#' continuous target (\code{original_value}), the columns of the rule (for the
+#' band rule \code{predicted_value, band_lo, band_hi, g, b, r}) and
+#' \code{at_risk}. The columns of each rule are listed under the value of
+#' \code{\link{rapid}}. \code{nobs()} returns the number of scored records, which
+#' is smaller than \code{nrow(X)} when \code{na_strategy = "drop"} removed
+#' records.
+#'
+#' @section Update:
+#' \code{update()} changes arguments of the call that created the object. When
+#' every changed argument only affects how the attack is scored
+#' (\code{num_eval_method}, \code{num_error_metric}, \code{num_epsilon},
+#' \code{num_delta}, \code{num_tau}, \code{cat_eval_method}, \code{cat_tau},
+#' \code{n_perm}, \code{threshold_rule}, \code{perm_level}, \code{seed}) and the
+#' object holds the attacker's predictions, the stored attack is scored again
+#' under the new rule and the model is not fitted again. The permutations then
+#' start from the seed, as in a fresh call with the same seed. Any other
+#' argument, among them the model arguments, \code{model_type},
+#' \code{num_scale}, \code{num_dist} and \code{prune}, refits: the changed call
+#' is evaluated in the caller's frame, as \code{\link[stats]{update}()} does, so
+#' the data must still be there under their names. A changed
+#' \code{num_error_metric} also refits when the linear model chose its scale
+#' under \code{num_scale = "auto"}, because that choice depends on the metric.
+#'
+#' @section Predict:
+#' \code{predict()} applies the attacker to new records. It needs an object
+#' created with \code{store_model = TRUE}, which keeps the model and, in the
+#' field \code{predictor}, the prepared synthetic data. The records are prepared
+#' like the original data: the column types of the synthetic data, the factor
+#' levels, and \code{na_strategy} for the target. A missing target value gets
+#' the value a missing value of the original data got (\code{na_constant_value},
+#' or the median of the original values), or the record is dropped under
+#' \code{na_strategy = "drop"}. Factor levels that occur neither in the original
+#' nor in the synthetic data are refused with an error of class
+#' \code{"rapid_error_levels"}, and so are, for the linear and logistic model
+#' and user-defined attackers, levels of the quasi-identifiers that the
+#' synthetic data do not contain. When \code{newdata} holds the target, the
+#' records are scored under the rule of the object as calibrated (a permutation
+#' threshold stays as found), with baselines from the original values.
+#'
+#' @section Confidence intervals:
+#' RAPID is a share of \eqn{n} flags, \eqn{\hat p = k / n}{p = k / n}. Given the
+#' fitted attacker, \code{confint()} treats the flags as independent Bernoulli
+#' trials. The interval is for RAPID itself. It does not include the
+#' uncertainty of the chance level, for which see \code{\link{rapid_test}()}.
+#' \describe{
+#'   \item{wilson}{Score interval (Wilson, 1927), the default. It stays inside
+#'     \eqn{[0, 1]} and keeps its coverage near 0 and 1.}
+#'   \item{wald}{\eqn{\hat p \pm z_{1-\alpha/2} \sqrt{\hat p (1 - \hat p) /
+#'     n}}{p +/- z * sqrt(p (1 - p) / n)}, which can leave \eqn{[0, 1]} and has
+#'     width 0 when \eqn{\hat p}{p} is 0 or 1.}
+#'   \item{clopper-pearson}{Exact interval from beta quantiles (Clopper and
+#'     Pearson, 1934), equal to that of \code{binom.test()}, with the bounds 0
+#'     at \eqn{k = 0} and 1 at \eqn{k = n}. It is conservative.}
+#'   \item{bootstrap}{Percentile interval of \code{n_bootstrap} binomial
+#'     counts with share \eqn{\hat p}{p}, which is the same as resampling the
+#'     \eqn{n} flags with replacement. The model is not fitted again.}
+#' }
+#'
+#' @return
+#' \describe{
+#'   \item{\code{format()}}{A character vector of lines.}
+#'   \item{\code{print()}}{The input object, invisibly.}
+#'   \item{\code{summary()}}{An object of class \code{"summary.rapid"}, a list
+#'     with the one-row data frame \code{table} (\code{target}, \code{model},
+#'     \code{rule}, \code{threshold}, \code{n}, \code{rapid}, \code{lower},
+#'     \code{upper}, \code{chance}, \code{excess}), \code{rare_share},
+#'     \code{n_rare}, \code{rare_hit_rate}, \code{rare_rate}, \code{level}, and
+#'     \code{n_at_risk}, \code{pct_at_risk}, \code{n_perm}, \code{method},
+#'     \code{attacker}, \code{model_metrics}, \code{is_categorical},
+#'     \code{key_vars} of the object.}
+#'   \item{\code{as.data.frame()}}{For a \code{rapid} object the record table,
+#'     for a summary its one-row \code{table}.}
+#'   \item{\code{nobs()}}{The number of scored records.}
+#'   \item{\code{update()}}{A \code{rapid} object whose \code{call} holds the
+#'     changed arguments, or the changed call if \code{evaluate = FALSE}.}
+#'   \item{\code{predict()}}{The prepared records. With the target they are
+#'     followed by the columns of the rule and \code{at_risk}, as in
+#'     \code{as.data.frame()}. Without it they are followed by
+#'     \code{predicted_value} (for the linear model on the log scale the
+#'     predictive median) or \code{predicted_class}.}
+#'   \item{\code{confint()}}{A 1 x 2 matrix with the lower and upper limit,
+#'     following the convention of \code{\link[stats]{confint}()}.}
+#' }
+#'
+#' @references
+#' Wilson, E.B. (1927). Probable Inference, the Law of Succession, and
+#' Statistical Inference. \emph{Journal of the American Statistical Association},
+#' 22(158), 209--212.
+#'
+#' Clopper, C.J. and Pearson, E.S. (1934). The use of confidence or fiducial limits
+#' illustrated in the case of the binomial. \emph{Biometrika}, 26(4), 404--413.
+#'
+#' @seealso \code{\link{rapid}}, \code{\link{plot.rapid}},
+#'   \code{\link{rapid_test}}, \code{\link{rapid_threshold_select}},
+#'   \code{\link{rapid_suite}}
+#' @author Oscar Thees, Matthias Templ
 #' @examples
 #' set.seed(1)
-#' X <- data.frame(age = sample(20:60, 100, replace = TRUE))
-#' X$income <- 20000 + 600 * X$age + rnorm(100, 0, 3000)
+#' n <- 200
+#' X <- data.frame(age = sample(20:70, n, replace = TRUE),
+#'                 sex = factor(sample(c("F", "M"), n, replace = TRUE)))
+#' X$income <- round(exp(9 + 0.03 * X$age + 0.3 * (X$sex == "M") + rnorm(n, 0, 0.1)))
 #' Y <- X
-#' Y$income <- Y$income + rnorm(100, 0, 2000)
-#' r <- rapid(X, Y, key_vars = "age", target_var = "income", model_type = "lm")
+#' Y$income <- round(Y$income * exp(rnorm(n, 0, 0.05)))
+#' r <- rapid(X, Y, key_vars = c("age", "sex"), target_var = "income",
+#'            model_type = "lm", store_model = TRUE, seed = 1)
+#'
+#' # Printing and the record table
 #' format(r)
-#' print(r)
+#' r
 #' nobs(r)
+#' head(as.data.frame(r))
 #' head(as.data.frame(r, at_risk_only = TRUE))
-#' @name rapid_methods
+#'
+#' # Summary, and the summaries of two rules in one table
+#' s <- summary(r)
+#' s
+#' r_point <- update(r, num_eval_method = "point")   # rescored, no refit
+#' rbind(as.data.frame(s), as.data.frame(summary(r_point)))
+#'
+#' # update(): the changed call, a rescore, a refit
+#' update(r, num_tau = 0.5, evaluate = FALSE)
+#' update(r, num_tau = 0.5)
+#' update(r, num_scale = "identity")                   # refits the linear model
+#'
+#' # predict(): new records with and without the target
+#' new <- data.frame(age = c(25, 45, 65), sex = c("F", "M", "M"),
+#'                   income = c(20000, 40000, 60000))
+#' predict(r, new)
+#' predict(r, new[c("age", "sex")])
+#'
+#' # Confidence intervals
+#' confint(r)
+#' confint(r, method = "clopper-pearson")
+#' confint(r, method = "bootstrap", n_bootstrap = 500, seed = 1)
+#'
+#' # Plots, see ?plot.rapid
+#' plot(r, which = 1:2)
+#' @name rapid-methods
+#' @aliases rapid_methods
 #' @family rapid
 NULL
 
-#' @rdname rapid_methods
+#' @rdname rapid-methods
 #' @export
 format.rapid <- function(x, digits = 3, ...) {
   .rapid_require(x, "version")
@@ -69,14 +250,14 @@ format.rapid <- function(x, digits = 3, ...) {
   )
 }
 
-#' @rdname rapid_methods
+#' @rdname rapid-methods
 #' @export
 print.rapid <- function(x, ...) {
   cat(format(x, ...), sep = "\n")
   invisible(x)
 }
 
-#' @rdname rapid_methods
+#' @rdname rapid-methods
 #' @export
 as.data.frame.rapid <- function(x, row.names = NULL, optional = FALSE, ...,
                                 at_risk_only = FALSE) {
@@ -87,7 +268,7 @@ as.data.frame.rapid <- function(x, row.names = NULL, optional = FALSE, ...,
   records
 }
 
-#' @rdname rapid_methods
+#' @rdname rapid-methods
 #' @importFrom stats nobs
 #' @export
 nobs.rapid <- function(object, ...) {
@@ -95,31 +276,7 @@ nobs.rapid <- function(object, ...) {
   object$n_total
 }
 
-#' Predictions of the attacker for new records
-#'
-#' Applies the attacker of a \code{rapid} object to new records. The records
-#' are prepared like the original data (column types, \code{na_strategy},
-#' factor levels). When they hold the target, they are scored under the rule of
-#' the object as calibrated, with baselines taken from the original values.
-#'
-#' @param object an object of class "rapid", created with \code{store_model = TRUE}
-#' @param newdata data frame with the quasi-identifiers and, optionally, the target
-#' @param ... not used
-#' @return The prepared records. With the target, followed by the record
-#'   columns of the rule and \code{at_risk} (as in \code{as.data.frame()});
-#'   without it, followed by \code{predicted_class} or \code{predicted_value}.
-#' @examples
-#' set.seed(1)
-#' X <- data.frame(age = sample(20:60, 100, replace = TRUE))
-#' X$income <- 20000 + 600 * X$age + rnorm(100, 0, 3000)
-#' Y <- X
-#' Y$income <- Y$income + rnorm(100, 0, 2000)
-#' r <- rapid(X, Y, key_vars = "age", target_var = "income", model_type = "lm",
-#'            store_model = TRUE)
-#' new <- data.frame(age = c(25, 50), income = c(36000, 50000))
-#' predict(r, new)
-#' predict(r, new["age"])
-#' @family rapid
+#' @rdname rapid-methods
 #' @export
 predict.rapid <- function(object, newdata, ...) {
   .rapid_require(object, c("version", "model", "predictor"))
@@ -145,49 +302,7 @@ predict.rapid <- function(object, newdata, ...) {
   out
 }
 
-#' Summary method for rapid objects
-#'
-#' \code{summary()} reports RAPID with its Wilson confidence interval, the
-#' chance level and the excess, and how the flagged records are spread over
-#' common and rare values of the target. \code{as.data.frame()} returns the
-#' one-row table, so that the summaries of several releases can be stacked with
-#' \code{rbind()}.
-#'
-#' A value is rare when the baseline of its record (the share of original
-#' records that fall in its tolerance band, or whose class it shares) is below
-#' the \code{1 - common_share} quantile of the baselines. Close predictions of
-#' common values carry little information: an attacker who always guesses the
-#' typical value is often right. \code{rare_hit_rate} is the share of flagged
-#' records among the rare ones and \code{rare_rate} the share of all records
-#' that are flagged and rare. Both are \code{NA} for a rule without baseline.
-#'
-#' @param object an object of class "rapid"
-#' @param common_share share of records treated as common (between 0 and 1)
-#' @param level confidence level of the Wilson interval, as in
-#'   \code{\link{confint.rapid}}
-#' @param x an object of class "summary.rapid"
-#' @param digits number of decimal places
-#' @param row.names,optional not used
-#' @param ... additional arguments (ignored)
-#' @return \code{summary()}: an object of class "summary.rapid", a list with the
-#'   one-row data frame \code{table} (\code{target}, \code{model}, \code{rule},
-#'   \code{threshold}, \code{n}, \code{rapid}, \code{lower}, \code{upper},
-#'   \code{chance}, \code{excess}), \code{rare_share}, \code{n_rare},
-#'   \code{rare_hit_rate}, \code{rare_rate} and the settings of the fit.
-#'   \code{print()}: the input, invisibly. \code{as.data.frame()}: \code{table}.
-#' @examples
-#' set.seed(1)
-#' X <- data.frame(age = sample(20:60, 100, replace = TRUE))
-#' X$income <- 20000 + 600 * X$age + rnorm(100, 0, 3000)
-#' Y <- X
-#' Y$income <- Y$income + rnorm(100, 0, 2000)
-#' r <- rapid(X, Y, key_vars = "age", target_var = "income", model_type = "lm")
-#' summary(r)
-#' # Summaries of several releases in one table
-#' r2 <- rapid(X, Y, key_vars = "age", target_var = "income", model_type = "lm",
-#'             num_tau = 0.5)
-#' rbind(as.data.frame(summary(r)), as.data.frame(summary(r2)))
-#' @family rapid
+#' @rdname rapid-methods
 #' @export
 summary.rapid <- function(object, common_share = 0.7, level = 0.95, ...) {
   .rapid_require(object, "version")
@@ -232,7 +347,7 @@ summary.rapid <- function(object, common_share = 0.7, level = 0.95, ...) {
   ), class = "summary.rapid")
 }
 
-#' @rdname summary.rapid
+#' @rdname rapid-methods
 #' @export
 format.summary.rapid <- function(x, digits = 4, ...) {
   f <- function(v) formatC(v, digits = digits, format = "f")
@@ -270,53 +385,21 @@ format.summary.rapid <- function(x, digits = 4, ...) {
   )
 }
 
-#' @rdname summary.rapid
+#' @rdname rapid-methods
 #' @export
 print.summary.rapid <- function(x, ...) {
   cat(format(x, ...), sep = "\n")
   invisible(x)
 }
 
-#' @rdname summary.rapid
+#' @rdname rapid-methods
 #' @export
 as.data.frame.summary.rapid <- function(x, row.names = NULL, optional = FALSE, ...) {
   x$table
 }
 
-#' Update a rapid object
-#'
-#' Changes arguments of the call that created a \code{rapid} object. When all
-#' changed arguments only affect how the attack is scored (\code{num_eval_method},
-#' \code{num_error_metric}, \code{num_epsilon}, \code{num_delta}, \code{num_tau},
-#' \code{cat_eval_method}, \code{cat_tau}, \code{n_perm}, \code{threshold_rule},
-#' \code{perm_level}, \code{seed}) and the object holds the attacker's
-#' predictions, the stored attack is scored again under the new rule and the
-#' model is not fitted again. Any other argument, among them the model
-#' arguments, \code{num_scale}, \code{num_dist} and \code{prune}, refits: the
-#' changed call is evaluated in the caller's frame, as
-#' \code{\link[stats]{update}} does.
-#'
-#' A changed \code{num_error_metric} refits when the model has a working scale
-#' chosen under \code{num_scale = "auto"} (the linear model), because that
-#' choice depends on the error metric.
-#'
-#' @param object an object of class "rapid"
-#' @param ... arguments of \code{\link{rapid}} to change, as \code{name = value}
-#' @param evaluate logical, if FALSE return the changed call instead of evaluating it
-#' @return A \code{rapid} object whose \code{call} holds the changed arguments,
-#'   or the changed call if \code{evaluate = FALSE}.
-#' @examples
-#' set.seed(1)
-#' X <- data.frame(age = sample(20:60, 100, replace = TRUE))
-#' X$income <- 20000 + 600 * X$age + rnorm(100, 0, 3000)
-#' Y <- X
-#' Y$income <- Y$income + rnorm(100, 0, 2000)
-#' r <- rapid(X, Y, key_vars = "age", target_var = "income", model_type = "lm")
-#' update(r, num_tau = 0.5)                  # rescored, no refit
-#' update(r, num_eval_method = "point")      # rescored, no refit
-#' update(r, num_tau = 0.5, evaluate = FALSE)
+#' @rdname rapid-methods
 #' @importFrom stats update
-#' @family rapid
 #' @export
 update.rapid <- function(object, ..., evaluate = TRUE) {
   .rapid_require(object, "version")

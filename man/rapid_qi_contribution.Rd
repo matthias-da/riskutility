@@ -68,7 +68,7 @@ single drops.  Names are used as labels.}
 
 \item{n_permutations}{Number of permutations of the true values for the
 chance level of each attacker model (default 99).  Set to 0 to skip
-the chance level; the excess columns are then \code{NA}.}
+the chance level. The excess columns are then \code{NA}.}
 
 \item{seed}{Optional random seed (see Details).}
 
@@ -81,7 +81,7 @@ the chance level; the excess columns are then \code{NA}.}
 \item{row.names, optional}{Not used.}
 
 \item{measure}{\code{"excess"} (default; change in excess over the
-chance level) or \code{"rapid"} (change in raw RAPID); both may be
+chance level) or \code{"rapid"} (change in raw RAPID). Both may be
 given and are drawn in this order.}
 }
 \value{
@@ -98,6 +98,14 @@ sorted by decreasing contribution.}
 \item{key_vars, target_var, groups, is_categorical,
 n_permutations}{Settings used.}
 }
+\code{format()} returns the printed lines and \code{print()} the object,
+invisibly. \code{summary()} returns an object of class
+\code{"summary.rapid_contribution"} with the full table and the
+quasi-identifier of the largest contribution, printed by its own
+\code{print()} method. \code{as.data.frame()} returns \code{results}.
+\code{plot()} draws the drop for each scenario as a lollipop chart (groups
+as triangles) and returns the ggplot object, or a list of two for both
+measures, invisibly.
 }
 \description{
 Quantifies how much each quasi-identifier contributes to the RAPID
@@ -138,7 +146,7 @@ both changes a lot.  Use \code{groups} to drop such sets jointly
 "harmless".
 
 \strong{Uncertainty.} A single synthetic release gives one value per
-quasi-identifier; differences of a few thousandths are within model
+quasi-identifier. Differences of a few thousandths are within model
 noise.  Repeat over several releases (or seeds) and report the spread.
 If \code{seed} is given, every attacker model and every set of
 permutations starts from the same seed (common random numbers), which
@@ -153,31 +161,42 @@ X <- data.frame(age = sample(20:70, n, replace = TRUE),
 X$smoker <- factor(ifelse(X$age < 40 & X$sex == "M", "yes", "no"))
 Y <- X
 Y$age <- Y$age + sample(-2:2, n, replace = TRUE)
-res <- rapid_qi_contribution(X, Y,
-                             key_vars = c("age", "sex", "region"),
-                             target_var = "smoker",
-                             model_type = "cart", n_permutations = 19,
-                             seed = 1)
-res
-\donttest{
-plot(res)
+if (requireNamespace("rpart", quietly = TRUE)) {
+  res <- rapid_qi_contribution(X, Y,
+                               key_vars = c("age", "sex", "region"),
+                               target_var = "smoker",
+                               model_type = "cart", n_permutations = 19,
+                               seed = 1)
+  print(res)
+  print(summary(res))
+  print(as.data.frame(res))
+  plot(res)
 }
+
+# The linear model drops a group of quasi-identifiers as well
+X$income <- round(exp(9 + 0.03 * X$age + 0.3 * (X$sex == "M") + rnorm(n, 0, 0.1)))
+Y$income <- round(X$income * exp(rnorm(n, 0, 0.05)))
+res_g <- rapid_qi_contribution(X, Y,
+                               key_vars = c("age", "sex", "region"),
+                               target_var = "income",
+                               groups = list(demography = c("age", "sex")),
+                               model_type = "lm", n_permutations = 19,
+                               seed = 1)
+res_g
+plot(res_g, measure = c("excess", "rapid"))
 }
 \seealso{
 \code{\link{rapid}}, \code{\link{rapid_test}}
 
 Other rapid: 
 \code{\link{confint.rapid}()},
-\code{\link{predict.rapid}()},
+\code{\link{plot.rapid}()},
 \code{\link{rapid}()},
 \code{\link{rapid_learner}()},
-\code{\link{rapid_methods}},
 \code{\link{rapid_suite}()},
 \code{\link{rapid_synthesizer_cv}()},
 \code{\link{rapid_test}()},
-\code{\link{rapid_threshold_select}()},
-\code{\link{summary.rapid}()},
-\code{\link{update.rapid}()}
+\code{\link{rapid_threshold_select}()}
 }
 \author{
 Matthias Templ

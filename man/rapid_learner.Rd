@@ -46,10 +46,12 @@ one is an error of class \code{"rapid_error_dependency"} (in
 \item{...}{ignored}
 }
 \value{
-An object of class \code{c("rapid_learner_custom",
-  "rapid_learner")}. Its field \code{targets} is \code{"categorical"} when
-\code{predict_prob} is given and \code{"numeric"} when
-\code{predict_point} is given.
+\code{rapid_learner()}: an object of class
+\code{c("rapid_learner_custom", "rapid_learner")}. Its field
+\code{targets} is \code{"categorical"} when \code{predict_prob} is given
+and \code{"numeric"} when \code{predict_point} is given. \code{format()}
+returns the lines that \code{print()} shows (name, target types, required
+packages and the functions given), \code{print()} the object, invisibly.
 }
 \description{
 Builds an attacker model from functions of the user, for the argument
@@ -60,7 +62,7 @@ functions that fit through \code{rapid()} (\code{\link{rapid_test}},
 }
 \details{
 The functions are called with their arguments by position, in the order
-given in the argument descriptions below; an argument name of that list
+given in the argument descriptions below. An argument name of that list
 that a function has at another position is an error of class
 \code{"rapid_error_input"}.
 
@@ -72,16 +74,16 @@ arguments given in \code{...} of \code{rapid()}.
 
 \code{predict_prob(fit, newdata)} returns, for a categorical target, a
 matrix with one row per record of \code{newdata} and the class names as
-column names; a class missing from the columns gets probability 0.
+column names. A class missing from the columns gets probability 0.
 \code{predict_point(fit, newdata)} returns, for a numeric target, one point
 prediction per record. \code{predict_quantiles(fit, newdata, probs)} returns
 the predictive distribution as an \code{nrow(newdata) x length(probs)}
-matrix of quantiles; the band rule (\code{num_eval_method = "band"}, the
+matrix of quantiles. The band rule (\code{num_eval_method = "band"}, the
 default) needs it, the point rule does not. \code{num_dist = "auto"} and
-\code{"grid"} both use these quantiles; \code{"exact"} is not available.
+\code{"grid"} both use these quantiles, and \code{"exact"} is not available.
 
-The output of the functions is checked (dimensions, names, no \code{NA});
-a violation is an error of class \code{"rapid_error_model"}. Errors raised
+The output of the functions is checked (dimensions, names, no \code{NA}),
+and a violation is an error of class \code{"rapid_error_model"}. Errors raised
 inside the functions are passed on unchanged. Records with a
 quasi-identifier level that the synthetic data do not contain are refused
 with an error of class \code{"rapid_error_levels"}, before the functions are
@@ -111,23 +113,41 @@ my_lm <- rapid_learner(
   }
 )
 my_lm
+format(my_lm)
 rapid(X, Y, key_vars = c("age", "hours"), target_var = "income",
       model_type = my_lm, n_perm = 3, seed = 1)
+
+# Without predict_quantiles only the point rule is available
+my_point <- rapid_learner("my_point", fit = stats::lm,
+                          predict_point = function(fit, newdata) predict(fit, newdata))
+rapid(X, Y, key_vars = c("age", "hours"), target_var = "income",
+      model_type = my_point, num_eval_method = "point", n_perm = 3, seed = 1)
+
+# A categorical target: logistic regression with class probabilities
+X$high <- factor(ifelse(X$income > median(X$income), "yes", "no"))
+Y$high <- X$high
+my_logit <- rapid_learner(
+  "my_logit",
+  fit = function(formula, data) stats::glm(formula, data = data, family = binomial()),
+  predict_prob = function(fit, newdata) {
+    p <- predict(fit, newdata, type = "response")
+    cbind(no = 1 - p, yes = p)
+  }
+)
+rapid(X, Y, key_vars = c("age", "hours"), target_var = "high",
+      model_type = my_logit, n_perm = 3, seed = 1)
 }
 \seealso{
 \code{\link{rapid}}, \code{\link{rapid_suite}}
 
 Other rapid: 
 \code{\link{confint.rapid}()},
-\code{\link{predict.rapid}()},
+\code{\link{plot.rapid}()},
 \code{\link{rapid}()},
-\code{\link{rapid_methods}},
 \code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_suite}()},
 \code{\link{rapid_synthesizer_cv}()},
 \code{\link{rapid_test}()},
-\code{\link{rapid_threshold_select}()},
-\code{\link{summary.rapid}()},
-\code{\link{update.rapid}()}
+\code{\link{rapid_threshold_select}()}
 }
 \concept{rapid}

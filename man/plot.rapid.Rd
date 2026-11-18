@@ -20,150 +20,150 @@
 )
 }
 \arguments{
-\item{x}{an object of class "rapid"}
+\item{x}{an object of class \code{"rapid"}}
 
 \item{y}{not used}
 
-\item{...}{additional arguments passed to plotting functions}
+\item{...}{additional arguments passed to the plotting functions}
 
-\item{which}{integer indicating which plot to show:
-\itemize{
-\item \code{1}: Risk score distribution histogram (default)
-\item \code{2}: Prediction scatter plot (numeric targets only); confidence
-against baseline for the gain rules
-\item \code{3}: Threshold sensitivity curve (RAPID vs threshold range)
-\item \code{4}: QI variable importance lollipop chart (requires \code{store_model = TRUE})
-\item \code{5}: QI attribution main effects (sum-to-zero logistic regression)
-\item \code{6}: QI interaction effects (pairwise interactions, requires >= 2 key variables)
+\item{which}{integer vector of plot types, drawn in the order given
+(default 1):
+\describe{
+\item{1}{Distribution of the scores with the threshold.}
+\item{2}{For the band and \code{RCS_marginal} rules the confidence
+\eqn{g} against the baseline \eqn{b}. For the other rules of a
+continuous target the prediction against the true value.}
+\item{3}{RAPID against the threshold.}
+\item{4}{Importance of the quasi-identifiers in the attacker model (needs
+\code{store_model = TRUE}).}
+\item{5}{Main effects of the quasi-identifiers on the flag.}
+\item{6}{Pairwise interactions of the quasi-identifiers on the flag (needs
+at least two quasi-identifiers).}
 }}
 
-\item{xlim}{character or numeric vector controlling x-axis limits for risk distribution
-(plots 1 and 2 only):
-\itemize{
-\item \code{"full"} (default): show full data range
-\item \code{"zero_to_one"}: fixed range from 0 to 1
-\item \code{"threshold_to_one"}: range from threshold to 1 (at-risk region only)
-\item numeric vector of length 2: custom limits, e.g., \code{c(-0.5, 1)}
-}}
+\item{xlim}{x-axis limits of plots 1 and 2: \code{"full"} (default, the
+range of the data), \code{"zero_to_one"}, \code{"threshold_to_one"} (the
+region of the records at risk), or a numeric vector of length 2}
 
-\item{annotate}{logical, if TRUE (default) add annotation showing percentage at risk}
+\item{annotate}{logical, if \code{TRUE} (default) add the percentage at risk}
 
-\item{facet_by}{character vector of variable names to facet by (creates subgroup panels).
-Must be columns present in the records data frame. Uses ggplot2 for faceted plots.}
+\item{facet_by}{character vector of variables of the record table. Plot 1
+is then drawn with one panel per subgroup (ggplot2).}
 
-\item{bins}{integer, number of histogram bins (default: 30)}
+\item{bins}{integer, number of histogram bins (default 30)}
 
-\item{tau_range}{numeric vector of tau thresholds for the sensitivity curve
-(plot 3, rules that flag scores above the threshold). Default
-\code{seq(0, 1, by = 0.05)}.}
+\item{tau_range}{numeric vector of thresholds for plot 3, for rules that flag
+scores above the threshold (default \code{seq(0, 1, by = 0.05)})}
 
-\item{epsilon_range}{numeric vector of epsilon thresholds for the sensitivity curve
-(plot 3, point rule). Default \code{seq(0, 1, by = 0.05)}; for errors in
-the units of the target (absolute metric) the range of the errors is used.}
+\item{epsilon_range}{numeric vector of tolerances for plot 3 under the point
+rule (default \code{seq(0, 1, by = 0.05)}). For the absolute metric the
+range of the errors is used.}
 
-\item{formula}{optional formula for QI attribution plot (plot 5), e.g.,
-\code{at_risk ~ age * gender}. If NULL, uses main effects of all key variables.}
+\item{formula}{optional formula of the attribution model of plot 5, for
+example \code{at_risk ~ age * sex}. The default uses the main effects of
+all quasi-identifiers.}
 
-\item{top_n}{integer, maximum number of variables/terms to show in importance (plot 4),
-attribution (plot 5), and interaction (plot 6) plots. Default 15.}
+\item{top_n}{integer, the largest number of variables or terms shown in plots
+4, 5 and 6 (default 15)}
 }
 \value{
 Invisibly, the ggplot2 object for one ggplot2 type, a list named by the type
 numbers (\code{"1"}, \code{"3"}, ...) for several types, with \code{NULL} entries for
-the types drawn with base graphics. Every requested type is drawn, in the order given.
+the types drawn with base graphics.
 }
 \description{
-Creates visualizations for RAPID disclosure risk assessment results.
-Six plot types are available via the \code{which} parameter.
+Draws one or several of six plot types for the result of
+\code{\link{rapid}()}. The other methods for \code{rapid} objects are
+documented in \code{\link{rapid-methods}}.
 }
 \details{
-\strong{Plot 1 -- Risk Distribution:}
-Histogram of risk scores colored by at-risk status. The red dashed line indicates
-the threshold. Higher scores indicate higher risk, except under the point rule
-for numeric targets, where lower prediction errors indicate higher risk
-(accurate predictions imply disclosure).
+\strong{Gain rules.} For the band rule and \code{RCS_marginal}, types 1 to 3
+are drawn with ggplot2. Type 1 is the histogram of the gain \eqn{r} with the
+threshold. When the predictions are stored, a grey outline adds the
+permutation null, the average histogram of one permutation. Type 2 shows the
+confidence \eqn{g} against the baseline \eqn{b} with the lines \eqn{g = b}
+and \eqn{g = b + \tau (1 - b)}{g = b + tau (1 - b)}. Records above the dashed
+line are at risk, records near the diagonal gain nothing over the marginal
+distribution. Type 3 shows RAPID against the threshold together with the
+chance curve, the share of records flagged under permuted true values. The
+permutations are drawn once per call from the stored predictions and the
+\code{n_perm} of the fit, starting from the seed of the fit when there is
+one. The chance
+curve then passes through \code{x$chance} at the object's threshold, as
+long as the caller has not changed \code{RNGkind()} since the fit. The random
+stream of the caller is restored afterwards. Without stored predictions or
+with \code{n_perm = 0}, the outline and the chance curve are left out.
 
-\strong{Plot 2 -- Prediction Scatter (numeric only):}
-Scatter plot of predicted vs actual values, colored by at-risk status.
+\strong{Other rules.} The point rule, \code{RCS_conditional} and
+\code{NCE} draw types 1 to 3 with base graphics. Type 1 is the histogram of
+the score with the threshold as a red dashed line. Under the point rule the
+score is the error and low values are at risk. Type 2 (continuous target
+only, nothing is drawn for a categorical one) shows the prediction against
+the true value, coloured by the flag.
+Type 3 marks the threshold of the object with a red point. \code{which =
+1:2} draws both panels side by side.
 
-\strong{The gain rules} (band for numeric targets, \code{RCS_marginal} for categorical
-ones) draw types 1 to 3 with ggplot2. Type 1 is the histogram of the gain \code{r} with
-the threshold and, when the predictions are stored, the permutation null as a grey outline
-(the average histogram of one permutation). Type 2 shows the confidence \code{g} against
-the baseline \code{b} with the lines \code{g = b} and \code{g = b + tau (1 - b)}; records
-above the dashed line are at risk. Type 3 adds the chance curve, the share of records
-flagged under permuted true values. The permutations are drawn once per call from the
-stored predictions and \code{n_perm} of the fit, started from the seed of the fit when
-there is one, so that the chance curve at the object's own threshold equals
-\code{x$chance}; the random stream of the caller is restored. Without stored
-predictions or with \code{n_perm = 0}, outline and chance curve are left out. The
-other rules keep their base-graphics plots.
-
-\strong{Plot 3 -- Threshold Sensitivity Curve:}
-Shows how RAPID (proportion at risk) changes across a range of threshold values.
-The current threshold is marked with a red point. Useful for understanding how
-sensitive the risk assessment is to threshold choice.
-
-\strong{Plot 4 -- QI Variable Importance:}
-Lollipop chart of relative variable importance from the attacker model.
-Requires the model to be stored via \code{rapid(..., store_model = TRUE)}.
-Supports random forest, CART, XGBoost, and linear/logistic models.
-
-\strong{Plot 5 -- QI Attribution (Main Effects):}
-Sum-to-zero contrast logistic regression on at-risk status. Shows which
-quasi-identifier values contribute most to disclosure risk. Numeric variables
-are discretized into quartile bins. All factor levels are shown including the
-implied reference level. Positive coefficients (firebrick) increase risk;
-negative coefficients (steelblue) decrease risk. Whiskers show 95\\% CI.
-
-\strong{Plot 6 -- QI Interaction Effects:}
-Same logistic regression framework as plot 5, but fits all pairwise interactions
-and displays only the interaction coefficients. Requires at least 2 key variables.
+\strong{Quasi-identifiers.} Type 4 is a lollipop chart of the variable
+importance of the attacker (impurity for rf, the importance of rpart for
+cart, gain for gbm, and the absolute coefficients scaled to sum 1 for lm and
+logit). Type 5
+fits a logistic regression of the flag on the quasi-identifiers with
+sum-to-zero contrasts and shows every level, including the reference level,
+with 95 percent intervals. Numeric quasi-identifiers are cut into quartile
+bins and factors with many levels are grouped, which avoids separation.
+Positive coefficients (red) raise the chance of being flagged, negative ones
+(blue) lower it. Type 6 fits the same model with all pairwise interactions
+and shows the interaction terms only.
 }
 \examples{
-\donttest{
 set.seed(42)
-n <- 500
-original <- data.frame(
+n <- 200
+X <- data.frame(
   age = sample(20:60, n, replace = TRUE),
   gender = factor(sample(c("M", "F"), n, replace = TRUE)),
   education = factor(sample(c("High", "Medium", "Low"), n, replace = TRUE))
 )
-original$health <- factor(ifelse(
-  original$age > 40 & original$gender == "M",
+X$income <- round(exp(9 + 0.03 * X$age + 0.3 * (X$gender == "M") + rnorm(n, 0, 0.1)))
+X$health <- factor(ifelse(
+  X$age > 40 & X$gender == "M",
   sample(c("Poor", "Fair", "Good"), n, replace = TRUE, prob = c(0.6, 0.3, 0.1)),
   sample(c("Poor", "Fair", "Good"), n, replace = TRUE, prob = c(0.1, 0.3, 0.6))
 ))
-synthetic <- original
-synthetic$health <- original$health
+Y <- X
+Y$income <- round(Y$income * exp(rnorm(n, 0, 0.05)))
 idx <- sample(n, n * 0.3)
-synthetic$health[idx] <- factor(
-  sample(c("Good", "Fair", "Poor"), length(idx), replace = TRUE)
-)
+Y$health[idx] <- sample(levels(X$health), length(idx), replace = TRUE)
 
-result <- rapid(original, synthetic,
-                key_vars = c("age", "gender", "education"),
-                target_var = "health",
-                model_type = "rf",
-                store_model = TRUE)
+# Continuous target, band rule: score histogram, g against b, chance curve
+r <- rapid(X, Y, key_vars = c("age", "gender", "education"),
+           target_var = "income", model_type = "lm", store_model = TRUE, seed = 1)
+plot(r, which = 1:3)
+plot(r, which = 4)
 
-# Risk distribution histogram (default)
-plot(result)
+# The point rule draws with base graphics
+plot(update(r, num_eval_method = "point"), which = 1:2)
 
-# Threshold sensitivity curve
-plot(result, which = 3)
-
-# QI variable importance
-plot(result, which = 4)
-
-# QI attribution (main effects)
-plot(result, which = 5)
-
-# QI interaction effects
-plot(result, which = 6)
-
-# Facet by gender
-plot(result, facet_by = "gender")
+# Categorical target: the quasi-identifiers behind the flags
+if (requireNamespace("rpart", quietly = TRUE)) {
+  rc <- rapid(X, Y, key_vars = c("age", "gender", "education"),
+              target_var = "health", model_type = "cart", store_model = TRUE,
+              seed = 1)
+  plot(rc, which = 4:6)
+  plot(rc, facet_by = "gender")
 }
 
 }
+\seealso{
+\code{\link{rapid}}, \code{\link{rapid-methods}}
+
+Other rapid: 
+\code{\link{confint.rapid}()},
+\code{\link{rapid}()},
+\code{\link{rapid_learner}()},
+\code{\link{rapid_qi_contribution}()},
+\code{\link{rapid_suite}()},
+\code{\link{rapid_synthesizer_cv}()},
+\code{\link{rapid_test}()},
+\code{\link{rapid_threshold_select}()}
+}
+\concept{rapid}
