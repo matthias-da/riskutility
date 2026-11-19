@@ -2,101 +2,195 @@
 % Please edit documentation in R/rapid_synthesizer_cv.R
 \name{rapid_synthesizer_cv}
 \alias{rapid_synthesizer_cv}
+\alias{format.rapid_cv}
 \alias{print.rapid_cv}
+\alias{summary.rapid_cv}
+\alias{format.summary.rapid_cv}
+\alias{print.summary.rapid_cv}
+\alias{plot.rapid_cv}
+\alias{as.data.frame.rapid_cv}
 \title{Cross-Validation of Synthesizer Disclosure Risk}
 \usage{
 rapid_synthesizer_cv(
-  original_data,
+  X,
   synthesizer = NULL,
-  quasi_identifiers,
-  sensitive_attribute,
+  key_vars,
+  target_var,
   k = 5,
   stratified = TRUE,
-  return_details = FALSE,
-  return_all_records = FALSE,
-  seed = 2025,
-  verbose = TRUE,
-  ...
+  seed = NULL,
+  verbose = FALSE,
+  ...,
+  return_details,
+  return_all_records
 )
 
+\method{format}{rapid_cv}(x, digits = 3, ...)
+
 \method{print}{rapid_cv}(x, ...)
+
+\method{summary}{rapid_cv}(object, ...)
+
+\method{format}{summary.rapid_cv}(x, ...)
+
+\method{print}{summary.rapid_cv}(x, ...)
+
+\method{plot}{rapid_cv}(x, ...)
+
+\method{as.data.frame}{rapid_cv}(x, row.names = NULL, optional = FALSE, ...)
 }
 \arguments{
-\item{original_data}{A data frame of original (confidential) records.}
+\item{X}{A data frame of original (confidential) records. A
+\code{synth_pair} is not accepted, because the synthetic data of each
+fold come from \code{synthesizer}.}
 
-\item{synthesizer}{A function that takes a data frame (and optionally
-a \code{seed} argument) and returns a synthetic data frame.  If
-\code{NULL}, \code{synthpop::syn()} is used as a default.}
+\item{synthesizer}{A function that takes a data frame, the training records
+of a fold, as its first argument and returns a synthetic data frame with
+at least the columns \code{key_vars} and \code{target_var}, of the same
+types as in \code{X}. The number of rows is free. If it has a \code{seed}
+argument (or \code{...}), it receives one seed per fold, see \code{seed}.
+If \code{NULL}, \code{synthpop::syn()} with its default methods is used,
+and the package synthpop must be installed.}
 
-\item{quasi_identifiers}{Character vector of quasi-identifier column
-names.}
+\item{key_vars}{character vector with the names of the quasi-identifiers}
 
-\item{sensitive_attribute}{Character string naming the sensitive
-(target) variable.}
+\item{target_var}{character, name of the sensitive variable (the target)}
 
-\item{k}{Number of folds (default 5).}
+\item{k}{Number of folds, a whole number of at least 2 and at most
+\code{nrow(X)} (default 5). Each fold scores about \code{nrow(X) / k}
+records against a release made from the other records.}
 
-\item{stratified}{Logical; use stratified folds for categorical
-targets?  Requires the \pkg{caret} package (default \code{TRUE}).}
+\item{stratified}{Logical. Use stratified folds for a categorical
+target (default \code{TRUE})?}
 
-\item{return_details}{Logical; include per-fold metrics in the
-result?}
+\item{seed}{Optional random seed. There is no default. With a seed, the
+folds are drawn from it and the synthesizer of fold \eqn{i} receives
+\code{seed + i} when it has a \code{seed} argument (or \code{...}).
+A synthesizer without one draws from the random stream the seed started.
+The attacker of each fold and its permutations draw from that stream as
+well. \code{rapid()} is called without a seed of its own, and \code{seed}
+is not passed on to it. The whole result is reproducible for a given
+\code{seed}. With a seed, \code{set.seed()} is called and the random
+stream of the session is not restored afterwards. In a simulation, set
+the seed once before the loop and leave \code{seed = NULL}, or pass a
+different seed in every replication.}
 
-\item{return_all_records}{Logical; include per-record risk data
-from every fold?}
+\item{verbose}{Logical. Print progress messages (default \code{FALSE})?}
 
-\item{seed}{Optional random seed.}
+\item{...}{Additional arguments passed to \code{\link{rapid}} in every fold
+(e.g. \code{model_type}, \code{cat_tau}, \code{num_tau}, \code{n_perm}).
+\code{Y} is refused, because the synthetic data come from
+\code{synthesizer}. The old argument names \code{original_data},
+\code{quasi_identifiers} and \code{sensitive_attribute} are accepted
+as aliases of \code{X}, \code{key_vars} and \code{target_var}.}
 
-\item{verbose}{Logical; print progress messages?}
+\item{return_details, return_all_records}{Deprecated and ignored, with a
+warning of class \code{"rapid_warning_deprecated"}. The object always
+holds the per-fold table \code{folds} and the fold objects \code{fits}.}
 
-\item{...}{additional arguments (ignored)}
+\item{x, object}{an object of class \code{"rapid_cv"}}
 
-\item{x}{an object of class \code{"rapid_cv"}}
+\item{digits}{number of decimal places}
+
+\item{row.names, optional}{not used}
 }
 \value{
 An object of class \code{"rapid_cv"} with components:
 \describe{
+\item{folds}{Data frame with one row per fold: \code{fold},
+\code{n} (records of the test split), \code{rapid},
+\code{chance}, \code{excess}, the model metrics and the
+\code{threshold} of the fold (it differs between folds under
+\code{threshold_rule = "permutation"}).}
+\item{fits}{List of the \code{rapid} objects of the folds.}
 \item{cv_summary}{List with \code{mean}, \code{sd}, \code{se},
 \code{median}, \code{min}, \code{max}, \code{ci_lower},
-\code{ci_upper} of the fold-level RAPID scores, plus
-aggregated model metrics.}
-\item{cv_details}{Data frame of per-fold results (if
-\code{return_details = TRUE}).}
-\item{fold_data}{Concatenated per-record risk data across folds
-(if \code{return_all_records = TRUE}).}
-\item{settings}{List of CV settings (\code{k}, \code{stratified},
-etc.).}
-\item{eval_method}{Evaluation method used.}
-\item{model_type}{Model type used.}
-\item{threshold}{Threshold value used.}
+\code{ci_upper} of the fold-level RAPID values, their
+\code{mean_chance} and \code{mean_excess} (\code{NA} with
+\code{n_perm = 0}), the mean of each model metric (for example
+\code{mean_mae}) and, for a categorical target, \code{sd_accuracy}.}
+\item{rapid, chance, excess}{Means over the folds.}
+\item{rule}{The scoring rule, taken from the first fold. Under a
+permutation threshold the print adds the range of the fold thresholds.}
+\item{method, threshold, model_type, attacker}{Method and threshold of
+the rule, the attacker model and its settings line, all taken from the
+first fold.}
+\item{settings}{List of the settings: \code{k}, \code{cv_type},
+\code{stratified}, \code{is_categorical}, \code{n_original},
+\code{target_var}, \code{key_vars}.}
 }
+The interval \code{ci_lower}, \code{ci_upper} is the t interval
+\eqn{\bar R \pm t_{0.975, k-1} s / \sqrt{k}}{mean +/- qt(0.975, k - 1) s /
+sqrt(k)} of the mean of the \eqn{k} fold values, where \eqn{s} is their
+standard deviation. It is a rough guide. The folds share the original data,
+so the fold values are not independent, and the interval can be too narrow.
+It is not truncated and can leave the range from 0 to 1.
+\code{format()} returns the printed lines and \code{print()} the object,
+invisibly. \code{summary()} returns an object of class
+\code{"summary.rapid_cv"} with the statistics over the folds and the fold
+table. \code{plot()} draws RAPID and the chance level by fold with the mean
+and its interval and returns the ggplot object, invisibly.
+\code{as.data.frame()} returns \code{folds}.
 }
 \description{
-Evaluates the RAPID disclosure risk of a synthesis method using
-k-fold cross-validation.
-In each fold the synthesizer is trained on the training split and
-RAPID is evaluated on the held-out test split, giving a
-distribution of risk scores that accounts for variability in both
-the synthesis and the evaluation.
+Answers the question how much a synthesis method lets an attacker infer
+about persons whose records were not used for the synthesis. The original
+data are split into \code{k} folds. In each fold the synthesizer is trained
+on the other folds, and \code{\link{rapid}} scores the records of the
+left-out fold against that release. Every fold is one call of
+\code{rapid()}, so the fold values come with their chance level and excess.
+
+The scored records are never among the records the synthesizer saw. The
+result measures the inference from the quasi-identifiers that the method
+transmits, as the \code{holdout} of \code{rapid()} does. It does not
+measure whether the method reproduces its training records. A synthesizer
+that returns its training data unchanged gets a cross-validated excess near
+zero when the target does not depend on the quasi-identifiers (see the
+second example). To assess a release, call \code{rapid()} on the release
+itself, with a holdout where one exists.
 }
 \examples{
+set.seed(1)
+df <- data.frame(age = sample(20:80, 150, replace = TRUE),
+                 sex = factor(sample(c("m", "f"), 150, replace = TRUE)))
+df$income <- 20000 + 500 * df$age + rnorm(150, 0, 5000)
+noisy <- function(data, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  data$income <- data$income + rnorm(nrow(data), 0, 3000)
+  data[sample(nrow(data)), ]
+}
+cv <- rapid_synthesizer_cv(df, noisy, key_vars = c("age", "sex"),
+                           target_var = "income", model_type = "lm",
+                           k = 3, seed = 1)
+cv
+summary(cv)
+as.data.frame(cv)
+plot(cv)
+
+# The folds score records the synthesizer has not seen. A synthesizer that
+# copies its training data looks harmless here, while rapid() on its
+# release puts nearly every record at risk.
+set.seed(3)
+d <- data.frame(age = sample(20:80, 300, replace = TRUE),
+                zip = factor(sample(1:30, 300, replace = TRUE)))
+d$income <- exp(rnorm(300, 10, 1))
+copy <- function(data, seed = NULL) data
+cv_copy <- rapid_synthesizer_cv(d, copy, key_vars = c("age", "zip"),
+                                target_var = "income", model_type = "lookup",
+                                k = 3, seed = 1)
+cv_copy$excess
+rapid(d, copy(d), key_vars = c("age", "zip"), target_var = "income",
+      model_type = "lookup", seed = 1)$excess
 \donttest{
-# Requires the 'synthpop' package for the default-style synthesizer
+# With synthpop as the synthesizer
 if (requireNamespace("synthpop", quietly = TRUE)) {
-  df <- data.frame(
-    age = sample(20:80, 200, replace = TRUE),
-    sex = factor(sample(c("m", "f"), 200, replace = TRUE)),
-    region = factor(sample(LETTERS[1:4], 200, replace = TRUE)),
-    income = rnorm(200, 50000, 10000)
-  )
   cv <- rapid_synthesizer_cv(
-    original_data = df,
+    df,
     synthesizer = function(data, seed = NULL) {
       synthpop::syn(data, m = 1, seed = seed, print.flag = FALSE)$syn
     },
-    quasi_identifiers = c("age", "sex", "region"),
-    sensitive_attribute = "income",
-    model_type = "rf", k = 5
+    key_vars = c("age", "sex"), target_var = "income",
+    model_type = "rf", k = 5, seed = 1
   )
   print(cv)
 }
@@ -104,17 +198,21 @@ if (requireNamespace("synthpop", quietly = TRUE)) {
 
 }
 \references{
-Thees, O., Mueller, N., & Templ, M. (2026). Beyond the Trade-off Curve:
-Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and
-Synthetic Data. \emph{Journal of Official Statistics}.
+Templ, M., Thees, O. and Müller, R. (2026). RAPID: Risk of Attribute
+Prediction-Induced Disclosure. Manuscript under review at EPJ Data Science.
 }
 \seealso{
-\code{\link{rapid}}, \code{\link{rapid_test}}
+\code{\link{rapid}}, \code{\link{rapid_test}}.
+The section "Cross-validation of a synthesizer" of
+\code{vignette("rapid", package = "riskutility")}.
 
 Other rapid: 
-\code{\link{confint.rapid}()},
+\code{\link{plot.rapid}()},
 \code{\link{rapid}()},
+\code{\link{rapid-methods}},
+\code{\link{rapid_learner}()},
 \code{\link{rapid_qi_contribution}()},
+\code{\link{rapid_suite}()},
 \code{\link{rapid_test}()},
 \code{\link{rapid_threshold_select}()}
 }

@@ -2,88 +2,121 @@
 % Please edit documentation in R/rapid_qi_contribution.R
 \name{rapid_qi_contribution}
 \alias{rapid_qi_contribution}
+\alias{rapid_qi_contribution.synth_pair}
+\alias{rapid_qi_contribution.default}
+\alias{format.rapid_contribution}
 \alias{print.rapid_contribution}
 \alias{summary.rapid_contribution}
+\alias{format.summary.rapid_contribution}
+\alias{print.summary.rapid_contribution}
+\alias{as.data.frame.rapid_contribution}
 \alias{plot.rapid_contribution}
 \title{Risk Contribution of Quasi-Identifiers to RAPID}
 \usage{
-rapid_qi_contribution(
-  original_data,
-  synthetic_data,
-  quasi_identifiers,
-  sensitive_attribute,
+rapid_qi_contribution(X, ...)
+
+\method{rapid_qi_contribution}{synth_pair}(X, ...)
+
+\method{rapid_qi_contribution}{default}(
+  X,
+  Y,
+  key_vars,
+  target_var,
   groups = NULL,
-  model_type = "rf",
-  cat_tau = 0.3,
-  num_epsilon = 10,
-  cat_eval_method = "RCS_marginal",
-  num_error_metric = "symmetric",
-  num_epsilon_type = "percentage",
-  num_delta = 0.01,
   n_permutations = 99,
   seed = NULL,
   verbose = FALSE,
   ...
 )
 
-\method{print}{rapid_contribution}(x, digits = 3, ...)
+\method{format}{rapid_contribution}(x, digits = 3, ...)
+
+\method{print}{rapid_contribution}(x, ...)
 
 \method{summary}{rapid_contribution}(object, ...)
 
-\method{plot}{rapid_contribution}(x, measure = c("excess", "rapid"), ...)
+\method{format}{summary.rapid_contribution}(x, digits = 4, ...)
+
+\method{print}{summary.rapid_contribution}(x, ...)
+
+\method{as.data.frame}{rapid_contribution}(x, row.names = NULL, optional = FALSE, ...)
+
+\method{plot}{rapid_contribution}(x, measure = "excess", ...)
 }
 \arguments{
-\item{original_data}{A data frame of original (confidential) records.}
+\item{X}{The original (confidential) data: a data frame, or a
+\code{\link{synth_pair}}. A \code{rapid} object is not accepted, because
+every scenario needs a new fit.}
 
-\item{synthetic_data}{A data frame of synthetic records used to train
-the attacker model.}
+\item{...}{Further arguments passed to \code{\link{rapid}}: the model
+(\code{model_type}), the scoring rule and its thresholds.  The old
+argument names \code{original_data}, \code{synthetic_data},
+\code{quasi_identifiers} and \code{sensitive_attribute} are accepted
+as aliases of \code{X}, \code{Y}, \code{key_vars} and
+\code{target_var}.}
 
-\item{quasi_identifiers}{Character vector: the full set of
-quasi-identifiers known to the attacker in the reference scenario.}
+\item{Y}{data frame of the released (synthetic or anonymized) data the
+attacker is fitted on. Not needed if \code{X} is a \code{synth_pair}.}
 
-\item{sensitive_attribute}{Character string naming the sensitive
-(target) variable.}
+\item{key_vars}{character vector with the names of the quasi-identifiers.
+It is the full set that the attacker knows in the reference scenario.
+At least two are needed.}
 
-\item{groups}{Optional named list of character vectors; each element is
+\item{target_var}{character, name of the sensitive variable (the target)}
+
+\item{groups}{Optional named list of character vectors. Each element is
 a set of quasi-identifiers that is dropped jointly, in addition to the
 single drops.  Names are used as labels.}
 
-\item{model_type}{Attacker model; see \code{\link{rapid}}.}
+\item{n_permutations}{Number of permutations of the true values for the
+chance level of each attacker model (default 99). It is passed to
+\code{rapid()} as \code{n_perm}. Set to 0 to skip the chance level. The
+excess columns are then \code{NA}, and \code{plot()} draws the drop in
+RAPID. The function fits \code{1 + length(key_vars) + length(groups)}
+attacker models and runs \code{n_permutations} permutations for each.}
 
-\item{cat_tau, num_epsilon, cat_eval_method, num_error_metric, num_epsilon_type, num_delta}{Risk definition; see \code{\link{rapid}}.  As in
-\code{\link{rapid_test}}, the default \code{cat_eval_method} is
-\code{"RCS_marginal"} (normalized gain over the marginal class
-proportion).}
+\item{seed}{Optional random seed (see Details). With a seed,
+\code{set.seed()} is called and the random stream of the session is not
+restored afterwards. In a simulation, set the seed once before the loop
+and leave \code{seed = NULL}, or pass a different seed in every
+replication.}
 
-\item{n_permutations}{Number of label permutations for the null mean
-of each attacker model (default 99).  Set to 0 to skip the null; the
-excess columns are then \code{NA}.}
-
-\item{seed}{Optional random seed (see Details).}
-
-\item{verbose}{Logical; print progress?}
-
-\item{...}{Additional arguments passed to the model fitting function.}
+\item{verbose}{Logical. Print progress (default \code{FALSE})?}
 
 \item{x, object}{An object of class \code{"rapid_contribution"}.}
 
 \item{digits}{Number of digits to print.}
 
-\item{measure}{\code{"excess"} (default; change in excess over the
-permutation null) or \code{"rapid"} (change in raw RAPID).}
+\item{row.names, optional}{Not used.}
+
+\item{measure}{\code{"excess"} (default, the change in excess over the
+chance level) or \code{"rapid"} (change in raw RAPID). Both may be
+given and are drawn in this order.}
 }
 \value{
 An object of class \code{"rapid_contribution"}, a list with
 \describe{
 \item{results}{Data frame with one row for the full scenario
-(\code{dropped = "(none)"}) and one per dropped quasi-identifier or
-group: \code{dropped}, \code{n_qi}, \code{rapid}, \code{null_mean},
-\code{excess}, \code{delta_rapid}, \code{delta_excess}.  Rows are
-sorted by decreasing contribution.}
+(\code{dropped = "(none)"}, always first) and one per dropped
+quasi-identifier or group: \code{dropped}, \code{n_qi} (number of
+quasi-identifiers the attacker keeps), \code{rapid}, \code{chance},
+\code{excess}, \code{delta_rapid}, \code{delta_excess}. The rows after
+the first are sorted by decreasing \code{delta_excess}, or by
+\code{delta_rapid} when \code{n_permutations = 0}.}
 \item{reference}{The row of the full scenario.}
-\item{quasi_identifiers, sensitive_attribute, groups, cat_tau,
-num_epsilon, is_categorical, n_permutations}{Settings used.}
+\item{rapid, chance, excess}{Values of the full scenario.}
+\item{rule}{The scoring rule of the full scenario.}
+\item{key_vars, target_var, groups, is_categorical,
+n_permutations}{Settings used.}
 }
+\code{format()} returns the printed lines and \code{print()} the object,
+invisibly. \code{summary()} returns an object of class
+\code{"summary.rapid_contribution"} with the full table and the
+quasi-identifier of the largest contribution, printed by its own
+\code{print()} method. \code{as.data.frame()} returns \code{results}.
+\code{plot()} draws the drop for each scenario as a lollipop chart (groups
+as triangles) and returns the ggplot object, or a list of two for both
+measures, invisibly.
 }
 \description{
 Quantifies how much each quasi-identifier contributes to the RAPID
@@ -92,37 +125,70 @@ full set of quasi-identifiers \eqn{Q}, each quasi-identifier \eqn{j}
 (or a group of them) is removed from the attacker's knowledge, the
 attacker model is refitted on the synthetic data without it, and the
 drop in risk is recorded:
-\deqn{\Delta_j = \mathrm{RAPID}(Q) - \mathrm{RAPID}(Q \setminus \{j\}).}
+\deqn{\Delta_j = \mathrm{RAPID}(Q) - \mathrm{RAPID}(Q \setminus \{j\}).}{
+  Delta_j = RAPID(Q) - RAPID(Q without j).}
+
+Because part of every RAPID value is present even when the predictions
+carry no information about the true values, every scenario also reports
+the chance level of \code{\link{rapid}} (the share of records at risk
+when the true values are permuted) and the function reports the change
+in the excess over it,
+\deqn{\Delta^{exc}_j = [\mathrm{RAPID}(Q) - c(Q)] -
+  [\mathrm{RAPID}(Q \setminus \{j\}) - c(Q \setminus \{j\})],}{
+  Delta_exc_j = [RAPID(Q) - c(Q)] - [RAPID(Q without j) - c(Q without j)],}
+where \eqn{c(\cdot)}{c(.)} is the chance level of a scenario. This is the
+quantity to interpret.
+
+Every row is a scenario of its own, in which the attacker lacks one
+quasi-identifier or one group. The values are no decomposition of RAPID.
+They do not add up to the excess of the full scenario, and a value near
+zero does not show that a quasi-identifier is harmless when another one
+carries the same information (see Details).
 }
 \details{
-Because part of every RAPID value is a confidence component that is
-present even when the predictions carry no information about the true
-labels, the function also evaluates the fixed-model permutation null of
-\code{\link{rapid_test}} for each attacker model and reports the change
-in the excess over the null,
-\eqn{\Delta^{exc}_j = [\mathrm{RAPID}(Q) - \bar{R}_0(Q)] -
-[\mathrm{RAPID}(Q \setminus \{j\}) - \bar{R}_0(Q \setminus \{j\})]}.
-This is the quantity to interpret.
+Every row of the result comes from one call of \code{\link{rapid}} with
+\code{n_perm = n_permutations}, so that the arguments in \code{...}
+(model, scoring rule, thresholds) define the attack in the same way as
+there.
 
-\strong{Interpretation.} \eqn{\Delta_j} answers "how much risk would
-disappear if the attacker did not know \eqn{j}?", which is also the
+\strong{Interpretation.} \eqn{\Delta_j}{Delta_j} answers "how much risk
+would disappear if the attacker did not know \eqn{j}?", which is also the
 first-order effect of withholding or strongly coarsening \eqn{j}.  It is
-a drop-one (drop-column) quantity: the attacker model is refitted, so it
-measures the value of the \emph{knowledge}, not how much a fixed model
-relies on a variable (permutation importance).
+a drop-one (drop-column) quantity. The attacker model is refitted, so it
+measures the value of the \emph{knowledge} of a variable. How much a
+fixed model relies on a variable (permutation importance) is another
+question.
 
 \strong{Substitutes.} Quasi-identifiers that carry the same information
-mask each other: dropping either alone changes little, while dropping
-both changes a lot.  Use \code{groups} to drop such sets jointly
-(e.g. relationship and marital status in the Adult data).  A small
-\eqn{\Delta_j} therefore means "not needed given the others", not
-"harmless".
+mask each other. Dropping either alone changes little, while dropping
+both changes a lot (see the last example).  Use \code{groups} to drop
+such sets jointly (e.g. relationship and marital status in the Adult
+data).  A small \eqn{\Delta_j}{Delta_j} therefore means "not needed given
+the others". It does not mean "harmless".
+
+\strong{Complements.} Two quasi-identifiers that the attacker needs
+jointly each take the whole excess with them when they are dropped, so
+their values sum to more than the excess of the full scenario (see the
+first example). Under the default forest (\code{model_type = "rf"}) on a
+release that contains copies of original records, a quasi-identifier
+that is independent of the target can show a large drop. A linear model
+or a pruned tree (\code{"lm"} or \code{"cart"}) shows a drop near zero
+for such a quasi-identifier. Use one of them to see which
+quasi-identifiers carry information about the target. A small negative
+value means that the attacker did slightly better without the
+quasi-identifier, which is within model noise. In a tie \code{summary()}
+names the first row as the largest contribution.
 
 \strong{Uncertainty.} A single synthetic release gives one value per
-quasi-identifier; differences of a few thousandths are within model
+quasi-identifier. Differences of a few thousandths are within model
 noise.  Repeat over several releases (or seeds) and report the spread.
-If \code{seed} is given, every attacker model is fitted with the same
-seed (common random numbers), which reduces this noise.
+If \code{seed} is given, every attacker model and every set of
+permutations starts from the same seed (common random numbers), which
+reduces this noise.
+
+\strong{Holdout.} The table holds the values of the records of \code{X}
+only. The holdout of a \code{synth_pair} takes no part. A \code{holdout}
+given in \code{...} is passed to \code{rapid()} and is not reported.
 }
 \examples{
 set.seed(1)
@@ -133,22 +199,60 @@ X <- data.frame(age = sample(20:70, n, replace = TRUE),
 X$smoker <- factor(ifelse(X$age < 40 & X$sex == "M", "yes", "no"))
 Y <- X
 Y$age <- Y$age + sample(-2:2, n, replace = TRUE)
-res <- rapid_qi_contribution(X, Y,
-                             quasi_identifiers = c("age", "sex", "region"),
-                             sensitive_attribute = "smoker",
-                             model_type = "cart", n_permutations = 19,
-                             seed = 1)
-res
-\donttest{
-plot(res)
+if (requireNamespace("rpart", quietly = TRUE)) {
+  res <- rapid_qi_contribution(X, Y,
+                               key_vars = c("age", "sex", "region"),
+                               target_var = "smoker",
+                               model_type = "cart", n_permutations = 19,
+                               seed = 1)
+  print(res)
+  print(summary(res))
+  print(as.data.frame(res))
+  plot(res)
 }
+
+# The linear model drops a group of quasi-identifiers as well
+X$income <- round(exp(9 + 0.03 * X$age + 0.3 * (X$sex == "M") + rnorm(n, 0, 0.1)))
+Y$income <- round(X$income * exp(rnorm(n, 0, 0.05)))
+res_g <- rapid_qi_contribution(X, Y,
+                               key_vars = c("age", "sex", "region"),
+                               target_var = "income",
+                               groups = list(demography = c("age", "sex")),
+                               model_type = "lm", n_permutations = 19,
+                               seed = 1)
+res_g
+plot(res_g, measure = c("excess", "rapid"))
+
+# Two quasi-identifiers with the same information mask each other. Each
+# single drop changes nothing, the joint drop removes the whole excess.
+set.seed(2)
+X2 <- data.frame(age = sample(20:70, n, replace = TRUE),
+                 region = factor(sample(letters[1:4], n, replace = TRUE)))
+X2$birth_year <- 2026 - X2$age
+X2$income <- round(exp(9 + 0.03 * X2$age + rnorm(n, 0, 0.1)))
+Y2 <- X2
+Y2$income <- round(X2$income * exp(rnorm(n, 0, 0.05)))
+rapid_qi_contribution(X2, Y2,
+                      key_vars = c("age", "birth_year", "region"),
+                      target_var = "income",
+                      groups = list(age_info = c("age", "birth_year")),
+                      model_type = "lm", n_permutations = 19, seed = 1)
+}
+\references{
+Templ, M., Thees, O. and Müller, R. (2026). RAPID: Risk of Attribute
+Prediction-Induced Disclosure. Manuscript under review at EPJ Data Science.
 }
 \seealso{
-\code{\link{rapid}}, \code{\link{rapid_test}}
+\code{\link{rapid}}, \code{\link{rapid_test}}.
+The section "Contribution of the quasi-identifiers" of
+\code{vignette("rapid", package = "riskutility")}.
 
 Other rapid: 
-\code{\link{confint.rapid}()},
+\code{\link{plot.rapid}()},
 \code{\link{rapid}()},
+\code{\link{rapid-methods}},
+\code{\link{rapid_learner}()},
+\code{\link{rapid_suite}()},
 \code{\link{rapid_synthesizer_cv}()},
 \code{\link{rapid_test}()},
 \code{\link{rapid_threshold_select}()}

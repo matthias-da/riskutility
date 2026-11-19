@@ -94,8 +94,7 @@ result_bad <- ims(X, Y_bad)
 print(result_bad)
 }
 \references{
-MOSTLY AI (2024). Synthetic data quality assurance.
-\url{https://mostly.ai/}
+MOSTLY AI (2024). Synthetic data quality assurance (mostly.ai).
 }
 \seealso{
 \code{\link{dcr}} for distance to closest record,

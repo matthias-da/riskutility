@@ -102,7 +102,9 @@ by computing multiple risk and utility measures simultaneously. It supports:
 \item dcap: Differential Correct Attribution Probability
 \item tcap: Targeted CAP (mean per-record risk)
 \item disco: Disclosive in Synthetic Correct Original
-\item rapid: Risk of Attribute Prediction-Induced Disclosure (ML-based)
+\item rapid: Risk of Attribute Prediction-Induced Disclosure. Reported as the excess
+over chance, \code{max(0, rapid - chance)}, from a random forest attacker (see
+\code{\link{rapid}}); 0 means the release is no more predictive than permuted values
 \item ims: Identical Match Share
 \item repu: Replicated Uniques
 \item dcr: Distance to Closest Record ratio

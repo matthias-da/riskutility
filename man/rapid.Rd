@@ -15,292 +15,918 @@ rapid(X, ...)
   Y,
   key_vars,
   target_var,
-  model_type = c("rf", "lm", "cart", "gbm", "logit"),
-  num_epsilon = 10,
-  num_epsilon_type = c("percentage", "absolute"),
+  model_type = c("rf", "lm", "cart", "gbm", "logit", "lookup"),
+  num_eval_method = c("band", "point"),
   num_error_metric = c("symmetric", "stabilised_relative", "absolute"),
+  num_epsilon = NULL,
   num_delta = 0.01,
-  cat_tau = 1,
-  cat_eval_method = c("RCS_conditional", "RCS_marginal", "NCE"),
-  na_strategy = c("constant", "drop", "median"),
+  num_tau = 0.3,
+  num_dist = c("auto", "grid", "exact"),
+  num_scale = c("auto", "identity", "log"),
+  n_quantiles = 100,
+  cat_eval_method = c("RCS_marginal", "RCS_conditional", "NCE"),
+  cat_tau = NULL,
+  na_strategy = c("drop", "constant", "median"),
   na_constant_value = 0,
-  return_all_records = TRUE,
+  n_perm = 10,
+  threshold_rule = c("fixed", "permutation"),
+  perm_level = 0.95,
+  holdout = NULL,
   store_model = FALSE,
+  store_predictions = TRUE,
   seed = NULL,
   verbose = FALSE,
-  ...
+  ...,
+  num_epsilon_type,
+  return_all_records
 )
 }
 \arguments{
-\item{X}{data frame of original data, or a \code{\link{synth_pair}} object}
+\item{X}{the original data, a data frame with one row per record, or a
+\code{\link{synth_pair}} that holds the original and the synthetic data,
+the quasi-identifiers, the target and optionally a holdout}
 
-\item{...}{additional arguments passed to model fitting functions}
+\item{...}{arguments for the model of the attacker. They override its
+defaults and go to \code{ranger::ranger()} (rf, lookup),
+\code{stats::lm()}, \code{rpart::rpart()} (cart), \code{stats::glm()}
+(logit), or the \code{fit} function of a user-defined attacker. For gbm
+they are booster parameters of \code{xgboost::xgb.train()} such as
+\code{max_depth} and \code{eta}, and \code{nrounds}. Examples:
+\code{num.trees = 1000}, \code{min.node.size = 1}, \code{cp = 0.01}. For
+cart, \code{prune = FALSE} keeps the tree as grown. The old argument names
+\code{original_data}, \code{synthetic_data}, \code{quasi_identifiers} and
+\code{sensitive_attribute} are accepted as aliases of the first four
+arguments. A name within a typing error of an argument of \code{rapid()}
+(for example \code{num_taus} or \code{nperm}) is an error of class
+\code{"rapid_error_input"}. Every other unknown name is passed to the
+model. \code{tau}, \code{epsilon}, \code{tolerance} and
+\code{n_permutations} are not arguments of \code{rapid()}: the threshold is
+\code{num_tau} or \code{cat_tau}, the tolerance \code{num_epsilon}, the
+number of permutations \code{n_perm}. Given by these names they reach the
+model, and the result uses the defaults. ranger and \code{lm()} then give
+a warning of their own (ranger: "Unused arguments: tau"), rpart stops with
+an error, and xgboost takes them without a message. Check the line "Rule:"
+of the print.}
 
-\item{Y}{data frame of synthetic data (not needed if X is a synth_pair)}
+\item{Y}{data frame of the released (synthetic or anonymized) data the
+attacker is fitted on. Not needed if \code{X} is a \code{synth_pair}. It
+need not have the same number of rows as \code{X}.}
 
-\item{key_vars}{character vector of quasi-identifier variable names}
+\item{key_vars}{character vector with the names of the quasi-identifiers,
+the variables the attacker knows about the records. They must be in
+\code{X} and \code{Y} and of the same kind in both, numeric or categorical
+(factor, character or logical). Other types, such as dates, are an error.
+The names must be syntactic, because they enter a model formula.
+\code{target_var} must not be among them.}
 
-\item{target_var}{character, name of the sensitive target variable}
+\item{target_var}{character, name of the sensitive variable, in \code{X} and
+\code{Y} and of the same kind in both. A factor, character or logical
+variable is a categorical target, and each distinct value is a class (an
+ordered factor is treated as unordered). A numeric variable is a numeric
+target and is scored with a tolerance band. Convert class codes that are
+stored as numbers (0 and 1, or 1 to 5) to a factor first. Otherwise they
+are scored as quantities.}
 
-\item{model_type}{character, model type for inference: "rf" (random forest,
-default), "lm" (linear model), "cart" (decision tree), "gbm" (gradient
-boosting), or "logit" (logistic regression, binary only)}
+\item{model_type}{the attacker, one of the names below or an object from
+\code{\link{rapid_learner}()}. RAPID depends on this choice, see the section
+"Attackers".
+\describe{
+\item{\code{"rf"}}{Random forest from ranger with its defaults (500
+trees). The default.}
+\item{\code{"lm"}}{Linear model. Numeric target only.}
+\item{\code{"cart"}}{Classification or regression tree from rpart, pruned
+by cross-validation. Needs the package rpart.}
+\item{\code{"gbm"}}{Gradient boosting from xgboost with 100 rounds and
+the default booster parameters. Needs the package xgboost.}
+\item{\code{"logit"}}{Logistic regression. Categorical target with
+exactly two classes.}
+\item{\code{"lookup"}}{One fully grown tree that reads off the synthetic
+records with the same key values. Read it by its excess.}
+}
+A missing package is an error of class \code{"rapid_error_dependency"}.
+\code{"lm"}, \code{"logit"} and user-defined attackers cannot predict a
+record with a level of a quasi-identifier that \code{Y} does not contain.
+They stop with an error of class \code{"rapid_error_levels"}. The
+tree-based attackers accept such records.}
 
-\item{num_epsilon}{numeric threshold for continuous attributes. For percentage-based
-metrics (default), specify as percentage (e.g., 5 for 5\\%). For absolute error,
-specify in units of the sensitive attribute.}
+\item{num_eval_method}{character, rule for a numeric target: \code{"band"}
+(default) or \code{"point"}, the rule of riskutility 0.2.0. Numeric target
+only. See the section "The measure".}
 
-\item{num_epsilon_type}{character, threshold type: "percentage" (default) or "absolute"}
+\item{num_error_metric}{character, the error \eqn{e(y, v)} between the true
+value \eqn{y} and a guess \eqn{v} that defines the tolerance band. Numeric
+target only. \code{"symmetric"} (default) is the difference relative to the
+mean size of the two values, \code{"stabilised_relative"} the difference
+relative to the true value, \code{"absolute"} the difference in the units
+of the target. Take a relative metric for a target whose spread grows with
+its level, such as income, and the absolute metric for a target with a
+natural unit of closeness, such as age in years. The formulas are in the
+section "The measure".}
 
-\item{num_error_metric}{character, error metric for continuous variables:
-"symmetric" (default, recommended), "stabilised_relative", or "absolute"}
+\item{num_epsilon}{numeric, the tolerance \eqn{\varepsilon}{epsilon}: how
+close a guess must be to the true value to count as a disclosure. Numeric
+target only. For the two relative metrics it is a proportion, above 0 and
+below 1 (default 0.1, that is 10 percent). For the absolute metric it is in
+the units of the target, has no default and must be given. A relative
+tolerance of 1 or more is read as percent, with a warning of class
+\code{"rapid_warning_legacy_tolerance"}. A larger tolerance widens the
+band, which raises the confidence and the baseline. Under the point rule
+the tolerance is also the threshold.}
 
-\item{num_delta}{numeric, smoothing constant for percentage-based metrics (default: 0.01)}
+\item{num_delta}{numeric, the constant \eqn{\delta}{delta} that the two
+relative metrics add to the denominator, in the units of the target
+(default 0.01, at least 0). Numeric target only. It keeps the error finite
+for true values at or near zero. Around a true value of 0 the band reaches
+about \eqn{\varepsilon \delta}{epsilon times delta} to each side. For
+values far above \code{num_delta} it has no visible effect. Choose it small
+against the typical size of the target, for example 0.001 for a share
+between 0 and 1. The absolute metric does not use it.}
 
-\item{cat_tau}{numeric threshold for categorical risk. Interpretation depends on method:
-\itemize{
-\item For RCS_conditional: ratio threshold (default 1, typically 1--1.25)
-\item For RCS_marginal: normalized gain threshold (typically 0.3)
-\item For NCE: risk score threshold (typically 0.5--0.7)
-}}
+\item{num_tau}{numeric, threshold \eqn{\tau}{tau} on the normalized gain of a
+numeric target. Band rule only. The default 0.3 flags a record when the
+attacker covers more than 30 percent of the distance between the baseline
+and certainty. Allowed values are 0 or more and less than 1, and any other
+value is an error of class \code{"rapid_error_input"}. The point rule
+ignores \code{num_tau}, with a warning when it is given, because there the
+tolerance is the threshold.}
 
-\item{cat_eval_method}{character, method for categorical evaluation:
-"RCS_conditional" (default), "RCS_marginal", or "NCE"}
+\item{num_dist}{character, how the predictive distribution of a numeric
+target is represented under the band rule: \code{"auto"} (default, exact
+where the attacker has an exact form, a grid of \code{n_quantiles}
+quantiles otherwise), \code{"grid"} or \code{"exact"}. A value the attacker
+does not offer is an error of class \code{"rapid_error_model"}: gbm has no
+exact form, lookup no grid. See the section "Attackers".}
 
-\item{na_strategy}{character, strategy for NA values in sensitive attribute:
-"constant" (default), "drop", or "median"}
+\item{num_scale}{character, working scale of the linear model:
+\code{"auto"} (default), \code{"identity"} or \code{"log"}. Only for
+\code{model_type = "lm"} and a numeric target. Other attackers ignore it,
+with a warning when it is given. \code{"auto"} takes the log scale when the
+error metric is relative, all observed synthetic target values are positive
+and the log model has the higher likelihood. \code{"log"} with a zero or
+negative synthetic value is an error. On the log scale the point prediction
+is the predictive median. See the section "Attackers".}
 
-\item{na_constant_value}{numeric, value for constant NA imputation (default: 0)}
+\item{n_quantiles}{integer, number of quantiles \eqn{K} of a grid
+distribution (default 100, a grid needs at least 2). Numeric target, band
+rule only. It is used by \code{"rf"} and \code{"gbm"}, by user-defined
+attackers, and by \code{"lm"} and \code{"cart"} under \code{num_dist =
+  "grid"}. It has no effect where the distribution is exact. A larger value
+gives a finer confidence \eqn{g_i} (steps of \eqn{1/K}) and a larger
+object.}
 
-\item{return_all_records}{logical, if TRUE (default) return all records with risk status;
-if FALSE return only at-risk records}
+\item{cat_eval_method}{character, rule for a categorical target:
+\code{"RCS_marginal"} (default, the gain over the marginal share of the
+class), \code{"RCS_conditional"} (the rule of riskutility 0.2.0, the ratio
+to the mean confidence within the class) or \code{"NCE"} (normalized
+cross-entropy). Categorical target only. See the section "The measure".}
 
-\item{store_model}{logical, if TRUE store the fitted model object in the result
-(needed for \code{plot(result, which = 4)} variable importance plot). Default FALSE.}
+\item{cat_tau}{numeric, threshold for a categorical target. Categorical
+target only. The default depends on the rule: 0.3 for \code{RCS_marginal},
+1 for \code{RCS_conditional}, 0.5 for \code{NCE}. Under \code{RCS_marginal}
+it is a threshold on a gain, with the meaning and the range of
+\code{num_tau}. A value outside the range is an error of class
+\code{"rapid_error_input"}. For \code{cat_tau = 1} the message names the
+rule of 0.2.0, which had this default.}
 
-\item{seed}{integer, random seed for reproducibility (default: NULL)}
+\item{na_strategy}{character, treatment of missing values of a numeric
+target: \code{"drop"} (default) removes the records, \code{"constant"}
+replaces the values by \code{na_constant_value} (the default of 0.2.0),
+\code{"median"} replaces them by the median of their data set. It has no
+effect on a categorical target or on the quasi-identifiers. See the section
+"Missing values".}
 
-\item{verbose}{logical, print diagnostic messages (default: FALSE)}
+\item{na_constant_value}{numeric, the value of \code{na_strategy =
+"constant"} (default 0). Numeric target only.}
+
+\item{n_perm}{integer, number of permutations of the true values that give
+the chance level (default 10, a whole number of 0 or more). 0 skips them,
+and \code{chance} and \code{excess} are then \code{NA}. The print can say
+that RAPID is not distinguishable from the chance level only with 2 or more
+permutations.}
+
+\item{threshold_rule}{character, \code{"fixed"} (default) flags with the
+threshold of the rule. \code{"permutation"} replaces it by the
+\code{perm_level} quantile of all permuted scores. Band rule and
+\code{RCS_marginal} only, the rules with a gain over a baseline. It needs
+\code{n_perm >= 1}.}
+
+\item{perm_level}{numeric between 0 and 1, the quantile of the permuted scores
+used as threshold (default 0.95). Only under \code{threshold_rule =
+  "permutation"}. Under a fixed threshold it is ignored, with a warning when
+it is given.}
+
+\item{holdout}{data frame of original records that were not used to generate
+the release, with the columns \code{key_vars} and \code{target_var}
+(default \code{NULL}, the holdout of a \code{synth_pair} is used when there
+is one). They are scored with the same attacker and rule as \code{X}, under
+a permutation threshold with the threshold found on \code{X}. Their
+baselines and permutations take the values of \code{X} as reference. The
+result is in the field \code{holdout}, and \code{release_specific} is RAPID
+minus the holdout RAPID. Missing values are treated as described in the
+section "Missing values". A holdout with factor levels that occur neither
+in \code{X} nor in \code{Y} is refused with an error of class
+\code{"rapid_error_levels"}. This includes a missing value of a categorical
+target when neither \code{X} nor \code{Y} has one.}
+
+\item{store_model}{logical. If \code{TRUE}, the result keeps the fitted model
+(field \code{model}) and, in the field \code{predictor}, the attacker, the
+prepared synthetic data and the distribution settings. \code{predict()} and
+the importance plot \code{plot(x, which = 4)} need both. The prepared
+synthetic data make the object at least as large as \code{Y}, and a
+random forest is much larger than its training data: with \code{"rf"} the
+stored model can take many times the size of \code{Y}. Default
+\code{FALSE}.}
+
+\item{store_predictions}{logical. If \code{TRUE} (default), the result keeps
+the attacker's predictions (field \code{attack}), so that
+\code{\link{rapid_test}()}, \code{\link{rapid_threshold_select}()},
+\code{update()} and the permutation null of \code{plot()} work without a
+refit. The predictions of a numeric target include the predictive
+distribution. For a grid distribution (the default of \code{"rf"} and
+\code{"gbm"}) they take \code{8 * n_quantiles} bytes per record, 0.8 kB
+with the default, which can be many times the size of the data.
+\code{FALSE} keeps the object small. \code{update()} then refits,
+\code{rapid_test()} and \code{rapid_threshold_select()} stop with an error
+of class \code{"rapid_error_object"}, and the plots leave out the
+permutation null.}
+
+\item{seed}{integer, random seed, or \code{NULL} (default). With a seed,
+\code{set.seed(seed)} is called before the fit and again before the
+permutations. The result is then reproducible, and \code{update()} without
+a refit draws the same permutations. The random stream of the session is
+not restored afterwards. It continues from this seed. With \code{NULL} the
+stream is used as it stands. In a simulation loop, leave \code{seed = NULL}
+and call \code{set.seed()} once before the loop. Otherwise the draws after
+every call repeat. See the section "Reproducibility".}
+
+\item{verbose}{logical, print progress messages (default \code{FALSE})}
+
+\item{num_epsilon_type}{deprecated. Numeric target only.
+\code{"percentage"} reads \code{num_epsilon} as percent, \code{"absolute"}
+selects the absolute error metric. A warning of class
+\code{"rapid_warning_deprecated"} says what to use instead.}
+
+\item{return_all_records}{deprecated and ignored: the result always holds all
+records. Use \code{as.data.frame(x, at_risk_only = TRUE)} for the records
+at risk.}
 }
 \value{
-An object of class "rapid" containing:
-\itemize{
-\item rapid: the confidence rate (proportion of records at risk)
-\item n_at_risk: number of records at risk
-\item pct_at_risk: percentage of records at risk
-\item method: evaluation method used (categorical) or "numeric"
-\item threshold: threshold used (cat_tau or num_epsilon)
-\item model_type: model type used
-\item model_metrics: model performance (accuracy for categorical, MAE/RMSE for numeric)
-\item model: the fitted model object (only if store_model=TRUE, otherwise NULL)
-\item formula: the model formula used
-\item records: data frame of at-risk records (or all records if return_all_records=TRUE)
-\item key_vars, target_var: input parameters
-\item call: the function call
+An object of class \code{"rapid"}, a list. Start with \code{rapid},
+\code{chance} and \code{excess}, then look at \code{records}. The methods
+for the object are listed in the section "Methods and companion functions".
+
+\strong{The result}
+\describe{
+\item{\code{rapid}}{RAPID, the share of scored records at risk.}
+\item{\code{n_at_risk}, \code{pct_at_risk}, \code{n_total}}{Number and
+percentage of records at risk, number of scored records.}
+\item{\code{chance}}{The chance level, the mean share at risk over the
+permutations (\code{NA} if \code{n_perm = 0}).}
+\item{\code{chance_rates}}{The share at risk in each permutation.}
+\item{\code{excess}}{\code{rapid - chance}.}
+\item{\code{holdout}}{\code{list(rapid, chance, excess, n, records)} of the
+holdout records (\code{NULL} without holdout).}
+\item{\code{release_specific}}{\code{rapid - holdout$rapid}, the part of
+RAPID that is specific to the records used for the release (\code{NULL}
+without holdout). No interval is computed. With the flags treated as
+independent, as \code{confint()} does, its standard error is
+\code{sqrt(x$rapid * (1 - x$rapid) / x$n_total + x$holdout$rapid * (1 -
+    x$holdout$rapid) / x$holdout$n)}. In the holdout example below (200 and
+100 records) it is 0.053. \code{rapid_test()}, \code{confint()} and
+\code{summary()} work on the records of \code{X} and do not use the
+holdout.}
+\item{\code{attacker}}{One line with the settings that drive the result,
+for example \code{"rf: 500 trees, min.node.size 5"}, \code{"cart: 12
+    leaves, pruned by cross-validation"} or \code{"lm: log scale (chosen
+    automatically)"}.}
+\item{\code{note}}{A line the print adds for the lookup attacker, otherwise
+\code{NULL}.}
+\item{\code{model_metrics}}{Accuracy of the predicted class (categorical
+target), or \code{mae}, \code{rmse} and their relative forms \code{rmae}
+(MAE over the mean absolute value) and \code{rrmse} (RMSE over the
+standard deviation) of the point prediction (numeric target).}
+}
+\strong{Per record}
+\describe{
+\item{\code{records}}{Data frame with one row per scored record. The row
+names are those of \code{X}, also after records were removed, so they
+link a row back to \code{X}. The columns are the prepared target and
+quasi-identifiers, for a numeric target the true value again as
+\code{original_value}, the columns of the rule and \code{at_risk}.
+\code{original_value} repeats the target column under a fixed name, so
+that code does not depend on the name of the target. The columns of the
+rule are \code{predicted_value, band_lo, band_hi, g, b, r} (band),
+\code{predicted_value, error, b} (point), \code{predicted_class, g, b, r}
+(\code{RCS_marginal}), \code{predicted_class, g, b, ratio}
+(\code{RCS_conditional}) and \code{predicted_class, g, nce} (\code{NCE}).
+Here \code{g} is the confidence, \code{b} the baseline, \code{r} the
+gain, and \code{band_lo}, \code{band_hi} the limits of the tolerance
+band. \code{predicted_value} is the point prediction of the attacker,
+which the band rule does not use. It is the fitted value for lm (the
+predictive median on the log scale), the mean of the synthetic target
+values in the record's leaf for cart and lookup, the mean over the trees
+for rf, the prediction of the boosted model for gbm, and the value of
+\code{predict_point} for a user-defined attacker. A column whose name is
+taken by a variable gets the suffix \code{".rapid"}.}
+\item{\code{score}}{Per record, the score that is compared with the
+threshold: \eqn{r_i} (band, \code{RCS_marginal}), the error (point), the
+ratio (\code{RCS_conditional}) or the NCE score.}
+\item{\code{baseline}}{Per record, the baseline \eqn{b_i} of the rule
+(\code{NULL} for \code{NCE}).}
+\item{\code{at_risk}}{Per record, the flag.}
+\item{\code{record_cols}}{Named character vector that maps the plain column
+names of the rule to their names in \code{records}.}
+}
+\strong{Settings of the call}
+\describe{
+\item{\code{method}, \code{threshold}}{Name and threshold of the rule. Under
+the point rule the threshold is the tolerance, under a permutation
+threshold it is the permutation quantile.}
+\item{\code{rule}}{The scoring rule (an internal object with its own
+\code{format()} method).}
+\item{\code{n_perm}, \code{threshold_rule}, \code{perm_level}}{The
+permutation settings.}
+\item{\code{model_type}}{Name of the attacker.}
+\item{\code{formula}, \code{key_vars}, \code{target_var},
+\code{is_categorical}}{The attack scenario.}
+\item{\code{na}}{The treatment of missing target values:
+\code{list(strategy, constant, value, dropped)}. \code{value} is the
+value a missing numeric target got (\code{NULL} under \code{"drop"} and
+for a categorical target), \code{dropped} the rows of \code{X} removed
+under \code{"drop"}.}
+\item{\code{seed}}{The seed of the call, or \code{NULL}.}
+\item{\code{call}}{The call, used by \code{update()}.}
+\item{\code{version}}{The version of riskutility that created the object.}
+}
+\strong{Kept for the methods}
+\describe{
+\item{\code{attack}}{The attacker's predictions on the original (and
+holdout) records, \code{NULL} if \code{store_predictions = FALSE}.}
+\item{\code{model}}{The fitted model (\code{NULL} unless \code{store_model =
+    TRUE}).}
+\item{\code{predictor}}{What \code{predict()} needs besides the model: the
+attacker, the prepared synthetic data and the distribution settings
+(\code{NULL} unless \code{store_model = TRUE}).}
 }
 }
 \description{
-Assesses inferential disclosure risk for a sensitive variable in synthetic data
-using the RAPID metric. This function trains a predictive model on synthetic data
-using quasi-identifiers, then evaluates attribute inference risk by scoring the
-model on the original data.
+Estimates the share of original records whose sensitive value an attacker can
+infer from a released (synthetic or anonymized) data set. The attacker fits a
+model on the release that predicts the sensitive variable from the
+quasi-identifiers and applies it to the original records. A record is at risk
+when the attacker puts clearly more probability on its true value than the
+marginal distribution of the sensitive variable does. RAPID is the share of
+such records.
+
+A first call needs four arguments: the original data \code{X}, the release
+\code{Y}, the quasi-identifiers \code{key_vars} and the sensitive variable
+\code{target_var}. The other arguments have defaults. The first ones to
+decide on are the attacker (\code{model_type}), for a numeric target the
+tolerance (\code{num_epsilon}), and \code{seed}.
+
+Read the result by three numbers. \code{rapid} is the share of records at
+risk. \code{chance} is the share at risk when the same predictions are paired
+with randomly reassigned true values. \code{excess}, their difference, is the
+part that comes from the link between the quasi-identifiers and the sensitive
+variable. See the section "Reading the result" and
+\code{vignette("rapid", package = "riskutility")}.
 }
-\details{
-RAPID (Risk of Attribute Prediction-Induced Disclosure) measures disclosure risk
-by training a predictive model on synthetic data and evaluating how well it can
-predict the sensitive attribute in the original data. High prediction accuracy
-indicates potential disclosure risk.
+\section{Reading the result}{
 
-Unlike CAP-based methods (DCAP, TCAP) which use exact or fuzzy matching, RAPID
-uses machine learning models to capture more complex relationships between
-quasi-identifiers and sensitive attributes.
-
-\strong{For categorical sensitive variables:}
-Three evaluation methods are available:
+The first example below (numeric target, default attacker, \code{seed = 1})
+prints three lines of numbers.
+\describe{
+\item{\code{RAPID = 0.120: 36 of 300 records at risk}}{For 36 original
+records the gain of the attacker over the marginal distribution is above
+the threshold of 0.3.}
+\item{\code{Chance level = 0.012 (10 permutations)}}{About 1 percent of the
+records pass the same threshold when the true values are permuted, that
+is, when the predictions carry no information about the record.}
+\item{\code{Excess = 0.108}}{The release lets this attacker infer the
+sensitive value of about 11 percent of the records beyond chance.}
+}
+These points help to read the numbers.
 \itemize{
-\item \code{RCS_conditional} (default): Measures if an observation is an outlier
-within its class using class-conditional baseline.
-\item \code{RCS_marginal}: Measures if the attribute can be inferred
-better than the marginal baseline rate. Uses normalized gain.
-\item \code{NCE}: Normalized Cross-Entropy, measures information leakage.
+\item Look at the excess first. It is the share of records the attacker
+infers beyond random pairing. This matters most when the chance level is
+high, as for a categorical target with few classes and for the lookup
+attacker. \code{\link{rapid_test}()} says whether the excess differs
+from 0. It does not say whether the excess is large.
+\item RAPID depends on the attacker. On the same data the linear model
+gives 0.760 where the forest gives 0.120. Report the attacker with the
+number, and compare attackers with \code{\link{rapid_suite}()}.
+\item Ask where the excess comes from. With a holdout, the excess on the
+holdout records is inference from the quasi-identifiers. It applies to
+records in the original data and to others alike, because the release
+keeps the dependence of the target on the quasi-identifiers.
+\code{release_specific} is what the records behind the release carry in
+addition.
+\item Without a holdout, compare a generalizing attacker (\code{"lm"},
+\code{"cart"}) with the lookup attacker. An excess under the lookup
+attacker that the linear model does not show points to reproduced
+records.
+\item \code{confint()} gives an interval for RAPID. The print says when
+RAPID is not distinguishable from the chance level.
+\item \code{as.data.frame(x, at_risk_only = TRUE)} lists the records at
+risk with their confidence \code{g}, baseline \code{b} and gain \code{r}.
+}
+There is no general cut-off. Choose the tolerance and the threshold for a
+sensitive variable before looking at the result. A small excess under the
+attackers tried does not show that the release is safe.
 }
 
-\strong{For continuous sensitive variables:}
-Risk is measured by the proportion of records for which prediction errors fall
-below a threshold. Three error metrics are available:
-\itemize{
-\item \code{symmetric} (recommended): Symmetric percentage error, treats predicted
-and true values equally.
-\item \code{stabilised_relative}: Stabilised relative error.
-\item \code{absolute}: Raw absolute error (use with num_epsilon_type = "absolute").
-}
-}
-\section{Threshold Selection Guidelines}{
+\section{The measure}{
 
-\strong{Categorical sensitive variables:}
-\itemize{
-\item RCS_conditional: \code{cat_tau = 1} (default)
-\item RCS_marginal: \code{cat_tau = 0.3}
-\item NCE: \code{cat_tau = 0.5-0.7}
+Record \eqn{i} of the original data has the true value \eqn{y_i} and the
+quasi-identifiers \eqn{x_i}. The attacker's model, fitted on the release,
+gives a predictive distribution of the target for \eqn{x_i}. Three numbers are
+computed per record. The confidence \eqn{g_i} is the probability the attacker
+puts on the true value. The baseline \eqn{b_i} is the probability an attacker
+who ignores the quasi-identifiers and guesses from the original values would
+put on it. The normalized gain is
+\deqn{r_i = \frac{g_i - b_i}{1 - b_i},}{r_i = (g_i - b_i) / (1 - b_i),}
+with \eqn{r_i = 0} where \eqn{b_i = 1}. A gain of 0 means the attacker does no
+better than the marginal distribution, a gain of 1 means it is certain of the
+true value, and \eqn{r_i = 0.3} means it covers 30 percent of the distance
+between the baseline and certainty. The record is at risk when \eqn{r_i >
+\tau}{r_i > tau}, and RAPID is the share of records at risk. Such a record is
+also called flagged.
+
+\strong{Categorical target} (\code{cat_eval_method = "RCS_marginal"},
+\eqn{\tau}{tau} = \code{cat_tau}). \eqn{g_i} is the predicted probability of
+the true class and \eqn{b_i} the share of that class among the \eqn{n}
+original values, \eqn{b_i = n^{-1} \sum_j I(y_j = y_i)}{b_i = (1/n) sum_j
+I(y_j = y_i)}. Two older rules are available. \code{"RCS_conditional"}
+replaces \eqn{b_i} by the mean of \eqn{g_j} over the records \eqn{j} of the
+same class and flags when the ratio \eqn{g_i / b_i} exceeds \code{cat_tau}
+(default 1). \code{"NCE"}, the normalized cross-entropy, flags when \eqn{1 +
+\log(g_i) / \log(C)}{1 + log(g_i) / log(C)} exceeds \code{cat_tau} (default
+0.5), where \eqn{C} is the number of classes and \eqn{g_i} is bounded below
+by \eqn{10^{-10}}{1e-10}.
+
+\strong{Numeric target, band rule} (\code{num_eval_method = "band"},
+\eqn{\tau}{tau} = \code{num_tau}). The true class is replaced by the tolerance
+band \eqn{B_i = \{v : e(y_i, v) < \varepsilon\}}{B_i = {v : e(y_i, v) <
+epsilon}}, the open interval of all values within the tolerance
+\eqn{\varepsilon}{epsilon} (\code{num_epsilon}) of the true value. The error
+\eqn{e} is set by \code{num_error_metric}, with the smoothing constant
+\eqn{\delta}{delta} (\code{num_delta}):
+\describe{
+\item{\code{"symmetric"}}{\eqn{e(y, v) = 2|y - v| / (|y| + |v| +
+    2\delta)}{e(y, v) = 2|y - v| / (|y| + |v| + 2 delta)}}
+\item{\code{"stabilised_relative"}}{\eqn{e(y, v) = |y - v| / (|y| +
+    \delta)}{e(y, v) = |y - v| / (|y| + delta)}}
+\item{\code{"absolute"}}{\eqn{e(y, v) = |y - v|}}
 }
-\strong{Continuous sensitive variables:}
-\itemize{
-\item symmetric: \code{num_epsilon = 5-10} (percentage)
-\item absolute: \code{num_epsilon} depends on domain/scale
-}
+\eqn{g_i} is the probability the attacker's predictive
+distribution puts into \eqn{B_i}, and \eqn{b_i = n^{-1} \sum_j I(y_j \in
+B_i)}{b_i = (1/n) sum_j I(y_j in B_i)} is the share of original values inside
+the band. With the symmetric error and a tolerance of 10 percent, a true
+income of 50000 has the band from about 45200 to 55300. The band depends only
+on the true value and the tolerance, so \eqn{b_i} is the same for every
+attacker. Near the center of the distribution \eqn{b_i} is large, and a close
+guess there earns little gain.
+
+\strong{Numeric target, point rule} (\code{num_eval_method = "point"}). A
+record is at risk when the error of the point prediction is below the
+tolerance, \eqn{e(y_i, \hat y_i) < \varepsilon}{e(y_i, yhat_i) < epsilon}.
+The rule has no baseline. It flags records near the center of the
+distribution even when the release carries no information about the target
+(see the examples), which is why it is no longer the default. The column
+\code{b} of its record table holds the band baseline for comparison.
+
+Arguments of the other type of target are ignored with a warning of class
+\code{"rapid_warning_ignored_argument"}, and so are \code{num_tau} under the
+point rule and \code{perm_level} under a fixed threshold.
+
+\strong{Terms.} The \emph{prepared} data are the columns \code{key_vars} and
+\code{target_var}, with character and logical variables turned into factors,
+the same factor levels in \code{X} and \code{Y}, and missing values treated
+as described in the section "Missing values". The \emph{rule} (field
+\code{method}) says how a record is scored and when it is at risk. A record
+\emph{at risk} is the same as a flagged record. The \emph{attacker} is the
+prediction model (\code{model_type}). The \emph{quasi-identifiers} are the
+key variables (\code{key_vars}).
 }
 
-\section{Comparison with CAP Methods}{
+\section{Chance level}{
 
-\itemize{
-\item \strong{RAPID} captures complex non-linear relationships via ML models
-\item \strong{DCAP/TCAP} use exact/fuzzy matching on key combinations
-\item Use RAPID when relationships are complex; use CAP when matching is intuitive
-\item Both approaches are complementary and should ideally be used together
+Some records pass any fixed threshold by chance. An attacker with
+concentrated predictions, such as a forest with small leaves, lands near some
+true values even when the quasi-identifiers say nothing about the target. To
+measure this share, the attacker and its predictions are kept fixed, the true
+values are permuted \code{n_perm} times, and each record's prediction is
+scored against the value it receives, with the baseline of that value. The
+chance level \code{chance} is the share at risk, averaged over the
+permutations. For a categorical target with few classes the chance level is
+high by construction. A record is at risk in every permutation that assigns
+it a class whose predicted probability passes the threshold for that class,
+and with two classes this happens often. RAPID alone then says little. Read
+the excess.
+
+Each permutation scores all \eqn{n} records, so ten permutations give a
+stable mean. The print states that RAPID is not distinguishable from the
+chance level when the excess is at most twice the standard deviation of the
+shares of the permutations.
+
+The excess \code{rapid - chance} is the part of RAPID that comes from the
+link between the quasi-identifiers and the target. An excess of 0.2 means
+that 20 percent of the records are at risk in addition to those that the
+same predictions flag when they are matched with true values at random,
+that is, the release lets the attacker infer the sensitive value of one
+record in five beyond chance. \code{\link{rapid_test}()} gives a p-value for
+the excess. See also the vignette section "Chance level and excess".
 }
+
+\section{Choosing tolerance and threshold}{
+
+The tolerance \eqn{\varepsilon}{epsilon} says when a guess counts as a
+disclosure. For the relative metrics it is a proportion (\code{num_epsilon =
+0.1} is 10 percent), which suits targets such as income whose spread grows
+with their level. A tolerance of 10 percent is narrow for a target that
+varies over orders of magnitude and wide for one with a small relative
+spread, so the same tolerance does not make RAPID comparable across targets.
+The absolute metric takes the tolerance in the units of the target (for
+example 2 years of age) and has no default.
+
+The threshold \eqn{\tau}{tau} is the share of the possible gain an attacker
+must reach. The paper uses 0.3 as reference for both target types. Two
+data-driven choices exist. \code{threshold_rule = "permutation"} takes as
+threshold the \code{perm_level} quantile of all permuted scores, so that
+about 5 percent of the records or fewer (\code{perm_level = 0.95}) pass it
+when the predictions carry no information.
+\code{\link{rapid_threshold_select}()} scans a grid of thresholds and returns
+the strictest one at which RAPID is above the \code{1 - alpha} quantile of
+its permutation distribution. Its help page and the vignette section
+"Choosing the threshold" say how to read the selected threshold.
+}
+
+\section{Attackers}{
+
+RAPID depends on the attacker. For a report, run
+\code{\link{rapid_suite}()} and give the largest excess with its attacker
+(fields \code{excess_max} and \code{worst_model_excess}). Its default
+attackers are rf, cart, gbm and lookup. For a numeric target add the linear
+model with \code{model_types = c("lm", "rf", "cart", "gbm", "lookup")}.
+
+The attackers answer two different questions. Generalizing attackers, the
+linear model and the tree pruned by cross-validation, learn how the target
+depends on the quasi-identifiers. Their RAPID measures inference from the
+quasi-identifiers, which any release that keeps this dependence allows, for
+records in the original data and for others alike. They do not flag the
+records of an exact copy when the target does not depend on the
+quasi-identifiers.
+
+The lookup attacker (\code{model_type = "lookup"}) is one tree of ranger
+grown on all synthetic records with node size 1, trying all
+quasi-identifiers at every split. It reads off the synthetic records that
+share a record's key values and so measures whether the release reproduces
+the records' values. Its predictions are concentrated, so its chance level is
+high, and only its excess can be read. The print adds a line that says so.
+
+The random forest, the default, takes both types of target and numeric and
+categorical quasi-identifiers. It lies between the two kinds of attackers,
+and its single value does not say whether it comes from inference or from
+reproduced records. Where it lies depends on settings of ranger that
+\code{rapid()} leaves at their defaults: the node size \code{min.node.size}
+(5 for a numeric target, 10 for class probabilities, reported in the field
+\code{attacker}) and \code{mtry}. When all quasi-identifiers are tried at
+every split, small nodes detect copied records and large nodes do not. On an
+exact copy of the example data with a permuted target, the forest with
+\code{mtry = 3} gave a RAPID of 0.840 at node size 1 and of 0.007 at node
+size 20. With the default \code{mtry} it flagged no record at either node
+size. The forest also depends on the seed. Over the seeds 1 to 10 its RAPID
+on the example data lay between 0.083 and 0.160, and the interval of
+\code{confint()} does not include this variation.
+
+To tell inference and reproduction apart on real data, pass records that
+were not used to generate the release as \code{holdout}. RAPID on them
+measures inference from the quasi-identifiers alone, and
+\code{release_specific}, RAPID minus holdout RAPID, the part that is specific
+to the records behind the release. The vignette sections "Inference and
+reproduction: which attacker answers which question", "Model suite and worst
+case" and "Holdout and release-specific risk" show these comparisons.
+
+The tree of \code{"cart"} is grown with \code{cp = 0}, \code{minbucket = 5}
+and \code{xval = 10} and pruned at the complexity with the smallest
+cross-validated error. Each of the three values can be set through
+\code{...}, a \code{control} object replaces all three, and \code{prune =
+FALSE} keeps the tree as grown. Pruning needs \code{xval >= 1}. The
+cross-validation draws random numbers, so the size of the tree depends on
+\code{seed}. The field \code{attacker} gives the number of leaves. On the
+example data the tree had 25 to 31 leaves over the seeds 1 to 10, with a
+RAPID between 0.740 and 0.757. The argument \code{prune} is ignored by the
+other attackers, with a warning.
+
+The linear model works on the scale set by \code{num_scale}. Under
+\code{"auto"} it takes the log scale when three conditions hold: the error
+metric is relative, all observed synthetic target values are positive, and
+the log model has the higher Gaussian log-likelihood on the original scale
+(the log model pays the Jacobian, the sum of the logged target values).
+Otherwise it takes the identity. Imputed missing values take no part in this
+choice, and the log model leaves out imputed values that are not positive.
+The field \code{attacker} names the scale.
+
+\strong{Predictive distribution.} A categorical target needs class
+probabilities, which every attacker provides. A numeric target under the band
+rule needs the probability the attacker puts into an interval.
+\code{num_dist} chooses how it is computed. Under \code{"grid"} every
+attacker gives \eqn{K} = \code{n_quantiles} quantiles \eqn{q_{i1}, \ldots,
+q_{iK}}{q_i1, ..., q_iK} at the levels \eqn{(k - 0.5)/K}{(k - 0.5)/K}, and
+\eqn{g_i} is the share of them strictly inside the band. \code{"exact"}
+computes the probability from the model's own distribution. \code{"auto"}
+(default) takes the exact form where the attacker has one and the grid
+otherwise.
+\describe{
+\item{lm}{Normal distribution with mean \eqn{\hat y_i}{yhat_i} and standard
+deviation \eqn{\sqrt{se_i^2 + \hat\sigma^2}}{sqrt(se_i^2 + sigma^2)} (the
+standard error of the fit and the residual standard deviation) on the
+working scale, lognormal on the log scale. \code{"auto"} and
+\code{"exact"} use the distribution function, \code{"grid"} its
+quantiles.}
+\item{cart}{The synthetic target values in the record's leaf.
+\code{"auto"} and \code{"exact"} count the share of them inside the band,
+\code{"grid"} uses their quantiles (type 1, so that point masses such as
+zeros stay).}
+\item{rf}{\code{"auto"} and \code{"grid"} use the quantiles of a quantile
+regression forest (Meinshausen, 2006) from ranger, which draws one value
+per leaf and tree, so \eqn{g_i} carries Monte Carlo noise.
+\code{"exact"} uses the weights of Meinshausen (2006) and removes this
+noise, at the cost of a larger object.}
+\item{gbm}{A second model with the same settings and the quantile loss
+estimates the \eqn{K} quantiles, crossing quantiles are sorted. Only the
+grid is available (\code{"auto"} gives it).}
+\item{lookup}{The synthetic values in the record's leaf of one fully grown
+tree, exact (\code{"auto"} or \code{"exact"}, no grid).}
+\item{user-defined}{The quantiles of \code{predict_quantiles} of
+\code{\link{rapid_learner}()} (\code{"auto"} or \code{"grid"}).}
+}
+The point rule uses only the point prediction, which for lm on the log scale
+is the predictive median.
+}
+
+\section{Missing values}{
+
+\describe{
+\item{Numeric target}{\code{na_strategy} decides. Under \code{"drop"}
+(default) the records of \code{X}, \code{Y} and the holdout with a missing
+target are removed. RAPID is the share among the remaining records of
+\code{X}, \code{nobs()} gives their number, \code{x$na$dropped} the
+removed rows of \code{X}, and the record table keeps the row names of
+\code{X}. Under \code{"constant"} the values are replaced by
+\code{na_constant_value}. Under \code{"median"} they are replaced by the
+median of the observed values, of \code{X} in \code{X} and of \code{Y} in
+\code{Y}. A holdout record gets the value a record of \code{X} got. Under
+both, the records stay in the denominator of RAPID. They are scored
+against the replaced value, so they are rarely at risk and RAPID tends to
+be lower than on the observed records. The linear model chooses its scale
+under \code{num_scale = "auto"} on the observed synthetic values.}
+\item{Categorical target}{A missing value becomes the class
+\code{"missing"} in \code{X} and \code{Y}, whatever \code{na_strategy}
+says, and the records stay in the denominator. A holdout record or a
+record of the \code{newdata} of \code{predict()} with a missing target
+is refused with an error of class \code{"rapid_error_levels"} when
+neither \code{X} nor \code{Y} has a missing target value. Remove such
+records first.}
+\item{Categorical quasi-identifier}{A missing value becomes the level
+\code{"missing"}. The attackers \code{"lm"}, \code{"logit"} and
+user-defined ones stop with an error of class
+\code{"rapid_error_levels"} when \code{X} has this level and \code{Y}
+does not. The tree-based attackers accept it.}
+\item{Numeric quasi-identifier}{A missing value is an error of class
+\code{"rapid_error_input"}. Impute or remove these records before the
+call.}
+}
+When the target of \code{X}, \code{Y}, the holdout or the \code{newdata} of
+\code{predict()} has missing values, a warning of class
+\code{"rapid_warning_missing_target"} gives their number per data set and
+their treatment.
+}
+
+\section{Reproducibility}{
+
+A result is reproducible when every random step has a seed.
+\describe{
+\item{\code{rapid()}}{The fit of the forest, the cross-validation of the
+pruned tree, and the permutations of every attacker are random. All
+start from \code{seed}.}
+\item{\code{update()}, \code{plot()}}{The permutations are random. They
+start from the seed stored in the object. Without one they are new
+draws.}
+\item{\code{rapid_test()}, \code{rapid_threshold_select()} on an
+object}{The permutations are random. They take the \code{seed} of
+these functions. The seed of the object is not used.}
+\item{\code{confint(method = "bootstrap")}}{The resampling is random. It
+takes the \code{seed} of \code{confint()}.}
+\item{\code{rapid_suite()}, \code{rapid_qi_contribution()}}{Every fit and
+its permutations are random. Each fit starts from the same \code{seed}.}
+\item{\code{rapid_synthesizer_cv()}}{The folds, the synthesizer and the
+fits are random. Its \code{seed} covers all three.}
+}
+\code{set.seed()} before a call without \code{seed} works as well. The linear
+model has no random fit, only its permutations are random. A forest with a
+seed gave the same result with 1 and with 4 threads (\code{num.threads}).
+}
+
+\section{Methods and companion functions}{
+
+\describe{
+\item{\code{print(x)}, \code{format(x)}}{The attacker line, the rule,
+RAPID, chance level and excess, the holdout result.}
+\item{\code{summary(x)}}{RAPID with its Wilson interval, the spread of
+the flags over rare and common values, model performance.}
+\item{\code{as.data.frame(x)}}{The record table, with \code{at_risk_only =
+    TRUE} the records at risk.}
+\item{\code{nobs(x)}}{The number of scored records.}
+\item{\code{confint(x)}}{Wilson, Wald, Clopper-Pearson or bootstrap
+interval for RAPID.}
+\item{\code{update(x, ...)}}{The object with changed arguments, rescored
+without a refit where only the rule changes.}
+\item{\code{predict(x, newdata)}}{The attacker applied to new records
+(needs \code{store_model = TRUE}).}
+\item{\code{plot(x, which)}}{Six plot types, see \code{\link{plot.rapid}}.}
+\item{\code{rapid_test(x)}}{Permutation test and Wald test of RAPID against
+the chance level, see \code{\link{rapid_test}}.}
+\item{\code{rapid_threshold_select(x)}}{Threshold chosen by permutation,
+see \code{\link{rapid_threshold_select}}.}
+\item{\code{rapid_suite(x, ...)}}{Several fitted objects combined into a
+model suite, see \code{\link{rapid_suite}}.}
+}
+The first seven are documented together in \code{\link{rapid-methods}}, the
+plots in \code{\link{plot.rapid}}. \code{\link{rapid_qi_contribution}()} and
+\code{\link{rapid_synthesizer_cv}()} start from the data and fit their own
+models. They do not take a \code{rapid} object.
+}
+
+\section{Changes in 0.3.0}{
+
+Calls of riskutility 0.2.0 and the call that gives the same rule now:
+\describe{
+\item{Numeric target, default}{\code{rapid(X, Y, kv, tv)} is now
+\code{rapid(X, Y, kv, tv, num_eval_method = "point", num_epsilon =
+    0.1)}.}
+\item{Tolerance in percent}{\code{num_epsilon = 10} is now
+\code{num_epsilon = 0.1}.}
+\item{Absolute tolerance}{\code{num_epsilon_type = "absolute", num_epsilon
+    = 2} is now \code{num_error_metric = "absolute", num_epsilon = 2}.}
+\item{Categorical target, default}{\code{rapid(X, Y, kv, tv)} is now
+\code{rapid(X, Y, kv, tv, cat_eval_method = "RCS_conditional")}.}
+\item{Categorical target, threshold 1}{\code{rapid(X, Y, kv, tv, cat_tau =
+    1)} is now an error, because the default rule \code{RCS_marginal} takes a
+threshold below 1. The 0.2.0 rule is \code{rapid(X, Y, kv, tv, cat_tau = 1,
+    cat_eval_method = "RCS_conditional")}.}
+\item{Linear model}{\code{model_type = "lm"} is now \code{model_type =
+    "lm", num_scale = "identity"}.}
+\item{Tree}{\code{model_type = "cart"} is now \code{model_type = "cart",
+    prune = FALSE, cp = 0.01, minsplit = 20, minbucket = 7}.}
+\item{Missing values of a numeric target}{\code{rapid(X, Y, kv, tv)}
+is now \code{rapid(X, Y, kv, tv, na_strategy = "constant")}.}
+\item{Records at risk only}{\code{return_all_records = FALSE} is now
+\code{as.data.frame(x, at_risk_only = TRUE)}.}
+\item{Old argument names}{\code{rapid(original_data = X, synthetic_data =
+    Y, quasi_identifiers = kv, sensitive_attribute = tv)} still works and is
+the same as \code{rapid(X, Y, kv, tv)}.}
+}
+For the random forest no attacker setting changed. With the same random
+stream (\code{set.seed()} before the call in 0.2.0, the same
+\code{set.seed()} or \code{seed} in 0.3.0) and \code{num_eval_method =
+"point", num_epsilon = 0.1}, the call reproduces the value of 0.2.0.
+
+The risk levels LOW, MEDIUM and HIGH of \code{summary()} are gone. Read
+the excess over the chance level and \code{\link{rapid_test}()} instead.
+Several fields and record columns of 0.2.0 are renamed or removed, and
+reading them gives \code{NULL} without an error. The confidence is the
+column \code{g} (0.2.0: \code{true_prob}), the baseline \code{b}
+(\code{baseline}), the score of \code{RCS_conditional} \code{ratio}
+(\code{relative_score}) and the error of the point rule \code{error}, a
+proportion (\code{symmetric_error_pct}, in percent). The full list is in
+the file NEWS.md and in the vignette section "Migration from 0.2.0".
+}
+
+\section{Reproducing the paper and the RAPID package}{
+
+The RAPID paper (Templ, Thees and Müller, 2026) and the RAPID package of
+Oscar Thees use the band rule with the defaults above and take three
+settings that differ from the defaults here:
+\describe{
+\item{\code{num_dist = "grid"}}{The predictive distribution of every
+attacker as 100 quantiles.}
+\item{\code{num_scale = "identity"}}{The linear model on the scale of the
+target.}
+\item{\code{prune = FALSE, cp = 0.01, minsplit = 20, minbucket = 7}}{The
+tree with the defaults of rpart, not pruned. \code{minsplit} must be
+given: with \code{minbucket = 7} alone, rpart sets \code{minsplit = 21}.}
+}
+With these settings the lm and cart results agree with those of the RAPID
+package. The rf and gbm results agree up to the random draws of the two
+implementations.
 }
 
 \examples{
-# Create example data
-set.seed(123)
-n <- 200
-original <- data.frame(
+set.seed(1)
+n <- 300
+X <- data.frame(
   age = sample(20:70, n, replace = TRUE),
-  gender = factor(sample(c("M", "F"), n, replace = TRUE)),
-  region = factor(sample(c("N", "S", "E", "W"), n, replace = TRUE)),
-  income = round(rnorm(n, 50000, 10000))
+  sex = factor(sample(c("F", "M"), n, replace = TRUE)),
+  region = factor(sample(c("N", "S", "E", "W"), n, replace = TRUE))
 )
+X$income <- round(exp(9 + 0.03 * X$age + 0.3 * (X$sex == "M") + rnorm(n, 0, 0.1)))
+X$smoker <- factor(ifelse(runif(n) < ifelse(X$age < 40, 0.6, 0.15), "yes", "no"))
+# A release that keeps the dependence on the quasi-identifiers
+Y <- X
+Y$income <- round(Y$income * exp(rnorm(n, 0, 0.05)))
+kv <- c("age", "sex", "region")
 
-# Synthetic version with some noise
-synthetic <- data.frame(
-  age = original$age + sample(-3:3, n, replace = TRUE),
-  gender = factor(sample(c("M", "F"), n, replace = TRUE)),
-  region = factor(sample(c("N", "S", "E", "W"), n, replace = TRUE)),
-  income = round(original$income * runif(n, 0.9, 1.1))
-)
+# Numeric target with the defaults: random forest, band rule, tolerance
+# 10 percent, threshold 0.3
+r <- rapid(X, Y, key_vars = kv, target_var = "income", seed = 1)
+r
+# RAPID is the share of records at risk. The chance level is the share at
+# risk when the true values are permuted. Read the excess, their difference.
+c(rapid = r$rapid, chance = r$chance, excess = r$excess)
 
-# RAPID for continuous sensitive variable
+# The records at risk: tolerance band, confidence g, baseline b, gain r
+head(as.data.frame(r, at_risk_only = TRUE), 3)
+
+# Interval for RAPID, and a stricter threshold without a new fit
+confint(r)
+update(r, num_tau = 0.5)
+
+# The result depends on the attacker. The linear model learns how income
+# depends on age and sex and flags more records than the forest.
+r_lm <- rapid(X, Y, key_vars = kv, target_var = "income", model_type = "lm",
+              seed = 1)
+r_lm
+
+# A release that says nothing about income: the band rule flags nothing, the
+# point rule of 0.2.0 still flags records, as many as it does by chance
+Y0 <- Y
+Y0$income <- sample(Y0$income)
+rapid(X, Y0, key_vars = kv, target_var = "income", model_type = "lm", seed = 1)
+rapid(X, Y0, key_vars = kv, target_var = "income", model_type = "lm",
+      num_eval_method = "point", seed = 1)
+
+# A tolerance in the units of the target: age within 5 years
+rapid(X, Y, key_vars = c("sex", "income"), target_var = "age",
+      num_error_metric = "absolute", num_epsilon = 5, seed = 1)
+
+# Categorical target. With two classes many records pass the threshold by
+# chance, so the chance level is high and the excess is the number to read.
+rapid(X, Y, key_vars = kv, target_var = "smoker", seed = 1)
+
+# Records 201 to 300 were not used for the release. RAPID on them is about as
+# high as on the records behind the release. The attacker infers income from
+# the quasi-identifiers and does not need the records themselves.
+rh <- rapid(X[1:200, ], Y[1:200, ], key_vars = kv, target_var = "income",
+            model_type = "lm", holdout = X[201:300, ], seed = 1)
+rh
+rh$release_specific
+
+# The same call as the first one, with the data in a synth_pair
+sp <- synth_pair(X, Y, key_vars = kv, target_var = "income")
+rapid(sp, seed = 1)
+
 \donttest{
-result <- rapid(
-  X = original,
-  Y = synthetic,
-  key_vars = c("age", "gender", "region"),
-  target_var = "income",
-  model_type = "rf",
-  num_epsilon = 10,
-  verbose = TRUE
-)
-print(result)
-summary(result)
+# Lookup attacker: read it by its excess
+rapid(X, Y, key_vars = kv, target_var = "income", model_type = "lookup", seed = 1)
+
+# Categorical target with a pruned tree
+if (requireNamespace("rpart", quietly = TRUE)) {
+  rapid(X, Y, key_vars = kv, target_var = "smoker", model_type = "cart", seed = 1)
 }
 
-# RAPID for categorical sensitive variable
-\donttest{
-original$health <- factor(sample(c("Good", "Fair", "Poor"), n,
-                                  replace = TRUE, prob = c(0.6, 0.3, 0.1)))
-synthetic$health <- factor(sample(c("Good", "Fair", "Poor"), n,
-                                   replace = TRUE, prob = c(0.55, 0.35, 0.1)))
-
-result_cat <- rapid(
-  X = original,
-  Y = synthetic,
-  key_vars = c("age", "gender", "region"),
-  target_var = "health",
-  model_type = "rf",
-  cat_tau = 1,
-  cat_eval_method = "RCS_conditional"
-)
-print(result_cat)
-}
-
-# ================================================================
-# Real data example using SD2011 from synthpop package
-# ================================================================
-\donttest{
-if (requireNamespace("synthpop", quietly = TRUE) &&
-    requireNamespace("ranger", quietly = TRUE)) {
-
-  # Load SD2011 Polish Social Diagnosis survey data
-  data(SD2011, package = "synthpop")
-
-  # Select relevant variables and remove NAs for cleaner example
-  vars <- c("sex", "age", "edu", "marital", "region", "income", "smoke")
-  original_sd <- SD2011[, vars]
-  original_sd <- original_sd[complete.cases(original_sd), ]
-
-  # Generate synthetic data using synthpop
-  synth_obj <- synthpop::syn(original_sd, seed = 123, print.flag = FALSE)
-  synthetic_sd <- synth_obj$syn
-
-  # ------------------------------------------------------------------
-  # Example 1: Continuous sensitive variable (income)
-  # ------------------------------------------------------------------
-  # Assess risk of inferring income from demographic quasi-identifiers
-
-  rapid_income <- rapid(
-    X = original_sd,
-    Y = synthetic_sd,
-    key_vars = c("sex", "age", "edu", "marital", "region"),
-    target_var = "income",
-    model_type = "rf",
-    num_epsilon = 10,           # 10\% error threshold
-    num_epsilon_type = "percentage",
-    num_error_metric = "symmetric",
-    verbose = TRUE
-  )
-
-  print(rapid_income)
-  summary(rapid_income)
-  plot(rapid_income, which = 1:2)
-
-  # Interpretation:
-  # - RAPID score close to 0: low risk (model cannot predict income well)
-  # - RAPID score > 0.15: elevated risk (sensitive attribute predictable)
-
-  # ------------------------------------------------------------------
-  # Example 2: Categorical sensitive variable (smoking status)
-  # ------------------------------------------------------------------
-  # Assess risk of inferring smoking behavior from demographics
-
-  rapid_smoke <- rapid(
-    X = original_sd,
-    Y = synthetic_sd,
-    key_vars = c("sex", "age", "edu", "marital", "income"),
-    target_var = "smoke",
-    model_type = "rf",
-    cat_tau = 1,                # ratio threshold for RCS_conditional
-    cat_eval_method = "RCS_conditional",
-    verbose = TRUE
-  )
-
-  print(rapid_smoke)
-  summary(rapid_smoke)
-  plot(rapid_smoke)
-
-  # Compare with DCAP for the same data
-  dcap_smoke <- dcap(
-    X = original_sd,
-    Y = synthetic_sd,
-    key_vars = c("sex", "age", "edu", "marital"),
-    target_var = "smoke"
-  )
-  print(dcap_smoke)
-
-  # RAPID may detect risks that DCAP misses when relationships are non-linear
+# Settings of the RAPID paper and the RAPID package
+rapid(X, Y, key_vars = kv, target_var = "income", model_type = "lm",
+      num_dist = "grid", num_scale = "identity", seed = 1)
+if (requireNamespace("rpart", quietly = TRUE)) {
+  rapid(X, Y, key_vars = kv, target_var = "income", model_type = "cart",
+        num_dist = "grid", prune = FALSE, cp = 0.01, minsplit = 20, minbucket = 7,
+        seed = 1)
 }
 }
 }
 \references{
-Templ, M. (2024). Beyond the Trade-off Curve: Multivariate Risk-Utility
-Visualization for Synthetic Data. \emph{Journal of Official Statistics}.
+Templ, M., Thees, O. and Müller, R. (2026). RAPID: Risk of Attribute
+Prediction-Induced Disclosure. Manuscript under review at EPJ Data Science.
+
+Meinshausen, N. (2006). Quantile Regression Forests. \emph{Journal of Machine
+Learning Research}, 7, 983--999.
 }
 \seealso{
-\code{\link{dcap}}, \code{\link{tcap}} for attribution-based metrics,
-\code{\link{disclosure_report}} for comprehensive risk assessment
+\code{vignette("rapid", package = "riskutility")} for a worked
+example. \code{\link{rapid-methods}} and \code{\link{plot.rapid}} for the
+methods, \code{\link{rapid_test}}, \code{\link{rapid_threshold_select}},
+\code{\link{rapid_suite}}, \code{\link{rapid_learner}},
+\code{\link{rapid_qi_contribution}} and \code{\link{rapid_synthesizer_cv}}
+for the companion functions, \code{\link{dcap}} and \code{\link{tcap}} for
+attribution by matching, \code{\link{disclosure_report}}.
 
 Other rapid: 
-\code{\link{confint.rapid}()},
+\code{\link{plot.rapid}()},
+\code{\link{rapid-methods}},
+\code{\link{rapid_learner}()},
 \code{\link{rapid_qi_contribution}()},
+\code{\link{rapid_suite}()},
 \code{\link{rapid_synthesizer_cv}()},
 \code{\link{rapid_test}()},
 \code{\link{rapid_threshold_select}()}

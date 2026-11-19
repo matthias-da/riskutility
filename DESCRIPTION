@@ -1,7 +1,7 @@
 Package: riskutility
 Title: Disclosure Risk and Data Utility Metrics for Synthetic and Anonymized Data
-Version: 0.2.0
-Date: 2026-09-01
+Version: 0.3.0
+Date: 2026-11-19
 Authors@R: c(
     person("Matthias", "Templ", email = "matthias.templ@gmail.com",
            role = c("aut", "cre"),
@@ -13,8 +13,11 @@ Authors@R: c(
 Description: Provides comprehensive methods to measure disclosure risk and data
     utility for anonymized and synthetic data. Implements attribution-based risk
     metrics including Correct Attribution Probability (CAP), Targeted CAP (TCAP),
-    Within Equivalence Class Attribution Probability (WEAP), and RAPID (Risk of
-    Attribute Prediction-Induced Disclosure). Also provides distance-based privacy
+    and Within Equivalence Class Attribution Probability (WEAP). RAPID (Risk of
+    Attribute Prediction-Induced Disclosure) fits an attacker model on the
+    synthetic data, applies it to the original records and reports the share of
+    records for which the attacker gains clearly over the marginal baseline,
+    together with the chance level of that share. Also provides distance-based privacy
     metrics such as Distance to Closest Record (DCR), Nearest Neighbor Distance
     Ratio (NNDR), and Identical Match Share (IMS). Utility assessment includes
     propensity score analysis, distribution comparisons, and various statistical

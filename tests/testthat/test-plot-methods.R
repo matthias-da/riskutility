@@ -147,8 +147,7 @@ test_that("plot.rapid works for which = 1:3", {
   result <- rapid(X, Y,
                   key_vars = c("age", "gender"),
                   target_var = "income",
-                  model_type = "lm",
-                  return_all_records = TRUE)
+                  model_type = "lm")
 
   expect_no_error(plot(result, which = 1))
   expect_no_error(plot(result, which = 2))

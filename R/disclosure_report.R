@@ -24,6 +24,10 @@
 #'   Default is "all". Options: "all", "attribution", "distance", "privacy",
 #'   "membership", or specific metric names (see Details).
 #' @param rapid_model character, model type for RAPID: "rf" (default), "lm", "cart"
+#' @param rapid_alpha numeric, significance level of the RAPID permutation test (default 0.05).
+#'   The RAPID row is "PASS" when the permutation p-value of \code{\link{rapid_test}} (199
+#'   permutations) is above \code{rapid_alpha}, i.e. the share of records the attacker gets
+#'   right is not distinguishable from chance, and "WARNING" otherwise.
 #' @param na.rm logical, remove records with NA values (default: TRUE)
 #' @param seed integer, random seed for holdout sampling (default: NULL)
 #' @param verbose logical, print progress messages (default: TRUE)
@@ -49,7 +53,8 @@
 #'   \item tcap: Per-record attribution risk with categories
 #'   \item weap: Within equivalence class attribution (on synthetic only)
 #'   \item disco: Count of disclosive synthetic records
-#'   \item rapid: ML-based attribute inference risk (requires ranger package)
+#'   \item rapid: ML-based attribute inference risk, judged by the excess over chance and
+#'     a permutation test (requires ranger package; see \code{rapid_alpha})
 #' }
 #'
 #' \strong{Distance-Based Metrics} (use holdout comparison):
@@ -154,6 +159,7 @@ disclosure_report.default <- function(X, Y,
                               distance_method = c("gower", "euclidean"),
                               compute = "all",
                               rapid_model = "rf",
+                              rapid_alpha = 0.05,
                               na.rm = TRUE,
                               seed = NULL,
                               verbose = TRUE, ...) {
@@ -365,12 +371,13 @@ disclosure_report.default <- function(X, Y,
       err <- tryCatch({
         results$rapid <- rapid(X, Y, key_vars, target_var,
                                model_type = rapid_model, verbose = FALSE)
-        pass <- results$rapid$rapid < 0.15
+        results$rapid_test <- rapid_test(results$rapid, n_permutations = 199)
+        pass <- results$rapid_test$p_value > rapid_alpha
         summary_rows$rapid <- data.frame(
           metric = "RAPID",
           value = round(results$rapid$rapid, 4),
-          reference = paste0(results$rapid$n_at_risk, " at risk"),
-          ratio = round(results$rapid$pct_at_risk, 1),
+          reference = paste0("chance ", round(results$rapid_test$chance, 4)),
+          ratio = round(results$rapid_test$excess, 4),
           status = ifelse(pass, "PASS", "WARNING")
         )
         NULL
@@ -1007,7 +1014,10 @@ summary.disclosure_report <- function(object, ...) {
       value = object$results$rapid$rapid,
       n_at_risk = object$results$rapid$n_at_risk,
       pct_at_risk = object$results$rapid$pct_at_risk,
-      model_type = object$results$rapid$model_type
+      model_type = object$results$rapid$model_type,
+      chance = object$results$rapid_test$chance,
+      excess = object$results$rapid_test$excess,
+      p_value = object$results$rapid_test$p_value
     )
   }
 
@@ -1143,6 +1153,9 @@ print.summary.disclosure_report <- function(x, ...) {
     }
     if (!is.null(x$attribution_results$rapid)) {
       cat("  RAPID:", round(x$attribution_results$rapid$value, 4),
+          ", chance:", round(x$attribution_results$rapid$chance, 4),
+          ", excess:", round(x$attribution_results$rapid$excess, 4),
+          ", p-value:", format.pval(x$attribution_results$rapid$p_value, digits = 3),
           ", at-risk records:", x$attribution_results$rapid$n_at_risk,
           sprintf("(%.1f%%)", x$attribution_results$rapid$pct_at_risk), "\n")
     }

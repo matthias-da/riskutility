@@ -21,6 +21,7 @@ disclosure_report(X, ...)
   distance_method = c("gower", "euclidean"),
   compute = "all",
   rapid_model = "rf",
+  rapid_alpha = 0.05,
   na.rm = TRUE,
   seed = NULL,
   verbose = TRUE,
@@ -57,6 +58,11 @@ Default is "all". Options: "all", "attribution", "distance", "privacy",
 
 \item{rapid_model}{character, model type for RAPID: "rf" (default), "lm", "cart"}
 
+\item{rapid_alpha}{numeric, significance level of the RAPID permutation test (default 0.05).
+The RAPID row is "PASS" when the permutation p-value of \code{\link{rapid_test}} (199
+permutations) is above \code{rapid_alpha}, i.e. the share of records the attacker gets
+right is not distinguishable from chance, and "WARNING" otherwise.}
+
 \item{na.rm}{logical, remove records with NA values (default: TRUE)}
 
 \item{seed}{integer, random seed for holdout sampling (default: NULL)}
@@ -92,7 +98,8 @@ by computing multiple complementary metrics across four families:
 \item tcap: Per-record attribution risk with categories
 \item weap: Within equivalence class attribution (on synthetic only)
 \item disco: Count of disclosive synthetic records
-\item rapid: ML-based attribute inference risk (requires ranger package)
+\item rapid: ML-based attribute inference risk, judged by the excess over chance and
+a permutation test (requires ranger package; see \code{rapid_alpha})
 }
 
 \strong{Distance-Based Metrics} (use holdout comparison):

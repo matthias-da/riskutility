@@ -55,7 +55,9 @@
 #'   \item dcap: Differential Correct Attribution Probability
 #'   \item tcap: Targeted CAP (mean per-record risk)
 #'   \item disco: Disclosive in Synthetic Correct Original
-#'   \item rapid: Risk of Attribute Prediction-Induced Disclosure (ML-based)
+#'   \item rapid: Risk of Attribute Prediction-Induced Disclosure. Reported as the excess
+#'     over chance, \code{max(0, rapid - chance)}, from a random forest attacker (see
+#'     \code{\link{rapid}}); 0 means the release is no more predictive than permuted values
 #'   \item ims: Identical Match Share
 #'   \item repu: Replicated Uniques
 #'   \item dcr: Distance to Closest Record ratio
@@ -318,9 +320,10 @@ rumap.default <- function(X,
     if ("rapid" %in% risk_measures) {
       tryCatch({
         res <- rapid(original, Y, key_vars = key_vars, target_var = target_var,
-                     model_type = "lm", return_all_records = FALSE,
-                     store_model = FALSE, verbose = FALSE)
-        risk_results[i, "rapid"] <- res$rapid
+                     model_type = "rf", store_model = FALSE,
+                     store_predictions = FALSE, verbose = FALSE)
+        # Excess over chance, so that an uninformative release scores 0
+        risk_results[i, "rapid"] <- max(0, res$excess)
       }, error = function(e) {
         warning(paste("rapid failed for", sdg_name, ":", e$message))
         risk_results[i, "rapid"] <<- NA

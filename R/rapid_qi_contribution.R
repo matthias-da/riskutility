@@ -1,79 +1,139 @@
 #' Risk Contribution of Quasi-Identifiers to RAPID
 #'
+#' @description
 #' Quantifies how much each quasi-identifier contributes to the RAPID
 #' disclosure risk under a declared attack scenario.  Starting from the
 #' full set of quasi-identifiers \eqn{Q}, each quasi-identifier \eqn{j}
 #' (or a group of them) is removed from the attacker's knowledge, the
 #' attacker model is refitted on the synthetic data without it, and the
 #' drop in risk is recorded:
-#' \deqn{\Delta_j = \mathrm{RAPID}(Q) - \mathrm{RAPID}(Q \setminus \{j\}).}
+#' \deqn{\Delta_j = \mathrm{RAPID}(Q) - \mathrm{RAPID}(Q \setminus \{j\}).}{
+#'   Delta_j = RAPID(Q) - RAPID(Q without j).}
 #'
-#' Because part of every RAPID value is a confidence component that is
-#' present even when the predictions carry no information about the true
-#' labels, the function also evaluates the fixed-model permutation null of
-#' \code{\link{rapid_test}} for each attacker model and reports the change
-#' in the excess over the null,
-#' \eqn{\Delta^{exc}_j = [\mathrm{RAPID}(Q) - \bar{R}_0(Q)] -
-#' [\mathrm{RAPID}(Q \setminus \{j\}) - \bar{R}_0(Q \setminus \{j\})]}.
-#' This is the quantity to interpret.
+#' Because part of every RAPID value is present even when the predictions
+#' carry no information about the true values, every scenario also reports
+#' the chance level of \code{\link{rapid}} (the share of records at risk
+#' when the true values are permuted) and the function reports the change
+#' in the excess over it,
+#' \deqn{\Delta^{exc}_j = [\mathrm{RAPID}(Q) - c(Q)] -
+#'   [\mathrm{RAPID}(Q \setminus \{j\}) - c(Q \setminus \{j\})],}{
+#'   Delta_exc_j = [RAPID(Q) - c(Q)] - [RAPID(Q without j) - c(Q without j)],}
+#' where \eqn{c(\cdot)}{c(.)} is the chance level of a scenario. This is the
+#' quantity to interpret.
+#'
+#' Every row is a scenario of its own, in which the attacker lacks one
+#' quasi-identifier or one group. The values are no decomposition of RAPID.
+#' They do not add up to the excess of the full scenario, and a value near
+#' zero does not show that a quasi-identifier is harmless when another one
+#' carries the same information (see Details).
 #'
 #' @details
-#' \strong{Interpretation.} \eqn{\Delta_j} answers "how much risk would
-#' disappear if the attacker did not know \eqn{j}?", which is also the
+#' Every row of the result comes from one call of \code{\link{rapid}} with
+#' \code{n_perm = n_permutations}, so that the arguments in \code{...}
+#' (model, scoring rule, thresholds) define the attack in the same way as
+#' there.
+#'
+#' \strong{Interpretation.} \eqn{\Delta_j}{Delta_j} answers "how much risk
+#' would disappear if the attacker did not know \eqn{j}?", which is also the
 #' first-order effect of withholding or strongly coarsening \eqn{j}.  It is
-#' a drop-one (drop-column) quantity: the attacker model is refitted, so it
-#' measures the value of the \emph{knowledge}, not how much a fixed model
-#' relies on a variable (permutation importance).
+#' a drop-one (drop-column) quantity. The attacker model is refitted, so it
+#' measures the value of the \emph{knowledge} of a variable. How much a
+#' fixed model relies on a variable (permutation importance) is another
+#' question.
 #'
 #' \strong{Substitutes.} Quasi-identifiers that carry the same information
-#' mask each other: dropping either alone changes little, while dropping
-#' both changes a lot.  Use \code{groups} to drop such sets jointly
-#' (e.g. relationship and marital status in the Adult data).  A small
-#' \eqn{\Delta_j} therefore means "not needed given the others", not
-#' "harmless".
+#' mask each other. Dropping either alone changes little, while dropping
+#' both changes a lot (see the last example).  Use \code{groups} to drop
+#' such sets jointly (e.g. relationship and marital status in the Adult
+#' data).  A small \eqn{\Delta_j}{Delta_j} therefore means "not needed given
+#' the others". It does not mean "harmless".
+#'
+#' \strong{Complements.} Two quasi-identifiers that the attacker needs
+#' jointly each take the whole excess with them when they are dropped, so
+#' their values sum to more than the excess of the full scenario (see the
+#' first example). Under the default forest (\code{model_type = "rf"}) on a
+#' release that contains copies of original records, a quasi-identifier
+#' that is independent of the target can show a large drop. A linear model
+#' or a pruned tree (\code{"lm"} or \code{"cart"}) shows a drop near zero
+#' for such a quasi-identifier. Use one of them to see which
+#' quasi-identifiers carry information about the target. A small negative
+#' value means that the attacker did slightly better without the
+#' quasi-identifier, which is within model noise. In a tie \code{summary()}
+#' names the first row as the largest contribution.
 #'
 #' \strong{Uncertainty.} A single synthetic release gives one value per
-#' quasi-identifier; differences of a few thousandths are within model
+#' quasi-identifier. Differences of a few thousandths are within model
 #' noise.  Repeat over several releases (or seeds) and report the spread.
-#' If \code{seed} is given, every attacker model is fitted with the same
-#' seed (common random numbers), which reduces this noise.
+#' If \code{seed} is given, every attacker model and every set of
+#' permutations starts from the same seed (common random numbers), which
+#' reduces this noise.
 #'
-#' @param original_data A data frame of original (confidential) records.
-#' @param synthetic_data A data frame of synthetic records used to train
-#'   the attacker model.
-#' @param quasi_identifiers Character vector: the full set of
-#'   quasi-identifiers known to the attacker in the reference scenario.
-#' @param sensitive_attribute Character string naming the sensitive
-#'   (target) variable.
-#' @param groups Optional named list of character vectors; each element is
+#' \strong{Holdout.} The table holds the values of the records of \code{X}
+#' only. The holdout of a \code{synth_pair} takes no part. A \code{holdout}
+#' given in \code{...} is passed to \code{rapid()} and is not reported.
+#'
+#' @param X The original (confidential) data: a data frame, or a
+#'   \code{\link{synth_pair}}. A \code{rapid} object is not accepted, because
+#'   every scenario needs a new fit.
+#' @param Y data frame of the released (synthetic or anonymized) data the
+#'   attacker is fitted on. Not needed if \code{X} is a \code{synth_pair}.
+#' @param key_vars character vector with the names of the quasi-identifiers.
+#'   It is the full set that the attacker knows in the reference scenario.
+#'   At least two are needed.
+#' @param target_var character, name of the sensitive variable (the target)
+#' @param groups Optional named list of character vectors. Each element is
 #'   a set of quasi-identifiers that is dropped jointly, in addition to the
 #'   single drops.  Names are used as labels.
-#' @param model_type Attacker model; see \code{\link{rapid}}.
-#' @param cat_tau,num_epsilon,cat_eval_method,num_error_metric,num_epsilon_type,num_delta
-#'   Risk definition; see \code{\link{rapid}}.  As in
-#'   \code{\link{rapid_test}}, the default \code{cat_eval_method} is
-#'   \code{"RCS_marginal"} (normalized gain over the marginal class
-#'   proportion).
-#' @param n_permutations Number of label permutations for the null mean
-#'   of each attacker model (default 99).  Set to 0 to skip the null; the
-#'   excess columns are then \code{NA}.
-#' @param seed Optional random seed (see Details).
-#' @param verbose Logical; print progress?
-#' @param ... Additional arguments passed to the model fitting function.
+#' @param n_permutations Number of permutations of the true values for the
+#'   chance level of each attacker model (default 99). It is passed to
+#'   \code{rapid()} as \code{n_perm}. Set to 0 to skip the chance level. The
+#'   excess columns are then \code{NA}, and \code{plot()} draws the drop in
+#'   RAPID. The function fits \code{1 + length(key_vars) + length(groups)}
+#'   attacker models and runs \code{n_permutations} permutations for each.
+#' @param seed Optional random seed (see Details). With a seed,
+#'   \code{set.seed()} is called and the random stream of the session is not
+#'   restored afterwards. In a simulation, set the seed once before the loop
+#'   and leave \code{seed = NULL}, or pass a different seed in every
+#'   replication.
+#' @param verbose Logical. Print progress (default \code{FALSE})?
+#' @param ... Further arguments passed to \code{\link{rapid}}: the model
+#'   (\code{model_type}), the scoring rule and its thresholds.  The old
+#'   argument names \code{original_data}, \code{synthetic_data},
+#'   \code{quasi_identifiers} and \code{sensitive_attribute} are accepted
+#'   as aliases of \code{X}, \code{Y}, \code{key_vars} and
+#'   \code{target_var}.
 #'
 #' @return An object of class \code{"rapid_contribution"}, a list with
 #' \describe{
 #'   \item{results}{Data frame with one row for the full scenario
-#'     (\code{dropped = "(none)"}) and one per dropped quasi-identifier or
-#'     group: \code{dropped}, \code{n_qi}, \code{rapid}, \code{null_mean},
-#'     \code{excess}, \code{delta_rapid}, \code{delta_excess}.  Rows are
-#'     sorted by decreasing contribution.}
+#'     (\code{dropped = "(none)"}, always first) and one per dropped
+#'     quasi-identifier or group: \code{dropped}, \code{n_qi} (number of
+#'     quasi-identifiers the attacker keeps), \code{rapid}, \code{chance},
+#'     \code{excess}, \code{delta_rapid}, \code{delta_excess}. The rows after
+#'     the first are sorted by decreasing \code{delta_excess}, or by
+#'     \code{delta_rapid} when \code{n_permutations = 0}.}
 #'   \item{reference}{The row of the full scenario.}
-#'   \item{quasi_identifiers, sensitive_attribute, groups, cat_tau,
-#'     num_epsilon, is_categorical, n_permutations}{Settings used.}
+#'   \item{rapid, chance, excess}{Values of the full scenario.}
+#'   \item{rule}{The scoring rule of the full scenario.}
+#'   \item{key_vars, target_var, groups, is_categorical,
+#'     n_permutations}{Settings used.}
 #' }
+#' \code{format()} returns the printed lines and \code{print()} the object,
+#' invisibly. \code{summary()} returns an object of class
+#' \code{"summary.rapid_contribution"} with the full table and the
+#' quasi-identifier of the largest contribution, printed by its own
+#' \code{print()} method. \code{as.data.frame()} returns \code{results}.
+#' \code{plot()} draws the drop for each scenario as a lollipop chart (groups
+#' as triangles) and returns the ggplot object, or a list of two for both
+#' measures, invisibly.
 #'
-#' @seealso \code{\link{rapid}}, \code{\link{rapid_test}}
+#' @references
+#' Templ, M., Thees, O. and Müller, R. (2026). RAPID: Risk of Attribute
+#' Prediction-Induced Disclosure. Manuscript under review at EPJ Data Science.
+#'
+#' @seealso \code{\link{rapid}}, \code{\link{rapid_test}}.
+#'   The section "Contribution of the quasi-identifiers" of
+#'   \code{vignette("rapid", package = "riskutility")}.
 #' @family rapid
 #' @author Matthias Templ
 #' @examples
@@ -85,89 +145,132 @@
 #' X$smoker <- factor(ifelse(X$age < 40 & X$sex == "M", "yes", "no"))
 #' Y <- X
 #' Y$age <- Y$age + sample(-2:2, n, replace = TRUE)
-#' res <- rapid_qi_contribution(X, Y,
-#'                              quasi_identifiers = c("age", "sex", "region"),
-#'                              sensitive_attribute = "smoker",
-#'                              model_type = "cart", n_permutations = 19,
-#'                              seed = 1)
-#' res
-#' \donttest{
-#' plot(res)
+#' if (requireNamespace("rpart", quietly = TRUE)) {
+#'   res <- rapid_qi_contribution(X, Y,
+#'                                key_vars = c("age", "sex", "region"),
+#'                                target_var = "smoker",
+#'                                model_type = "cart", n_permutations = 19,
+#'                                seed = 1)
+#'   print(res)
+#'   print(summary(res))
+#'   print(as.data.frame(res))
+#'   plot(res)
 #' }
+#'
+#' # The linear model drops a group of quasi-identifiers as well
+#' X$income <- round(exp(9 + 0.03 * X$age + 0.3 * (X$sex == "M") + rnorm(n, 0, 0.1)))
+#' Y$income <- round(X$income * exp(rnorm(n, 0, 0.05)))
+#' res_g <- rapid_qi_contribution(X, Y,
+#'                                key_vars = c("age", "sex", "region"),
+#'                                target_var = "income",
+#'                                groups = list(demography = c("age", "sex")),
+#'                                model_type = "lm", n_permutations = 19,
+#'                                seed = 1)
+#' res_g
+#' plot(res_g, measure = c("excess", "rapid"))
+#'
+#' # Two quasi-identifiers with the same information mask each other. Each
+#' # single drop changes nothing, the joint drop removes the whole excess.
+#' set.seed(2)
+#' X2 <- data.frame(age = sample(20:70, n, replace = TRUE),
+#'                  region = factor(sample(letters[1:4], n, replace = TRUE)))
+#' X2$birth_year <- 2026 - X2$age
+#' X2$income <- round(exp(9 + 0.03 * X2$age + rnorm(n, 0, 0.1)))
+#' Y2 <- X2
+#' Y2$income <- round(X2$income * exp(rnorm(n, 0, 0.05)))
+#' rapid_qi_contribution(X2, Y2,
+#'                       key_vars = c("age", "birth_year", "region"),
+#'                       target_var = "income",
+#'                       groups = list(age_info = c("age", "birth_year")),
+#'                       model_type = "lm", n_permutations = 19, seed = 1)
 #' @export
-rapid_qi_contribution <- function(original_data, synthetic_data,
-                                  quasi_identifiers, sensitive_attribute,
-                                  groups = NULL,
-                                  model_type = "rf",
-                                  cat_tau = 0.3, num_epsilon = 10,
-                                  cat_eval_method = "RCS_marginal",
-                                  num_error_metric = "symmetric",
-                                  num_epsilon_type = "percentage",
-                                  num_delta = 0.01,
-                                  n_permutations = 99,
-                                  seed = NULL, verbose = FALSE, ...) {
-  stopifnot(is.character(quasi_identifiers), length(quasi_identifiers) >= 2,
-            !sensitive_attribute %in% quasi_identifiers,
-            n_permutations >= 0)
+rapid_qi_contribution <- function(X, ...) {
+  if (missing(X)) {
+    # Without X the data arrive under their alias names
+    cl <- sys.call()
+    cl[[1L]] <- rapid_qi_contribution.default
+    return(eval(cl, parent.frame()))
+  }
+  UseMethod("rapid_qi_contribution")
+}
+
+#' @rdname rapid_qi_contribution
+#' @export
+rapid_qi_contribution.synth_pair <- function(X, ...) {
+  # The default method unpacks the pair
+  NextMethod()
+}
+
+#' @rdname rapid_qi_contribution
+#' @export
+rapid_qi_contribution.default <- function(X, Y, key_vars, target_var, groups = NULL,
+                                          n_permutations = 99, seed = NULL,
+                                          verbose = FALSE, ...) {
+  inputs <- .rapid_inputs(
+    if (missing(X)) NULL else X, if (missing(Y)) NULL else Y,
+    if (missing(key_vars)) NULL else key_vars,
+    if (missing(target_var)) NULL else target_var,
+    list(...)
+  )
+  .rapid_check_reserved(inputs$dots, c(n_perm = paste(
+    "use 'n_permutations' for the permutations of each scenario")),
+    "rapid_qi_contribution")
+  key_vars <- inputs$key_vars
+  if (length(key_vars) < 2) {
+    .rapid_abort("At least two quasi-identifiers are needed to drop one.", "input")
+  }
+  if (!is.numeric(n_permutations) || length(n_permutations) != 1 ||
+      !is.finite(n_permutations) ||
+      n_permutations < 0 || n_permutations != round(n_permutations)) {
+    .rapid_abort("'n_permutations' must be a single whole number (0 skips the chance level).",
+                 "input")
+  }
   if (!is.null(groups)) {
-    if (!is.list(groups) || is.null(names(groups)) || any(names(groups) == ""))
-      stop("'groups' must be a named list of character vectors.")
-    bad <- setdiff(unlist(groups), quasi_identifiers)
-    if (length(bad))
-      stop("'groups' contains variables not in 'quasi_identifiers': ",
-           paste(bad, collapse = ", "))
-    if (any(vapply(groups, function(g) length(setdiff(quasi_identifiers, g)) == 0,
-                   logical(1))))
-      stop("A group may not contain all quasi-identifiers.")
+    if (!is.list(groups) || is.null(names(groups)) || any(names(groups) == "")) {
+      .rapid_abort("'groups' must be a named list of character vectors.", "input")
+    }
+    bad <- setdiff(unlist(groups), key_vars)
+    if (length(bad)) {
+      .rapid_abort(c("'groups' contains variables not in 'key_vars': ",
+                     paste(bad, collapse = ", ")), "input")
+    }
+    if (any(vapply(groups, function(g) length(setdiff(key_vars, g)) == 0, logical(1)))) {
+      .rapid_abort("A group may not contain all quasi-identifiers.", "input")
+    }
   }
 
   drops <- c(list("(none)" = character(0)),
-             stats::setNames(as.list(quasi_identifiers), quasi_identifiers),
+             stats::setNames(as.list(key_vars), key_vars),
              groups)
 
-  is_categorical <- NA
+  fits <- list()
   one <- function(label, drop) {
-    qi <- setdiff(quasi_identifiers, drop)
+    qi <- setdiff(key_vars, drop)
     if (verbose) message("  dropped: ", label)
-    if (!is.null(seed)) set.seed(seed)
-    prep <- .rapid_prepare_permutation(
-      original_data = original_data, synthetic_data = synthetic_data,
-      quasi_identifiers = qi, sensitive_attribute = sensitive_attribute,
-      model_type = model_type, num_delta = num_delta, ...)
-    is_categorical <<- prep$is_categorical
-    stat <- function(y) .compute_rapid_permuted(
-      predictions = prep$predictions, y = y,
-      is_categorical = prep$is_categorical,
-      cat_tau = cat_tau, num_epsilon = num_epsilon,
-      cat_eval_method = cat_eval_method,
-      num_error_metric = num_error_metric,
-      num_epsilon_type = num_epsilon_type, num_delta = num_delta,
-      original_data = prep$original_prepared,
-      sensitive_attribute = sensitive_attribute)
-    obs <- stat(prep$y_true)
-    null_mean <- if (n_permutations > 0)
-      mean(vapply(seq_len(n_permutations), function(b) stat(sample(prep$y_true)),
-                  numeric(1)))
-    else NA_real_
-    data.frame(dropped = label, n_qi = length(qi), rapid = obs,
-               null_mean = null_mean, stringsAsFactors = FALSE)
+    fit <- do.call(rapid, c(
+      list(X = inputs$X, Y = inputs$Y, key_vars = qi, target_var = inputs$target_var,
+           n_perm = n_permutations, seed = seed, verbose = FALSE),
+      inputs$dots))
+    if (length(fits) == 0) fits <<- list(fit)
+    data.frame(dropped = label, n_qi = length(qi), rapid = fit$rapid,
+               chance = fit$chance, excess = fit$excess, stringsAsFactors = FALSE)
   }
 
   res <- do.call(rbind, Map(one, names(drops), drops))
   rownames(res) <- NULL
-  res$excess <- res$rapid - res$null_mean
   ref <- res[1, ]
   res$delta_rapid <- ref$rapid - res$rapid
   res$delta_excess <- ref$excess - res$excess
   key <- if (n_permutations > 0) res$delta_excess else res$delta_rapid
   res <- res[c(1, 1 + order(key[-1], decreasing = TRUE)), ]
   rownames(res) <- NULL
+  ref <- res[1, ]
 
   structure(list(results = res, reference = ref,
-                 quasi_identifiers = quasi_identifiers,
-                 sensitive_attribute = sensitive_attribute,
-                 groups = groups, cat_tau = cat_tau, num_epsilon = num_epsilon,
-                 is_categorical = is_categorical,
+                 rapid = ref$rapid, chance = ref$chance, excess = ref$excess,
+                 rule = fits[[1]]$rule,
+                 key_vars = key_vars, target_var = inputs$target_var,
+                 groups = groups, is_categorical = fits[[1]]$is_categorical,
                  n_permutations = n_permutations),
             class = "rapid_contribution")
 }
@@ -177,60 +280,113 @@ rapid_qi_contribution <- function(original_data, synthetic_data,
 #' @param x,object An object of class \code{"rapid_contribution"}.
 #' @param digits Number of digits to print.
 #' @export
-print.rapid_contribution <- function(x, digits = 3, ...) {
-  thr <- if (isTRUE(x$is_categorical)) sprintf("tau = %s", x$cat_tau)
-         else sprintf("epsilon = %s", x$num_epsilon)
-  cat("\n  RAPID risk contribution of quasi-identifiers (drop-one, refitted)\n\n")
-  cat(sprintf("  Sensitive attribute: %s   (%s)\n", x$sensitive_attribute, thr))
-  cat(sprintf("  Full scenario: %d QIs, RAPID = %.*f", length(x$quasi_identifiers),
-              digits, x$reference$rapid))
-  if (x$n_permutations > 0)
-    cat(sprintf(", null mean = %.*f, excess = %.*f", digits, x$reference$null_mean,
-                digits, x$reference$excess))
-  cat("\n\n")
+format.rapid_contribution <- function(x, digits = 3, ...) {
+  f <- function(v) formatC(v, digits = digits, format = "f")
   tab <- x$results[-1, c("dropped", "n_qi", "rapid", "delta_rapid",
                          if (x$n_permutations > 0) c("excess", "delta_excess"))]
   num <- vapply(tab, is.double, logical(1))
   tab[num] <- lapply(tab[num], round, digits)
-  print(tab, row.names = FALSE)
-  if (x$n_permutations > 0)
-    cat("\n  delta_excess = drop in RAPID beyond the drop of its permutation null.\n")
-  cat("\n")
-  invisible(x)
+  c(
+    "RAPID risk contribution of quasi-identifiers (drop-one, refitted)",
+    paste0("Target: ", x$target_var, "; rule: ", format(x$rule)),
+    paste0("Full scenario: ", length(x$key_vars), " quasi-identifiers, RAPID = ", f(x$rapid),
+           if (x$n_permutations > 0) {
+             paste0(", chance level = ", f(x$chance), ", excess = ", f(x$excess))
+           }),
+    utils::capture.output(print(tab, row.names = FALSE)),
+    if (x$n_permutations > 0) {
+      "delta_excess = drop in the excess over the chance level."
+    },
+    "Next: summary(), plot()"
+  )
 }
 
+#' @rdname rapid_qi_contribution
+#' @export
+print.rapid_contribution <- function(x, ...) {
+  cat(format(x, ...), sep = "\n")
+  invisible(x)
+}
 
 #' @rdname rapid_qi_contribution
 #' @export
 summary.rapid_contribution <- function(object, ...) {
-  object$results
+  structure(list(
+    target_var = object$target_var,
+    key_vars = object$key_vars,
+    rule = format(object$rule),
+    n_permutations = object$n_permutations,
+    rapid = object$rapid,
+    chance = object$chance,
+    excess = object$excess,
+    top = if (nrow(object$results) > 1) object$results$dropped[2],
+    table = object$results
+  ), class = "summary.rapid_contribution")
 }
 
+#' @rdname rapid_qi_contribution
+#' @export
+format.summary.rapid_contribution <- function(x, digits = 4, ...) {
+  tab <- x$table
+  num <- vapply(tab, is.double, logical(1))
+  tab[num] <- lapply(tab[num], round, digits)
+  c(
+    "Summary: RAPID Risk Contribution of Quasi-Identifiers",
+    "=====================================================",
+    paste0("Target variable: ", x$target_var),
+    paste0("Rule: ", x$rule),
+    paste0("Quasi-identifiers: ", paste(x$key_vars, collapse = ", ")),
+    paste0("Permutations for the chance level: ", x$n_permutations),
+    "Scenarios (first row: all quasi-identifiers known):",
+    utils::capture.output(print(tab, row.names = FALSE)),
+    if (!is.null(x$top)) paste0("Largest contribution: ", x$top)
+  )
+}
 
 #' @rdname rapid_qi_contribution
-#' @param measure \code{"excess"} (default; change in excess over the
-#'   permutation null) or \code{"rapid"} (change in raw RAPID).
 #' @export
-plot.rapid_contribution <- function(x, measure = c("excess", "rapid"), ...) {
-  measure <- match.arg(measure)
-  if (measure == "excess" && x$n_permutations == 0) measure <- "rapid"
-  df <- x$results[-1, ]
-  df$value <- if (measure == "excess") df$delta_excess else df$delta_rapid
-  df$group <- ifelse(df$dropped %in% names(x$groups), "group", "single")
-  df$dropped <- factor(df$dropped, levels = rev(df$dropped[order(-df$value)]))
-  ggplot2::ggplot(df, ggplot2::aes(x = .data$value, y = .data$dropped)) +
-    ggplot2::geom_vline(xintercept = 0, colour = "grey60") +
-    ggplot2::geom_segment(ggplot2::aes(x = 0, xend = .data$value,
-                                       yend = .data$dropped),
-                          colour = "grey70") +
-    ggplot2::geom_point(ggplot2::aes(shape = .data$group), size = 2.5,
-                        colour = "steelblue") +
-    ggplot2::scale_shape_manual(values = c(single = 16, group = 17), guide = "none") +
-    ggplot2::theme_minimal() +
-    ggplot2::labs(
-      x = if (measure == "excess") "Drop in RAPID excess over the null"
-          else "Drop in RAPID",
-      y = "Quasi-identifier(s) unknown to the attacker",
-      title = "Risk contribution of quasi-identifiers",
-      subtitle = sprintf("Sensitive attribute: %s", x$sensitive_attribute))
+print.summary.rapid_contribution <- function(x, ...) {
+  cat(format(x, ...), sep = "\n")
+  invisible(x)
+}
+
+#' @rdname rapid_qi_contribution
+#' @param row.names,optional Not used.
+#' @export
+as.data.frame.rapid_contribution <- function(x, row.names = NULL, optional = FALSE, ...) {
+  x$results
+}
+
+#' @rdname rapid_qi_contribution
+#' @param measure \code{"excess"} (default, the change in excess over the
+#'   chance level) or \code{"rapid"} (change in raw RAPID). Both may be
+#'   given and are drawn in this order.
+#' @export
+plot.rapid_contribution <- function(x, measure = "excess", ...) {
+  measure <- match.arg(measure, c("excess", "rapid"), several.ok = TRUE)
+  if (x$n_permutations == 0) measure <- unique(sub("excess", "rapid", measure))
+  plots <- lapply(measure, function(m) {
+    df <- x$results[-1, ]
+    df$value <- if (m == "excess") df$delta_excess else df$delta_rapid
+    df$group <- ifelse(df$dropped %in% names(x$groups), "group", "single")
+    df$dropped <- factor(df$dropped, levels = rev(df$dropped[order(-df$value)]))
+    p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$value, y = .data$dropped)) +
+      ggplot2::geom_vline(xintercept = 0, colour = "grey60") +
+      ggplot2::geom_segment(ggplot2::aes(x = 0, xend = .data$value,
+                                         yend = .data$dropped),
+                            colour = "grey70") +
+      ggplot2::geom_point(ggplot2::aes(shape = .data$group), size = 2.5,
+                          colour = "steelblue") +
+      ggplot2::scale_shape_manual(values = c(single = 16, group = 17), guide = "none") +
+      ggplot2::theme_minimal() +
+      ggplot2::labs(
+        x = if (m == "excess") "Drop in RAPID excess over the chance level"
+            else "Drop in RAPID",
+        y = "Quasi-identifier(s) unknown to the attacker",
+        title = "Risk contribution of quasi-identifiers",
+        subtitle = sprintf("Target: %s", x$target_var))
+    print(p)
+    p
+  })
+  invisible(if (length(plots) == 1) plots[[1]] else plots)
 }

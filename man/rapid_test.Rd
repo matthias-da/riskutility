@@ -2,138 +2,233 @@
 % Please edit documentation in R/rapid_test.R
 \name{rapid_test}
 \alias{rapid_test}
+\alias{rapid_test.rapid}
+\alias{rapid_test.synth_pair}
+\alias{rapid_test.default}
+\alias{format.rapid_test}
 \alias{print.rapid_test}
+\alias{summary.rapid_test}
+\alias{format.summary.rapid_test}
+\alias{print.summary.rapid_test}
+\alias{plot.rapid_test}
+\alias{as.data.frame.rapid_test}
 \title{Permutation Test for RAPID Disclosure Risk}
 \usage{
-rapid_test(
-  original_data,
-  synthetic_data,
-  quasi_identifiers,
-  sensitive_attribute,
-  model_type = "rf",
-  cat_tau = 0.3,
-  num_epsilon = 10,
-  cat_eval_method = "RCS_marginal",
-  num_error_metric = "symmetric",
-  num_epsilon_type = "percentage",
-  num_delta = 0.01,
+rapid_test(X, ...)
+
+\method{rapid_test}{rapid}(X, n_permutations = 199, alpha = 0.05, seed = NULL, ...)
+
+\method{rapid_test}{synth_pair}(X, ...)
+
+\method{rapid_test}{default}(
+  X,
+  Y,
+  key_vars,
+  target_var,
+  ...,
   n_permutations = 199,
   alpha = 0.05,
-  seed = NULL,
-  verbose = FALSE,
-  ...
+  seed = NULL
 )
 
+\method{format}{rapid_test}(x, digits = 3, ...)
+
 \method{print}{rapid_test}(x, ...)
+
+\method{summary}{rapid_test}(object, ...)
+
+\method{format}{summary.rapid_test}(x, ...)
+
+\method{print}{summary.rapid_test}(x, ...)
+
+\method{plot}{rapid_test}(x, ..., bins = 30)
+
+\method{as.data.frame}{rapid_test}(x, row.names = NULL, optional = FALSE, ...)
 }
 \arguments{
-\item{original_data}{A data frame of original (confidential) records.}
+\item{X}{a \code{rapid} object (with stored predictions), the original data,
+or a \code{\link{synth_pair}}}
 
-\item{synthetic_data}{A data frame of synthetic records used to train
-the predictive model.}
+\item{...}{for the data methods, arguments of \code{\link{rapid}} (model
+and rule, the old argument names \code{original_data},
+\code{synthetic_data}, \code{quasi_identifiers} and
+\code{sensitive_attribute} are accepted). Not allowed for a \code{rapid}
+object. Ignored by the methods for \code{rapid_test} objects.}
 
-\item{quasi_identifiers}{Character vector of column names used as
-predictors.}
+\item{n_permutations}{number of permutations of the test, a whole number
+of at least 1 (default 199). The p-value cannot fall below
+\code{1 / (1 + n_permutations)}. The permutations of the test are
+\code{n_permutations}, those of the fit \code{n_perm}.}
 
-\item{sensitive_attribute}{Character string naming the sensitive
-(target) variable.}
+\item{alpha}{significance level, above 0 and below 1 (default 0.05)}
 
-\item{model_type}{Model to train on synthetic data.  One of
-\code{"rf"} (default), \code{"lm"}, \code{"cart"}, \code{"gbm"},
-or \code{"logit"}.}
+\item{seed}{random seed of the permutations, and of the fit for the data
+methods (default NULL: the random stream is left alone). With a seed,
+\code{set.seed()} is called and the random stream of the session is not
+restored afterwards. In a simulation, set the seed once before the loop
+and leave \code{seed = NULL}, or pass a different seed in every
+replication.}
 
-\item{cat_tau}{Categorical risk threshold; see \code{\link{rapid}}.}
+\item{Y}{data frame of the released (synthetic or anonymized) data the
+attacker is fitted on. Not needed if \code{X} is a \code{synth_pair}.}
 
-\item{num_epsilon}{Numeric error threshold; see \code{\link{rapid}}.}
+\item{key_vars}{character vector with the names of the quasi-identifiers}
 
-\item{cat_eval_method}{Categorical evaluation method; see
-\code{\link{rapid}}.}
-
-\item{num_error_metric}{Numeric error metric; see
-\code{\link{rapid}}.}
-
-\item{num_epsilon_type}{Numeric threshold type (\code{"percentage"}
-or \code{"absolute"}); see \code{\link{rapid}}.}
-
-\item{num_delta}{Smoothing constant for percentage metrics
-(default 0.01).}
-
-\item{n_permutations}{Number of permutations (default 199).}
-
-\item{alpha}{Significance level (default 0.05).}
-
-\item{seed}{Optional random seed.}
-
-\item{verbose}{Logical; print progress?}
-
-\item{...}{additional arguments (ignored)}
+\item{target_var}{character, name of the sensitive variable (the target)}
 
 \item{x}{an object of class \code{"rapid_test"}}
+
+\item{digits}{number of decimal places}
+
+\item{object}{an object of class \code{"rapid_test"}}
+
+\item{bins}{number of histogram bins}
+
+\item{row.names, optional}{not used}
 }
 \value{
 An object of class \code{"rapid_test"} with components:
 \describe{
-\item{statistic}{Observed RAPID score.}
-\item{p_value}{Permutation p-value.}
-\item{null_distribution}{Numeric vector of permutation RAPID values.}
-\item{n_permutations}{Number of permutations used.}
-\item{alpha}{Significance level.}
-\item{significant}{Logical; \code{TRUE} if \code{p_value <= alpha}.}
-\item{null_mean}{Mean of the null distribution.}
-\item{null_sd}{Standard deviation of the null distribution.}
-\item{null_quantiles}{Named vector of null quantiles (5th, 50th, 95th percentile).}
-\item{observed_rapid}{The full \code{rapid} object from the
-unpermuted evaluation.}
+\item{statistic, rapid}{Observed RAPID of the object.}
+\item{p_value}{Permutation p-value, \eqn{(1 + \#\{null \ge obs\}) / (1 + B)}{(1 +
+    #{null >= obs}) / (1 + B)}.}
+\item{null_distribution}{RAPID of each permutation.}
+\item{n_permutations, alpha}{Settings.}
+\item{significant}{Logical, \code{TRUE} if \code{p_value <= alpha}.}
+\item{null_mean, chance}{Mean of the null distribution (the chance level).
+It rests on \code{n_permutations} permutations, the chance level of the
+object on its \code{n_perm} (10 by default). In a report, give the
+chance level of the test together with its p-value.}
+\item{excess}{\code{rapid - chance}.}
+\item{wald}{List \code{(z, p_value, pi0)}: Wald test of \code{rapid} against the chance
+level \code{pi0 = null_mean}, one-sided \code{p_value = 1 - pnorm(z)}. \code{z} and
+\code{p_value} are \code{NA} when \code{pi0} is 0 or 1.}
+\item{null_sd}{Standard deviation of the null distribution (\code{NA}
+with one permutation).}
+\item{null_quantiles}{Null quantiles (5, 50, 95 percent).}
+\item{observed_rapid}{The \code{rapid} object that was tested.}
 \item{method}{\code{"permutation"}.}
 }
+\code{format()} returns the printed lines and \code{print()} the object,
+invisibly. \code{summary()} returns an object of class
+\code{"summary.rapid_test"} with the components above except
+\code{null_distribution} and \code{observed_rapid}, plus \code{rule} (the
+printed rule) and \code{effect_size},
+\code{(rapid - null_mean) / null_sd}. \code{plot()} returns the ggplot
+object, invisibly. \code{as.data.frame()} returns the null distribution as a
+data frame with the columns \code{permutation} and \code{rapid}.
 }
 \description{
-Tests whether the observed RAPID score is significantly greater than
-expected under the null hypothesis that the sensitive attribute is
-independent of the quasi-identifiers.  The model is fitted once on
-the synthetic data and predictions are computed once on the original
-quasi-identifiers; each permutation only re-evaluates the risk score
-against shuffled labels, making the test computationally efficient.
+Tests whether RAPID is above its chance level, that is, whether the attacker's
+predictions are aligned with the true values of the original records beyond
+what random pairing gives. The attacker is fitted once. Each permutation
+scores its fixed predictions against randomly reassigned true values under
+the rule of the object (the baseline is that of the reassigned value), so
+the test needs no refit.
+}
+\details{
+\code{rapid_test()} works on a fitted \code{\link{rapid}} object or on the
+data. On the data it first calls \code{rapid()} with the arguments in
+\code{...} and \code{n_perm = 0}, then tests that object. A given
+\code{n_perm} or \code{threshold_rule} is passed on instead, so that
+\code{threshold_rule = "permutation"} works on the data as well. The scoring rule is
+part of the object: change it with \code{\link[=update.rapid]{update}()}.
+\code{rapid_test(rapid(X, Y, ..., seed = s, n_perm = 0), seed = s)} equals
+\code{rapid_test(X, Y, ..., seed = s)}.
+
+With \eqn{B} = \code{n_permutations} permutations, \eqn{R_b} the RAPID of
+permutation \eqn{b} and \eqn{R} the observed RAPID, the p-value is
+\deqn{p = \frac{1 + \#\{b : R_b \ge R\}}{1 + B},}{p = (1 + #{b : R_b >= R}) /
+  (1 + B),}
+and RAPID counts as significant when \eqn{p \le \alpha}{p <= alpha}. The
+null hypothesis is that the predictions carry no information about which true
+value belongs to which record. The test holds the fitted attacker fixed, so
+it is exact given that attacker, and a significant result says that this
+attacker infers the sensitive value of more records than chance allows.
+
+The test says nothing beyond that. It holds the attacker and the release
+fixed, so the p-value does not cover the randomness of the model fit or of
+the synthesis. A result that is not significant does not show that the
+release is safe. It shows that under this attacker and this rule no more
+records are at risk than chance gives. Another attacker can do better (see
+\code{\link{rapid_suite}}). The smallest possible p-value is
+\eqn{1/(1 + B)}, so a significant result needs at least
+\code{1 / alpha - 1} permutations (19 for \code{alpha = 0.05}). The test
+covers the records of \code{X}. A holdout stored in the object takes no
+part in it.
+
+The mean of the \eqn{R_b} is the chance level \eqn{\pi_0}{pi0}, and the
+Wald statistic \eqn{z = (R - \pi_0) / \sqrt{\pi_0 (1 - \pi_0) / n}}{z = (R -
+pi0) / sqrt(pi0 (1 - pi0) / n)} with \eqn{n} scored records gives a
+one-sided p-value from the normal distribution. The Wald test needs a stable
+estimate of \eqn{\pi_0}{pi0}: use \code{n_permutations >= 999} (the print
+says so otherwise). Its variance treats every record as at risk with the same
+probability \eqn{\pi_0}{pi0}. When records differ in that probability, as
+they do under a forest attacker, the permutation distribution is narrower,
+and the Wald test is conservative.
+
+\code{plot()} draws the null distribution with the observed RAPID and the
+\code{1 - alpha} quantile of the null. This quantile is the criterion of
+\code{\link{rapid_threshold_select}()}, which calls a threshold significant
+when RAPID is above it. The two criteria can disagree at the same threshold:
+the quantile is interpolated between permuted values, while the p-value
+counts the permuted values at or above RAPID. With 19 permutations and
+\code{alpha = 0.05}, for example, a RAPID equal to the largest permuted value,
+when no other permutation reaches it, is above the interpolated 95 percent
+quantile but has \eqn{p = 2/20 = 0.1}.
+The verdict of \code{rapid_test()} is the one of the p-value.
 }
 \examples{
-# Small runnable example with few permutations
 set.seed(42)
 X <- data.frame(
-  age = sample(20:60, 80, replace = TRUE),
-  sex = sample(c("M", "F"), 80, replace = TRUE),
-  income = rnorm(80, 50000, 10000)
+  age = sample(20:60, 100, replace = TRUE),
+  hours = sample(10:50, 100, replace = TRUE)
 )
+X$income <- 20000 + 600 * X$age + 300 * X$hours + rnorm(100, 0, 5000)
 Y <- X
-Y$income <- Y$income + rnorm(80, 0, 5000)
-res <- rapid_test(X, Y,
-                  quasi_identifiers = c("age", "sex"),
-                  sensitive_attribute = "income",
-                  model_type = "lm", n_permutations = 9)
-print(res)
+Y$income <- Y$income + rnorm(100, 0, 3000)
 
-\donttest{
-# With more permutations and random forest
-res2 <- rapid_test(X, Y,
-                   quasi_identifiers = c("age", "sex"),
-                   sensitive_attribute = "income",
-                   model_type = "rf", n_permutations = 199)
-print(res2)
-}
+# On a fitted object: no refit
+r <- rapid(X, Y, key_vars = c("age", "hours"), target_var = "income",
+           model_type = "lm")
+res <- rapid_test(r, n_permutations = 199, seed = 1)
+res
+res$p_value
+res$wald
+summary(res)
+head(as.data.frame(res))
+plot(res)
+
+# On the data: arguments in ... go to rapid()
+rapid_test(X, Y, key_vars = c("age", "hours"), target_var = "income",
+           model_type = "lm", n_permutations = 199, seed = 1)
+
+# A release without information on income. Under the forest some records
+# are still at risk, and the test shows that they are no more than chance
+# gives.
+Y0 <- Y
+Y0$income <- sample(Y0$income)
+rapid_test(X, Y0, key_vars = c("age", "hours"), target_var = "income",
+           model_type = "rf", n_permutations = 199, seed = 1)
 
 }
 \references{
-Thees, O., Mueller, N., & Templ, M. (2026). Beyond the Trade-off Curve:
-Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and
-Synthetic Data. \emph{Journal of Official Statistics}.
+Templ, M., Thees, O. and Müller, R. (2026). RAPID: Risk of Attribute
+Prediction-Induced Disclosure. Manuscript under review at EPJ Data Science.
 }
 \seealso{
 \code{\link{rapid}}, \code{\link[=confint.rapid]{confint}},
-\code{\link{rapid_threshold_select}}
+\code{\link{rapid_threshold_select}}, \code{\link[=update.rapid]{update}}.
+The section "Testing and intervals" of
+\code{vignette("rapid", package = "riskutility")}.
 
 Other rapid: 
-\code{\link{confint.rapid}()},
+\code{\link{plot.rapid}()},
 \code{\link{rapid}()},
+\code{\link{rapid-methods}},
+\code{\link{rapid_learner}()},
 \code{\link{rapid_qi_contribution}()},
+\code{\link{rapid_suite}()},
 \code{\link{rapid_synthesizer_cv}()},
 \code{\link{rapid_threshold_select}()}
 }

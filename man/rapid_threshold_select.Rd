@@ -2,141 +2,265 @@
 % Please edit documentation in R/rapid_threshold_select.R
 \name{rapid_threshold_select}
 \alias{rapid_threshold_select}
+\alias{rapid_threshold_select.rapid}
+\alias{rapid_threshold_select.synth_pair}
+\alias{rapid_threshold_select.default}
+\alias{format.rapid_threshold}
 \alias{print.rapid_threshold}
+\alias{summary.rapid_threshold}
+\alias{format.summary.rapid_threshold}
+\alias{print.summary.rapid_threshold}
 \alias{plot.rapid_threshold}
+\alias{as.data.frame.rapid_threshold}
 \title{Data-Driven Threshold Selection for RAPID}
 \usage{
-rapid_threshold_select(
-  original_data,
-  synthetic_data,
-  quasi_identifiers,
-  sensitive_attribute,
-  model_type = "rf",
-  cat_eval_method = "RCS_marginal",
-  num_error_metric = "symmetric",
-  num_epsilon_type = "percentage",
-  num_delta = 0.01,
+rapid_threshold_select(X, ...)
+
+\method{rapid_threshold_select}{rapid}(
+  X,
   tau_range = seq(0.05, 0.95, by = 0.05),
-  epsilon_range = seq(1, 50, by = 2),
+  epsilon_range = seq(0.01, 0.5, by = 0.02),
   n_permutations = 199,
   alpha = 0.05,
   seed = NULL,
-  verbose = FALSE,
   ...
 )
 
+\method{rapid_threshold_select}{synth_pair}(X, ...)
+
+\method{rapid_threshold_select}{default}(
+  X,
+  Y,
+  key_vars,
+  target_var,
+  ...,
+  tau_range = seq(0.05, 0.95, by = 0.05),
+  epsilon_range = seq(0.01, 0.5, by = 0.02),
+  n_permutations = 199,
+  alpha = 0.05,
+  seed = NULL
+)
+
+\method{format}{rapid_threshold}(x, digits = 3, ...)
+
 \method{print}{rapid_threshold}(x, ...)
 
+\method{summary}{rapid_threshold}(object, ...)
+
+\method{format}{summary.rapid_threshold}(x, ...)
+
+\method{print}{summary.rapid_threshold}(x, ...)
+
 \method{plot}{rapid_threshold}(x, ...)
+
+\method{as.data.frame}{rapid_threshold}(x, row.names = NULL, optional = FALSE, ...)
 }
 \arguments{
-\item{original_data}{A data frame of original (confidential) records.}
+\item{X}{a \code{rapid} object (with stored predictions), the original data,
+or a \code{\link{synth_pair}}}
 
-\item{synthetic_data}{A data frame of synthetic records used to train
-the predictive model.}
+\item{...}{for the data methods, arguments of \code{\link{rapid}} (model
+and rule, the old argument names are accepted). Not allowed for a
+\code{rapid} object. Ignored by the methods for \code{rapid_threshold}
+objects.}
 
-\item{quasi_identifiers}{Character vector of column names used as
-predictors.}
+\item{tau_range}{numeric vector of thresholds for rules that put records
+with a score above the threshold at risk (default
+\code{seq(0.05, 0.95, by = 0.05)}). The default suits the two gain rules
+(band, \code{RCS_marginal}), where a threshold is at least 0 and below 1,
+and \code{NCE} with its default threshold 0.5. Under
+\code{RCS_conditional} the score is a ratio with the default threshold 1,
+and the default grid ends below it. Give a grid around 1 there, for
+example \code{seq(0.8, 2, by = 0.1)}. The values are not checked against
+the range of the rule.}
 
-\item{sensitive_attribute}{Character string naming the sensitive
-(target) variable.}
+\item{epsilon_range}{numeric vector of tolerances for the point rule
+(default \code{seq(0.01, 0.5, by = 0.02)}, that is 1 to 49 percent). For
+the relative error metrics a tolerance is a proportion. A grid with a
+value of 1 or more is read as percent there, as \code{num_epsilon} in
+\code{rapid()}, with a warning of class
+\code{"rapid_warning_legacy_tolerance"}. For the absolute metric a
+tolerance is in the units of the target, and the default grid has no
+meaning. Always give \code{epsilon_range} there, for example
+\code{seq(1000, 10000, by = 1000)} for an income.}
 
-\item{model_type}{Model to train on synthetic data.  One of
-\code{"rf"} (default), \code{"lm"}, \code{"cart"}, \code{"gbm"},
-or \code{"logit"}.}
+\item{n_permutations}{number of permutations for the null distribution, a
+whole number of at least 1 (default 199). The permutations of the
+selection are \code{n_permutations}, those of the fit \code{n_perm}.}
 
-\item{cat_eval_method}{Categorical evaluation method; see
-\code{\link{rapid}}.}
+\item{alpha}{level of the quantile criterion, above 0 and below 1 (default
+0.05). Each threshold is tested at this level on its own.}
 
-\item{num_error_metric}{Numeric error metric; see
-\code{\link{rapid}}.}
+\item{seed}{random seed of the permutations, and of the fit for the data
+methods (default NULL: the random stream is left alone). With a seed,
+\code{set.seed()} is called and the random stream of the session is not
+restored afterwards. In a simulation, set the seed once before the loop
+and leave \code{seed = NULL}, or pass a different seed in every
+replication.}
 
-\item{num_epsilon_type}{Numeric threshold type (\code{"percentage"}
-or \code{"absolute"}); see \code{\link{rapid}}.}
+\item{Y}{data frame of the released (synthetic or anonymized) data the
+attacker is fitted on. Not needed if \code{X} is a \code{synth_pair}.}
 
-\item{num_delta}{Smoothing constant for percentage metrics
-(default 0.01).}
+\item{key_vars}{character vector with the names of the quasi-identifiers}
 
-\item{tau_range}{Numeric vector of categorical thresholds to
-evaluate (used when the sensitive attribute is categorical).}
-
-\item{epsilon_range}{Numeric vector of numeric thresholds to
-evaluate (used when the sensitive attribute is continuous).}
-
-\item{n_permutations}{Number of permutations (default 199).}
-
-\item{alpha}{Significance level (default 0.05).}
-
-\item{seed}{Optional random seed.}
-
-\item{verbose}{Logical; print progress?}
-
-\item{...}{additional arguments (ignored)}
+\item{target_var}{character, name of the sensitive variable (the target)}
 
 \item{x}{an object of class \code{"rapid_threshold"}}
+
+\item{digits}{number of decimal places}
+
+\item{object}{an object of class \code{"rapid_threshold"}}
+
+\item{row.names, optional}{not used}
 }
 \value{
 An object of class \code{"rapid_threshold"} with components:
 \describe{
-\item{threshold_star}{Recommended threshold, or \code{NA} if no
-threshold is significant.}
-\item{results}{Data frame with columns \code{threshold},
-\code{rapid_obs}, \code{null_quantile}, and
-\code{significant}.}
-\item{alpha}{Significance level used.}
-\item{is_categorical}{Logical; type of sensitive attribute.}
-\item{observed_rapid}{Full \code{rapid} object at the recommended
-threshold.}
+\item{threshold_star}{Selected threshold, the strictest significant one
+of the grid, or \code{NA} if no threshold is significant. The print
+calls it "Recommended". It is exploratory, see Details.}
+\item{results}{Data frame with columns \code{threshold}, \code{rapid_obs},
+\code{chance} (mean of the null distribution), \code{null_quantile} and
+\code{significant} (\code{rapid_obs > null_quantile}).}
+\item{rapid, chance, excess}{Observed RAPID, chance level and their
+difference at \code{threshold_star} (\code{NA} if there is none).}
+\item{alpha, n_permutations}{Settings.}
+\item{rule}{The rule of the object whose threshold was varied.}
+\item{is_categorical}{Logical, the type of the sensitive variable.}
+\item{observed_rapid}{The object rescored at \code{threshold_star}, with
+\code{n_perm = 0} (\code{NULL} if there is none).}
 }
+\code{format()} returns the printed lines and \code{print()} the object,
+invisibly. \code{summary()} returns an object of class
+\code{"summary.rapid_threshold"} with the number and the percentage of
+significant thresholds (\code{n_significant}, \code{pct_significant}), the
+range of the grid, the values at \code{threshold_star} and the table
+\code{results}. \code{plot()} draws the observed
+RAPID and the null quantile against the threshold, marks
+\code{threshold_star} and returns the ggplot object, invisibly.
+\code{as.data.frame()} returns \code{results}.
 }
 \description{
-Selects the largest threshold at which the observed RAPID score is
-still significantly greater than the permutation null, following the
-approach described in the RAPID inferential framework.  The
-recommended threshold \eqn{\tau^*} (or \eqn{\varepsilon^*}) is the
-maximum threshold where \code{RAPID_obs > Q_{1-alpha}(null)}.
+Answers the question how strict a threshold a release still fails. The
+attack of a \code{rapid} object is scored over a grid of thresholds, and at
+each one the observed RAPID is compared with the \code{1 - alpha} quantile
+of its permutation null distribution. \code{threshold_star} is the
+strictest threshold at which RAPID is still above that quantile. The
+selection is exploratory. The thresholds are tested one by one without a
+correction for their number, and a test at \code{threshold_star} on the
+same records is no confirmation (see Details). The scores under permuted
+true values are computed once, for all thresholds, and the model is not
+fitted again.
+}
+\details{
+Where a record is at risk (flagged) when its score is above the threshold
+(band, \code{RCS_marginal}, \code{RCS_conditional}, \code{NCE}), the grid
+is \code{tau_range} and \code{threshold_star} is the largest significant
+threshold, the strictest one at which RAPID is still above chance. Where a
+record is at risk when its score is below the threshold (point rule: the
+score is the error, the threshold the tolerance), the grid is
+\code{epsilon_range} and \code{threshold_star} is the smallest significant
+one, again the strictest. For the band rule the tolerance stays that of the
+object and the grid runs over the gain threshold \code{num_tau}.
+
+On the data, \code{rapid_threshold_select()} first calls \code{rapid()} with
+the arguments in \code{...} and \code{n_perm = 0}, as \code{\link{rapid_test}}
+does. The grid that the rule does not use (\code{tau_range} for the point
+rule, \code{epsilon_range} for every other rule)
+is ignored with a warning of class \code{"rapid_warning_ignored_argument"}
+when it is given.
+
+A threshold counts as significant when the observed RAPID is above the
+\code{1 - alpha} quantile (type 7 of \code{\link[stats]{quantile}()}) of the
+RAPID values of the permutations. \code{\link{rapid_test}()} uses the
+permutation p-value instead and calls RAPID significant when \eqn{p \le
+\alpha}{p <= alpha}. The two criteria can disagree at the same threshold,
+because the quantile is interpolated between permuted values (see
+\code{\link{rapid_test}} for an example). Each threshold of the grid is tested
+at level \code{alpha} on its own. There is no correction for testing many
+thresholds, so under the null hypothesis the chance that at least one
+threshold of the grid comes out significant can exceed \code{alpha}.
+
+The selected threshold is exploratory. \code{threshold_star} says up to
+which strictness the release still shows a RAPID above chance. The print
+calls it "Recommended". It is no advice to report RAPID at that threshold.
+At \code{threshold_star} RAPID can rest on few records (7 of 200 in the
+last example). For a report, fix the threshold before looking at the
+data, and use \code{plot()} of the selection to show how RAPID depends on
+the threshold.
+
+A test with \code{rapid_test()} at \code{threshold_star} on the same object
+is no confirmation, because the threshold was chosen by looking at the same
+data. To test a threshold, fix it before looking at the results, or select
+it on one data set and test it on data not used for the selection, such as
+a holdout or another release (see the last example).
 }
 \examples{
-# Small runnable example
 set.seed(42)
 X <- data.frame(
   age = sample(20:60, 80, replace = TRUE),
   sex = sample(c("M", "F"), 80, replace = TRUE),
   income = rnorm(80, 50000, 10000)
 )
+X$income <- X$income + 500 * X$age
 Y <- X
 Y$income <- Y$income + rnorm(80, 0, 5000)
-sel <- rapid_threshold_select(X, Y,
-  quasi_identifiers = c("age", "sex"),
-  sensitive_attribute = "income",
-  model_type = "lm",
-  epsilon_range = seq(5, 30, by = 5),
-  n_permutations = 9)
-print(sel)
+r <- rapid(X, Y, key_vars = c("age", "sex"), target_var = "income",
+           model_type = "lm")
 
-\donttest{
-# With random forest and finer grid
-sel2 <- rapid_threshold_select(X, Y,
-  quasi_identifiers = c("age", "sex"),
-  sensitive_attribute = "income",
-  model_type = "rf", n_permutations = 199)
-print(sel2)
-plot(sel2)
-}
+# Band rule: the grid runs over the gain threshold
+sel <- rapid_threshold_select(r, tau_range = seq(0.1, 0.9, by = 0.1),
+                              n_permutations = 99, seed = 1)
+sel
+summary(sel)
+as.data.frame(sel)
+plot(sel)
+
+# Point rule: the grid runs over the tolerance
+sel_point <- rapid_threshold_select(update(r, num_eval_method = "point"),
+                                    n_permutations = 99, seed = 1)
+sel_point
+
+# On the data, the arguments in ... go to rapid()
+rapid_threshold_select(X, Y, key_vars = c("age", "sex"), target_var = "income",
+                       model_type = "lm", n_permutations = 99, seed = 1)
+
+# A selected threshold is confirmed on other records: select on one half
+# of the original records, test on the other half
+set.seed(42)
+X2 <- data.frame(age = sample(20:60, 400, replace = TRUE),
+                 hours = sample(10:50, 400, replace = TRUE))
+X2$income <- 20000 + 600 * X2$age + 300 * X2$hours + rnorm(400, 0, 5000)
+Y2 <- X2
+Y2$income <- Y2$income + rnorm(400, 0, 3000)
+half <- seq_len(nrow(X2)) <= 200
+r_select <- rapid(X2[half, ], Y2, key_vars = c("age", "hours"),
+                  target_var = "income", model_type = "lm", seed = 1)
+sel2 <- rapid_threshold_select(r_select, n_permutations = 199, seed = 1)
+sel2
+sel2$observed_rapid$n_at_risk
+r_confirm <- rapid(X2[!half, ], Y2, key_vars = c("age", "hours"),
+                   target_var = "income", model_type = "lm",
+                   num_tau = sel2$threshold_star, seed = 1)
+rapid_test(r_confirm, n_permutations = 199, seed = 2)
 
 }
 \references{
-Thees, O., Mueller, N., & Templ, M. (2026). Beyond the Trade-off Curve:
-Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and
-Synthetic Data. \emph{Journal of Official Statistics}.
+Templ, M., Thees, O. and Müller, R. (2026). RAPID: Risk of Attribute
+Prediction-Induced Disclosure. Manuscript under review at EPJ Data Science.
 }
 \seealso{
-\code{\link{rapid}}, \code{\link{rapid_test}}
+\code{\link{rapid}}, \code{\link{rapid_test}}.
+The section "Choosing the threshold" of
+\code{vignette("rapid", package = "riskutility")}.
 
 Other rapid: 
-\code{\link{confint.rapid}()},
+\code{\link{plot.rapid}()},
 \code{\link{rapid}()},
+\code{\link{rapid-methods}},
+\code{\link{rapid_learner}()},
 \code{\link{rapid_qi_contribution}()},
+\code{\link{rapid_suite}()},
 \code{\link{rapid_synthesizer_cv}()},
 \code{\link{rapid_test}()}
 }

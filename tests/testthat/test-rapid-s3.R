@@ -1,0 +1,316 @@
+# The rapid object: constructor, validator and basic methods
+
+qi <- c("x1", "x2")
+
+lm_object <- function(...) {
+  o <- sim_numeric(100)
+  rapid(o, noisy_copy(o), qi, "y", model_type = "lm", ...)
+}
+
+test_that("new_rapid() sets class and version", {
+  x <- lm_object()
+  expect_s3_class(x, "rapid", exact = TRUE)
+  expect_identical(x$version, utils::packageVersion("riskutility"))
+  expect_true(all(c("rapid", "n_at_risk", "pct_at_risk", "n_total", "rule", "method",
+                    "threshold", "score", "baseline", "at_risk", "records", "attack",
+                    "model_type", "attacker", "model_metrics", "formula", "key_vars",
+                    "target_var", "is_categorical", "na", "call", "version") %in% names(x)))
+  expect_identical(validate_rapid(x), x)
+})
+
+test_that("validate_rapid() rejects inconsistent objects", {
+  x <- lm_object()
+  bad <- x
+  bad$score <- bad$score[-1]
+  expect_error(validate_rapid(bad), class = "rapid_error_object")
+  bad <- x
+  bad$n_total <- 99L
+  expect_error(validate_rapid(bad), class = "rapid_error_object")
+  bad <- x
+  bad$at_risk <- NULL
+  expect_error(validate_rapid(bad), regexp = "at_risk", class = "rapid_error_object")
+  bad <- x
+  bad$records <- bad$records[-1, ]
+  expect_error(validate_rapid(bad), class = "rapid_error_object")
+})
+
+test_that("a 0.2.0 object is refused with advice", {
+  old <- structure(
+    list(rapid = 0.4, n_at_risk = 4, pct_at_risk = 40, n_total = 10, method = "RCS_conditional",
+         threshold = 1, model_type = "rf", records = data.frame(at_risk = rep(TRUE, 4)),
+         is_categorical = TRUE),
+    class = "rapid"
+  )
+  calls <- list(print = function() print(old), summary = function() summary(old),
+                confint = function() confint(old),
+                as.data.frame = function() as.data.frame(old),
+                format = function() format(old), nobs = function() nobs(old),
+                plot = function() plot(old))
+  for (nm in names(calls)) {
+    err <- tryCatch(calls[[nm]](), error = function(e) e)
+    expect_s3_class(err, "rapid_error_object")
+    expect_match(conditionMessage(err), "re-run rapid()", fixed = TRUE, info = nm)
+  }
+})
+
+test_that("methods that need stored parts say which argument to set", {
+  x <- lm_object(store_predictions = FALSE)
+  expect_error(.rapid_require(x, "predictions"), regexp = "store_predictions",
+               class = "rapid_error_object")
+  expect_error(.rapid_require(x, "model"), regexp = "store_model",
+               class = "rapid_error_object")
+  expect_silent(.rapid_require(x, "version"))
+  expect_silent(.rapid_require(lm_object(store_model = TRUE), c("version", "predictions",
+                                                                 "model")))
+})
+
+test_that("print returns its input invisibly and equals format()", {
+  x <- lm_object()
+  out <- utils::capture.output(res <- withVisible(print(x)))
+  expect_false(res$visible)
+  expect_identical(res$value, x)
+  expect_identical(out, format(x))
+  expect_type(format(x), "character")
+  expect_match(format(x)[2], "^Rule: band: symmetric error < 10 %, gain > 0.3$")
+  expect_match(format(x)[length(format(x))],
+               "^Next: summary\\(\\), plot\\(\\), confint\\(\\), rapid_test\\(\\)$")
+})
+
+test_that("print output is stable", {
+  skip_if_not_installed("rpart")
+  o <- sim_numeric(150)
+  s <- noisy_copy(o)
+  expect_snapshot(print(rapid(o, s, qi, "y", model_type = "lm", seed = 1)))
+  expect_snapshot(print(rapid(o, s, qi, "y", model_type = "lm", num_eval_method = "point", seed = 1)))
+  expect_snapshot(print(rapid(to_classes(o), to_classes(s, ref = o), qi, "y",
+                              model_type = "cart", seed = 1)))
+})
+
+test_that("as.data.frame returns all records, or the flagged ones", {
+  x <- lm_object()
+  all_rec <- as.data.frame(x)
+  expect_s3_class(all_rec, "data.frame")
+  expect_identical(all_rec, x$records)
+  flagged <- as.data.frame(x, at_risk_only = TRUE)
+  expect_equal(nrow(flagged), x$n_at_risk)
+  expect_true(all(flagged$at_risk))
+  expect_true(x$n_at_risk > 0 && x$n_at_risk < x$n_total)
+})
+
+test_that("nobs equals n_total", {
+  x <- lm_object()
+  expect_identical(stats::nobs(x), x$n_total)
+  expect_equal(stats::nobs(x), 100)
+})
+
+test_that("the stored call can be re-evaluated", {
+  o <- sim_numeric(100)
+  s <- noisy_copy(o)
+  x <- rapid(o, s, qi, "y", model_type = "rf", seed = 3)
+  expect_identical(x$call[[1]], quote(rapid))
+  expect_identical(eval(x$call)$score, x$score)
+
+  alias <- rapid(original_data = o, synthetic_data = s, quasi_identifiers = qi,
+                 sensitive_attribute = "y", model_type = "rf", seed = 3)
+  expect_identical(alias$call[[1]], quote(rapid))
+  expect_identical(eval(alias$call)$score, x$score)
+
+  sp <- synth_pair(o, s, key_vars = qi, target_var = "y")
+  paired <- rapid(sp, model_type = "rf", seed = 3)
+  expect_identical(paired$call[[1]], quote(rapid))
+  expect_identical(eval(paired$call)$score, x$score)
+})
+
+test_that("the object does not carry the calling environment", {
+  x <- lm_object()
+  expect_identical(environment(x$formula), globalenv())
+})
+
+# ---- update() ----------------------------------------------------------------------
+
+test_that("update() with a new threshold does not refit and equals a fresh call", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "lm", seed = 1)
+  fresh <- rapid(o, s, qi, "y", model_type = "lm", num_tau = 0.5, seed = 1)
+  local_mocked_bindings(.learner_fit = function(...) stop("refit"))
+  u <- update(r, num_tau = 0.5)
+  expect_identical(u$rapid, fresh$rapid)
+  expect_identical(u$at_risk, fresh$at_risk)
+  expect_identical(u$rule$threshold, fresh$rule$threshold)
+  expect_identical(u$chance_rates, fresh$chance_rates)
+  expect_identical(u$records, fresh$records)
+  expect_identical(u$call$num_tau, 0.5)
+  expect_false(identical(u$rapid, r$rapid))
+})
+
+test_that("update() switches between band and point without refit", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "lm", seed = 1)
+  fresh <- rapid(o, s, qi, "y", model_type = "lm", num_eval_method = "point", seed = 1)
+  local_mocked_bindings(.learner_fit = function(...) stop("refit"))
+  p <- update(r, num_eval_method = "point")
+  expect_s3_class(p$rule, "rapid_rule_point")
+  expect_identical(p$rapid, fresh$rapid)
+  expect_identical(p$at_risk, fresh$at_risk)
+  back <- update(p, num_eval_method = "band")
+  expect_s3_class(back$rule, "rapid_rule_band")
+  expect_identical(back$at_risk, r$at_risk)
+  expect_identical(back$rapid, r$rapid)
+})
+
+test_that("update() with a new seed refits and equals a fresh call", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "rf", seed = 1, num.trees = 50)
+  u <- update(r, seed = 2)
+  fresh <- rapid(o, s, qi, "y", model_type = "rf", seed = 2, num.trees = 50)
+  expect_identical(u$score, fresh$score)
+  expect_identical(u$chance_rates, fresh$chance_rates)
+  expect_identical(u$rapid, fresh$rapid)
+  # The stored call reproduces the object
+  expect_identical(eval(u$call)$score, u$score)
+})
+
+test_that("update() with a model argument refits", {
+  skip_if_not_installed("rpart")
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "lm", seed = 1)
+  expect_identical(update(r, model_type = "cart")$model_type, "cart")
+  # A rescored object keeps the new scoring arguments in its call
+  u <- update(r, num_tau = 0.5)
+  refit <- update(u, model_type = "cart")
+  expect_identical(refit$model_type, "cart")
+  expect_identical(refit$rule$threshold, 0.5)
+  # Without stored predictions every update refits
+  np <- rapid(o, s, qi, "y", model_type = "lm", seed = 1, store_predictions = FALSE)
+  expect_identical(update(np, num_tau = 0.5)$rule$threshold, 0.5)
+  expect_identical(update(r, num_tau = 0.5, evaluate = FALSE)$num_tau, 0.5)
+})
+
+test_that("update() with a new error metric refits when the metric chose the scale", {
+  set.seed(7)
+  o <- data.frame(x1 = stats::rnorm(150), x2 = stats::rnorm(150))
+  o$y <- exp(10 + 0.6 * o$x1 + 0.4 * o$x2 + 0.5 * stats::rnorm(150))
+  s <- noisy_copy(o, sd = 0, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "lm", seed = 1)
+  fresh <- rapid(o, s, qi, "y", model_type = "lm", num_error_metric = "absolute",
+                 num_epsilon = 5000, seed = 1)
+  # The two metrics lead to different working scales
+  expect_match(r$attacker, "log scale")
+  expect_match(fresh$attacker, "identity scale")
+  u <- update(r, num_error_metric = "absolute", num_epsilon = 5000)
+  expect_identical(u$attacker, fresh$attacker)
+  expect_identical(u$rapid, fresh$rapid)
+  expect_identical(u$at_risk, fresh$at_risk)
+  expect_identical(u$rule, fresh$rule)
+})
+
+test_that("update() with a new error metric rescores a learner without a working scale", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "rf", seed = 1)
+  fresh <- rapid(o, s, qi, "y", model_type = "rf", num_error_metric = "stabilised_relative",
+                 seed = 1)
+  local_mocked_bindings(.learner_fit = function(...) stop("refit"))
+  u <- update(r, num_error_metric = "stabilised_relative")
+  expect_identical(u$rule, fresh$rule)
+  expect_identical(u$rapid, fresh$rapid)
+  expect_identical(u$at_risk, fresh$at_risk)
+})
+
+test_that("update() draws the same permutations as a fresh call with a random learner", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "rf", seed = 1)
+  fresh <- rapid(o, s, qi, "y", model_type = "rf", num_tau = 0.5, seed = 1)
+  u <- update(r, num_tau = 0.5)
+  expect_identical(u$chance_rates, fresh$chance_rates)
+  expect_identical(u$chance, fresh$chance)
+  expect_identical(u$excess, fresh$excess)
+})
+
+test_that("update() to a permutation threshold equals a fresh call with a random learner", {
+  o <- sim_numeric(150)
+  s <- noisy_copy(o, seed = 2)
+  r <- rapid(o, s, qi, "y", model_type = "rf", seed = 1)
+  fresh <- rapid(o, s, qi, "y", model_type = "rf", threshold_rule = "permutation", seed = 1)
+  u <- update(r, threshold_rule = "permutation")
+  expect_identical(u$rule$threshold, fresh$rule$threshold)
+  expect_identical(u$rapid, fresh$rapid)
+  expect_identical(u$at_risk, fresh$at_risk)
+})
+
+# ---- the verbs of every RAPID class ------------------------------------------------
+
+rapid_classes <- function() {
+  o <- sim_numeric(100)
+  s <- noisy_copy(o)
+  fit <- rapid(o, s, qi, "y", model_type = "lm", seed = 1)
+  synth <- function(data, seed = NULL) noisy_copy(data, seed = seed)
+  list(
+    rapid = fit,
+    rapid_test = rapid_test(fit, n_permutations = 9, seed = 1),
+    rapid_threshold = rapid_threshold_select(fit, tau_range = c(0.2, 0.4),
+                                             n_permutations = 9, seed = 1),
+    rapid_contribution = rapid_qi_contribution(o, s, key_vars = qi, target_var = "y",
+                                               model_type = "lm", n_permutations = 9,
+                                               seed = 1),
+    rapid_cv = rapid_synthesizer_cv(o, synth, key_vars = qi, target_var = "y",
+                                    k = 3, model_type = "lm", seed = 1),
+    rapid_suite = rapid_suite(o, s, key_vars = qi, target_var = "y", model_types = "lm",
+                              n_perm = 3, seed = 1)
+  )
+}
+
+test_that("every RAPID class answers print, summary, plot and as.data.frame", {
+  for (cl in names(rapid_classes())) {
+    for (verb in c("print", "summary", "plot", "as.data.frame", "format")) {
+      expect_false(is.null(getS3method(verb, cl, optional = TRUE)),
+                   info = paste(verb, cl))
+    }
+  }
+})
+
+test_that("every summary method returns summary.<class> with a print method", {
+  for (nm in names(rapid_classes())) {
+    obj <- rapid_classes()[[nm]]
+    sm <- summary(obj)
+    expect_s3_class(sm, paste0("summary.", nm))
+    expect_false(is.null(getS3method("print", paste0("summary.", nm), optional = TRUE)),
+                 info = nm)
+    out <- utils::capture.output(res <- withVisible(print(sm)))
+    expect_false(res$visible, info = nm)
+    expect_identical(res$value, sm, info = nm)
+    expect_true(length(out) > 0, info = nm)
+  }
+})
+
+test_that("every print method returns its input invisibly", {
+  for (nm in names(rapid_classes())) {
+    obj <- rapid_classes()[[nm]]
+    out <- utils::capture.output(res <- withVisible(print(obj)))
+    expect_false(res$visible, info = nm)
+    expect_identical(res$value, obj, info = nm)
+    expect_identical(out, format(obj), info = nm)
+  }
+})
+
+test_that("the plot methods of the companion classes return the ggplot invisibly", {
+  # plot.rapid() draws base graphics for some types; it is not part of this check
+  classes <- rapid_classes()
+  for (nm in setdiff(names(classes), "rapid")) {
+    p <- withVisible(plot(classes[[nm]]))
+    expect_false(p$visible, info = nm)
+    expect_s3_class(p$value, "ggplot")
+  }
+})
+
+test_that("every RAPID generic has X as first argument", {
+  for (fn in c("rapid", "rapid_test", "rapid_threshold_select", "rapid_qi_contribution",
+               "rapid_synthesizer_cv", "rapid_suite")) {
+    expect_identical(names(formals(get(fn)))[1], "X", info = fn)
+  }
+})
