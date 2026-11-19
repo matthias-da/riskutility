@@ -189,7 +189,7 @@ rumap(original, synthetic,
 - `R/divergence.R` and `R/divergence2.R`: Entropy measures (KL, JS divergence)
 - `R/evaluation_stats.R`: Error metrics (MAE, MSE, RMSE, MAPE)
 - `R/propscore.R`: Propensity score utility
-- `R/rapid.R`: `rapid()` generic, methods and object assembly (~1060 lines). The rest of RAPID is split: `rapid_score.R` (rules), `rapid_models.R` (learners, distributions, `rapid_learner()`), `rapid_inputs.R` (data preparation, aliases, classed errors), `rapid_methods.R` (print/summary/update/predict etc.), `rapid_plot.R`, `rapid_test.R`, `rapid_threshold_select.R`, `rapid_qi_contribution.R`, `rapid_synthesizer_cv.R`, `rapid_suite.R`, `confint_rapid.R`
+- `R/rapid.R`: `rapid()` generic, methods and object assembly (~1060 lines). The rest of RAPID is split: `rapid_score.R` (rules), `rapid_models.R` (learners, distributions, `rapid_learner()`), `rapid_inputs.R` (data preparation, aliases, classed errors), `rapid_methods.R` (print/summary/confint/update/predict etc.), `rapid_plot.R`, `rapid_test.R`, `rapid_threshold_select.R`, `rapid_qi_contribution.R`, `rapid_synthesizer_cv.R`, `rapid_suite.R`
 - `vignettes/rapid.Rmd`: RAPID vignette (measure, chance level, testing, attackers, holdout, migration from 0.2.0)
 - `R/dcap.R`, `R/tcap.R`: CAP-based attribution metrics
 - `R/dcr.R`, `R/nndr.R`, `R/ims.R`: Distance-based metrics
