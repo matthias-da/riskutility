@@ -53,8 +53,7 @@
 #'   \code{\link{disco}} for disclosive records with matching target values
 #'
 #' @references
-#' MOSTLY AI (2024). Synthetic data quality assurance.
-#' \url{https://mostly.ai/}
+#' MOSTLY AI (2024). Synthetic data quality assurance (mostly.ai).
 #'
 #' @author Matthias Templ
 #' @family distance-risk

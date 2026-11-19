@@ -65,8 +65,7 @@
 #'   \code{\link{nnaa}} for nearest-neighbor adversarial accuracy
 #'
 #' @references
-#' MOSTLY AI (2024). Synthetic data quality assurance.
-#' \url{https://mostly.ai/}
+#' MOSTLY AI (2024). Synthetic data quality assurance (mostly.ai).
 #'
 #' Lowe, D.G. (2004). Distinctive Image Features from Scale-Invariant Keypoints.
 #' \emph{International Journal of Computer Vision}, 60(2), 91-110.

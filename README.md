@@ -5,7 +5,10 @@ Risk and utility measurement for anonymized and synthetic data.
 ## Installation
 
 ```r
-# Install from GitHub
+# Released version from CRAN
+install.packages("riskutility")
+
+# Development version from GitHub
 devtools::install_github("matthias-da/riskutility")
 ```
 
@@ -60,9 +63,10 @@ result <- dcr(original_data, synthetic_data,
 ### ML-Based Measure (RAPID)
 
 `rapid()` trains a model on the synthetic data and scores attribute-inference
-risk on the original data (random-forest default; also `lm`/`cart`/`gbm`/`logit`),
-with confidence intervals, a permutation test, threshold selection, and six
-diagnostic plots.
+risk on the original data (random-forest default; also `lm`/`cart`/`gbm`/`logit`).
+Every result reports the chance level next to the risk. Confidence intervals, a
+permutation test, threshold selection and six diagnostic plots come with it. See
+`vignette("rapid", package = "riskutility")`.
 
 ### Classical SDC Privacy Models
 
@@ -266,11 +270,11 @@ compare_histograms(original, synthetic, var = "age")
 
 - Taub, J., Elliot, M., Pampaka, M., & Smith, D. (2018). Differential Correct Attribution Probability for Synthetic Data: An Exploration. *Privacy in Statistical Databases*, 122-137.
 - Templ, M. (2017). Statistical Disclosure Control for Microdata: Methods and Applications in R. *Springer International Publishing*.
-- MOSTLY AI (2024). Synthetic Data Quality Metrics. https://docs.mostly.ai/
+- MOSTLY AI (2024). Synthetic Data Quality Metrics (docs.mostly.ai).
 
 ## Status
 
-The package is feature-complete for an initial CRAN release: attribution
+The package is on CRAN (<https://CRAN.R-project.org/package=riskutility>). It covers attribution
 (CAP/TCAP/WEAP/DiSCO), ML-based (RAPID), distance-based (DCR/NNDR/IMS),
 membership inference (DOMIAS/NNAA/MIA), classical SDC privacy models, record
 linkage, a comprehensive `disclosure_report()`, a broad set of utility measures,
