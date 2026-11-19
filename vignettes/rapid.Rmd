@@ -638,6 +638,7 @@ and the call that gives the same rule in 0.3.0 (`?rapid`, section "Changes in 0.
 | `rapid(X, Y, kv, tv)`, categorical target | `rapid(X, Y, kv, tv, cat_eval_method = "RCS_conditional")` |
 | `model_type = "lm"` | `model_type = "lm", num_scale = "identity"` |
 | `model_type = "cart"` | `model_type = "cart", prune = FALSE, cp = 0.01, minsplit = 20, minbucket = 7` |
+| `rapid(X, Y, kv, tv)`, continuous target with missing values | `rapid(X, Y, kv, tv, na_strategy = "constant")` |
 | `return_all_records = FALSE` | `as.data.frame(x, at_risk_only = TRUE)` |
 | `rapid(original_data = X, synthetic_data = Y, quasi_identifiers = kv, sensitive_attribute = tv)` | unchanged, the old names are aliases |
 

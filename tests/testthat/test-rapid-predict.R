@@ -153,10 +153,17 @@ test_that("missing target values of the holdout and of newdata give a classed wa
   s <- noisy_copy(o, seed = 2)
   h <- sim_numeric(30, seed = 3)
   h$y[1:3] <- NA
-  w <- expect_warning(rapid(o, s, qi, "y", model_type = "lm", holdout = h, n_perm = 0),
+  w <- expect_warning(rapid(o, s, qi, "y", model_type = "lm", holdout = h,
+                            na_strategy = "constant", n_perm = 0),
                       class = "rapid_warning_missing_target")
   expect_match(conditionMessage(w), "3 in the holdout", fixed = TRUE)
   expect_match(conditionMessage(w), "denominator", fixed = TRUE)
+  # The default removes them
+  w <- expect_warning(rd <- rapid(o, s, qi, "y", model_type = "lm", holdout = h, n_perm = 0),
+                      class = "rapid_warning_missing_target")
+  expect_match(conditionMessage(w), "3 in the holdout", fixed = TRUE)
+  expect_match(conditionMessage(w), "removed", fixed = TRUE)
+  expect_identical(rd$holdout$n, 27L)
   r <- rapid(o, s, qi, "y", model_type = "lm", n_perm = 0, store_model = TRUE)
   w <- expect_warning(predict(r, h), class = "rapid_warning_missing_target")
   expect_match(conditionMessage(w), "3 in newdata", fixed = TRUE)

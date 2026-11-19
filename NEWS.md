@@ -41,6 +41,12 @@ Several defaults change reported values. Each item below gives the call that rep
   rpart defaults, is
   `model_type = "cart", prune = FALSE, cp = 0.01, minsplit = 20, minbucket = 7`. `minsplit` must
   be given, because with `minbucket = 7` alone rpart sets `minsplit = 21`.
+* Records with a missing value of a continuous target are removed (`na_strategy = "drop"`), in
+  `X`, `Y`, the holdout and the `newdata` of `predict()`. RAPID is the share among the records
+  with an observed target. 0.2.0 set the missing values to 0 and kept the records in the
+  denominator, where they are rarely flagged, so RAPID tended to be lower. The 0.2.0 rule is
+  `rapid(X, Y, kv, tv, na_strategy = "constant")`. A missing value of a categorical target is
+  the level `"missing"`, as before.
 * `rapid_test()`, `rapid_threshold_select()`, `rapid_qi_contribution()` and
   `rapid_synthesizer_cv()` fit through `rapid()` and use its defaults. Their numeric results
   change with the band rule as above.
@@ -154,10 +160,7 @@ Several defaults change reported values. Each item below gives the call that rep
   Without them the fit skips its own permutations, as before.
 * Missing values of the target in `X`, `Y`, the holdout or the `newdata` of `predict()` give a
   warning of class `rapid_warning_missing_target` with their number per data set and their
-  treatment. 0.2.0 replaced them without a message. Under the default `na_strategy =
-  "constant"` the records of `X` stay in the denominator of RAPID and are scored against
-  `na_constant_value`, so RAPID tends to be lower than on the observed records. Use
-  `na_strategy = "drop"` to compute RAPID on the records with an observed target.
+  treatment. 0.2.0 replaced them without a message.
 * `plot()` of a `rapid` object draws the gain rules (band, `RCS_marginal`) with ggplot2. Type 1
   is the histogram of the gains with the permutation null as an outline, type 2 the confidence
   `g` against the baseline `b`, and type 3 RAPID against the threshold with the chance level as

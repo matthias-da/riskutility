@@ -74,10 +74,11 @@
 #'   is a threshold on a gain and must be at least 0 and below 1, otherwise an
 #'   error of class \code{"rapid_error_input"} names the rule of 0.2.0.
 #' @param na_strategy character, treatment of missing values of a continuous
-#'   target: \code{"constant"} (default, replaced by \code{na_constant_value}),
-#'   \code{"drop"} (the records are removed) or \code{"median"} (replaced by the
-#'   median of the original values in \code{X} and of the synthetic values in
-#'   \code{Y}). A missing value of a categorical target or a categorical
+#'   target: \code{"drop"} (default, the records are removed),
+#'   \code{"constant"} (replaced by \code{na_constant_value}, the default of
+#'   0.2.0) or \code{"median"} (replaced by the median of the original values
+#'   in \code{X} and of the synthetic values in \code{Y}). A missing value of a
+#'   categorical target or a categorical
 #'   quasi-identifier becomes the level \code{"missing"}. A numeric
 #'   quasi-identifier with missing values is an error. When the target of
 #'   \code{X}, \code{Y}, the holdout or the \code{newdata} of \code{predict()}
@@ -479,6 +480,8 @@
 #'     "lm", num_scale = "identity"}.}
 #'   \item{Tree}{\code{model_type = "cart"} is now \code{model_type = "cart",
 #'     prune = FALSE, cp = 0.01, minsplit = 20, minbucket = 7}.}
+#'   \item{Missing values of a continuous target}{\code{rapid(X, Y, kv, tv)}
+#'     is now \code{rapid(X, Y, kv, tv, na_strategy = "constant")}.}
 #'   \item{Flagged records only}{\code{return_all_records = FALSE} is now
 #'     \code{as.data.frame(x, at_risk_only = TRUE)}.}
 #'   \item{Old argument names}{\code{rapid(original_data = X, synthetic_data =
@@ -620,7 +623,7 @@ rapid.default <- function(X, Y,
                           cat_eval_method = c("RCS_marginal", "RCS_conditional", "NCE"),
                           cat_tau = NULL,
                           # NA handling
-                          na_strategy = c("constant", "drop", "median"),
+                          na_strategy = c("drop", "constant", "median"),
                           na_constant_value = 0,
                           # Chance level and threshold
                           n_perm = 10,
@@ -647,7 +650,7 @@ rapid.default <- function(X, Y,
   }
   num_dist <- .rapid_choice(num_dist, c("auto", "grid", "exact"), "num_dist")
   num_scale <- .rapid_choice(num_scale, c("auto", "identity", "log"), "num_scale")
-  na_strategy <- .rapid_choice(na_strategy, c("constant", "drop", "median"), "na_strategy")
+  na_strategy <- .rapid_choice(na_strategy, c("drop", "constant", "median"), "na_strategy")
 
   # Data arguments (aliases, synth_pair) and arguments for the model
   inputs <- .rapid_inputs(

@@ -210,8 +210,20 @@ test_that("missing target values give a classed warning with counts and treatmen
   s <- noisy_copy(o, seed = 2)
   o$y[1:3] <- NA
   s$y[5] <- NA
-  w <- expect_warning(rapid(o, s, qi, "y", model_type = "lm", n_perm = 0),
+  # The default removes the records with a missing target
+  w <- expect_warning(r <- rapid(o, s, qi, "y", model_type = "lm", n_perm = 0),
                       class = "rapid_warning_missing_target")
+  expect_match(conditionMessage(w), "3 in X", fixed = TRUE)
+  expect_match(conditionMessage(w), "removed", fixed = TRUE)
+  expect_identical(nobs(r), 77L)
+  expect_warning(rd <- rapid(o, s, qi, "y", model_type = "lm", na_strategy = "drop",
+                             n_perm = 0),
+                 class = "rapid_warning_missing_target")
+  expect_identical(r$rapid, rd$rapid)
+  w <- expect_warning(rc <- rapid(o, s, qi, "y", model_type = "lm", na_strategy = "constant",
+                                  n_perm = 0),
+                      class = "rapid_warning_missing_target")
+  expect_identical(nobs(rc), 80L)
   msg <- conditionMessage(w)
   expect_match(msg, "3 in X", fixed = TRUE)
   expect_match(msg, "1 in Y", fixed = TRUE)
