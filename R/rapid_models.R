@@ -765,25 +765,58 @@
 #' \code{\link{rapid_synthesizer_cv}}).
 #'
 #' The functions are called with their arguments by position, in the order
-#' given in the argument descriptions below. An argument name of that list
-#' that a function has at another position is an error of class
+#' given in the section Arguments. An argument name of that list that a
+#' function has at another position is an error of class
 #' \code{"rapid_error_input"}.
 #'
-#' \code{fit(formula, data, ...)} trains the attacker on the synthetic data:
-#' \code{formula} is \code{target ~ key_var1 + key_var2 + ...}, \code{data}
-#' holds the prepared synthetic records (classes of a categorical target that no
-#' synthetic record has are dropped from its levels), and \code{...} are the
-#' arguments given in \code{...} of \code{rapid()}.
+#' \code{fit(formula, data, ...)} trains the attacker on the synthetic data.
+#' \code{formula} is \code{target ~ key_var1 + key_var2 + ...}. \code{data} is
+#' a data frame with the target in its first column and the quasi-identifiers
+#' after it, and no other column. It is prepared as in \code{rapid()}.
+#' Character and logical variables are factors (a logical target has the
+#' levels \code{"FALSE"} and \code{"TRUE"}), integer variables are stored as
+#' double, and classes of a categorical target that no synthetic record has
+#' are dropped from its levels. The model arguments given in \code{...} of
+#' \code{rapid()} are passed to \code{fit} by name. Give \code{fit} further
+#' named arguments or \code{...} to receive them, for example
+#' \code{fit = function(formula, data, k = 10)} and \code{rapid(..., k = 5)}.
+#' The prediction functions receive no further arguments.
+#'
+#' \code{newdata} holds the records to be scored: the original records, the
+#' holdout records, or the \code{newdata} of \code{predict()}. It has the
+#' quasi-identifiers, prepared like \code{data} and with the factor levels of
+#' \code{data}. When \code{rapid()} scores the original or the holdout
+#' records, \code{newdata} also has the column of the target with the true
+#' values. Under \code{predict()} that column can be absent. The prediction
+#' functions must use the quasi-identifiers only. A function that reads the
+#' target column of \code{newdata} models an attacker who already knows the
+#' sensitive value, and RAPID is then inflated without a warning. Take the
+#' names of the quasi-identifiers from the formula, for example with
+#' \code{attr(terms(formula), "term.labels")}, and store them with the fit.
 #'
 #' \code{predict_prob(fit, newdata)} returns, for a categorical target, a
-#' matrix with one row per record of \code{newdata} and the class names as
-#' column names. A class missing from the columns gets probability 0.
-#' \code{predict_point(fit, newdata)} returns, for a numeric target, one point
-#' prediction per record. \code{predict_quantiles(fit, newdata, probs)} returns
-#' the predictive distribution as an \code{nrow(newdata) x length(probs)}
-#' matrix of quantiles. The band rule (\code{num_eval_method = "band"}, the
-#' default) needs it, the point rule does not. \code{num_dist = "auto"} and
-#' \code{"grid"} both use these quantiles, and \code{"exact"} is not available.
+#' numeric matrix or data frame with one row per record of \code{newdata} and
+#' the class names as column names. The class names are the levels of the
+#' target in \code{data}. A class missing from the columns gets probability 0.
+#'
+#' \code{predict_point(fit, newdata)} returns, for a numeric target, a
+#' numeric vector with one point prediction per record, on the scale of the
+#' target. It gives the column \code{predicted_value}, the model metrics and
+#' the score of the point rule.
+#'
+#' \code{predict_quantiles(fit, newdata, probs)} returns the predictive
+#' distribution of a numeric target as a numeric matrix with
+#' \code{nrow(newdata)} rows and \code{length(probs)} columns, on the scale of
+#' the target. \code{probs} holds the \eqn{K} = \code{n_quantiles} midpoint
+#' probabilities \eqn{(k - 0.5)/K}, that is 0.005, 0.015, ..., 0.995 for the
+#' default of 100. Column \eqn{k} holds the quantile of \code{probs[k]}. Each
+#' value of a row counts as a point with probability \eqn{1/K}. The confidence
+#' \eqn{g_i} of a record is the share of the \eqn{K} values of its row that
+#' lie strictly inside the tolerance band. The values of a row need not be
+#' sorted. The band rule (\code{num_eval_method = "band"}, the default) needs
+#' \code{predict_quantiles}, the point rule does not. \code{num_dist = "auto"}
+#' and \code{"grid"} both use these quantiles, and \code{"exact"} is not
+#' available.
 #'
 #' The output of the functions is checked (dimensions, names, no \code{NA},
 #' probabilities between 0 and 1 whose sum per record is at most 1), and a
@@ -797,18 +830,25 @@
 #' including the environment of a closure, so define them at top level or keep
 #' them free of large captured objects.
 #'
-#' @param name character, the name of the model; it is the \code{model_type}
-#'   of the \code{rapid} object and the name of the model in a suite
-#' @param fit function \code{(formula, data)} returning the fitted model
+#' @param name character, the name of the model. It is the \code{model_type}
+#'   of the \code{rapid} object and the name of the model in a suite. Choose a
+#'   name other than the built-in ones (\code{"rf"}, \code{"lm"},
+#'   \code{"cart"}, \code{"gbm"}, \code{"logit"}, \code{"lookup"}).
+#' @param fit function \code{(formula, data, ...)} returning the fitted model,
+#'   any R object except \code{NULL}. Arguments after \code{data} receive the
+#'   model arguments given in \code{...} of \code{rapid()}.
 #' @param predict_prob function \code{(fit, newdata)} for a categorical target,
+#'   or \code{NULL}. At least one of \code{predict_prob} and
+#'   \code{predict_point} must be given. With both, the learner serves both
+#'   types of target.
+#' @param predict_point function \code{(fit, newdata)} for a numeric target,
 #'   or \code{NULL}
-#' @param predict_point function \code{(fit, newdata)} for a numeric target, or
-#'   \code{NULL}
 #' @param predict_quantiles function \code{(fit, newdata, probs)} giving the
-#'   predictive distribution of a numeric target, or \code{NULL}
-#' @param requires character vector of packages the functions need; a missing
+#'   predictive distribution of a numeric target, or \code{NULL}. It needs
+#'   \code{predict_point} as well.
+#' @param requires character vector of packages the functions need. A missing
 #'   one is an error of class \code{"rapid_error_dependency"} (in
-#'   \code{rapid_suite()} the model is skipped)
+#'   \code{rapid_suite()} the model is skipped).
 #'
 #' @return \code{rapid_learner()}: an object of class
 #'   \code{c("rapid_learner_custom", "rapid_learner")}. Its field
@@ -817,7 +857,13 @@
 #'   returns the lines that \code{print()} shows (name, target types, required
 #'   packages and the functions given), \code{print()} the object, invisibly.
 #'
-#' @seealso \code{\link{rapid}}, \code{\link{rapid_suite}}
+#' @references
+#' Templ, M., Thees, O. and Müller, R. (2026). RAPID: Risk of Attribute
+#' Prediction-Induced Disclosure. Manuscript under review at EPJ Data Science.
+#'
+#' @seealso \code{\link{rapid}}, \code{\link{rapid_suite}}.
+#'   The section "Your own attacker" of
+#'   \code{vignette("rapid", package = "riskutility")}.
 #' @family rapid
 #' @examples
 #' set.seed(1)
@@ -848,6 +894,37 @@
 #'                           predict_point = function(fit, newdata) predict(fit, newdata))
 #' rapid(X, Y, key_vars = c("age", "hours"), target_var = "income",
 #'       model_type = my_point, num_eval_method = "point", n_perm = 3, seed = 1)
+#'
+#' # k nearest neighbors. The predictive distribution is that of the k
+#' # neighbors, and k is an argument of fit() that is set through ... of
+#' # rapid(). The quasi-identifiers are taken from the formula, so the target
+#' # column of newdata is never used.
+#' neighbors <- function(fit, newdata) {
+#'   z <- scale(as.matrix(newdata[fit$vars]), fit$center, fit$scale)
+#'   values <- apply(z, 1, function(v) {
+#'     fit$y[order(colSums((t(fit$z) - v)^2))[seq_len(fit$k)]]
+#'   })
+#'   t(values)
+#' }
+#' my_knn <- rapid_learner(
+#'   "knn",
+#'   fit = function(formula, data, k = 10) {
+#'     vars <- attr(stats::terms(formula), "term.labels")
+#'     z <- scale(as.matrix(data[vars]))
+#'     list(vars = vars, z = z, center = attr(z, "scaled:center"),
+#'          scale = attr(z, "scaled:scale"), y = data[[all.vars(formula)[1]]],
+#'          k = k)
+#'   },
+#'   predict_point = function(fit, newdata) rowMeans(neighbors(fit, newdata)),
+#'   predict_quantiles = function(fit, newdata, probs) {
+#'     t(apply(neighbors(fit, newdata), 1, stats::quantile, probs = probs,
+#'             type = 1, names = FALSE))
+#'   }
+#' )
+#' rapid(X, Y, key_vars = c("age", "hours"), target_var = "income",
+#'       model_type = my_knn, n_perm = 3, seed = 1)
+#' rapid(X, Y, key_vars = c("age", "hours"), target_var = "income",
+#'       model_type = my_knn, k = 3, n_perm = 3, seed = 1)
 #'
 #' # A categorical target: logistic regression with class probabilities
 #' X$high <- factor(ifelse(X$income > median(X$income), "yes", "no"))

@@ -24,36 +24,44 @@
 
 \item{y}{not used}
 
-\item{...}{additional arguments passed to the plotting functions}
+\item{...}{not used. Change a ggplot2 plot by adding to the returned object,
+for example \code{plot(x, which = 1) + ggplot2::ggtitle("My title")}.}
 
 \item{which}{integer vector of plot types, drawn in the order given
 (default 1):
 \describe{
 \item{1}{Distribution of the scores with the threshold.}
 \item{2}{For the band and \code{RCS_marginal} rules the confidence
-\eqn{g} against the baseline \eqn{b}. For the other rules of a
-continuous target the prediction against the true value.}
+\eqn{g} against the baseline \eqn{b}. For the point rule the prediction
+against the true value.}
 \item{3}{RAPID against the threshold.}
-\item{4}{Importance of the quasi-identifiers in the attacker model (needs
-\code{store_model = TRUE}).}
-\item{5}{Main effects of the quasi-identifiers on the flag.}
-\item{6}{Pairwise interactions of the quasi-identifiers on the flag (needs
-at least two quasi-identifiers).}
+\item{4}{Importance of the quasi-identifiers in the attacker's model
+(needs \code{store_model = TRUE}).}
+\item{5}{Main effects of the quasi-identifiers on being at risk.}
+\item{6}{Pairwise interactions of the quasi-identifiers on being at risk
+(needs at least two quasi-identifiers).}
 }}
 
-\item{xlim}{x-axis limits of plots 1 and 2: \code{"full"} (default, the
-range of the data), \code{"zero_to_one"}, \code{"threshold_to_one"} (the
-region of the records at risk), or a numeric vector of length 2}
+\item{xlim}{x-axis limits of plot 1 (the other types ignore it):
+\code{"full"} (default, the range of the observed scores, from 0 under the
+point rule), \code{"zero_to_one"}, \code{"threshold_to_one"} (the region
+of the records at risk under a gain rule), or a numeric vector of length
+two. Any other string is read as \code{"full"}.}
 
-\item{annotate}{logical, if \code{TRUE} (default) add the percentage at risk}
+\item{annotate}{logical, if \code{TRUE} (default) plots 1 and 2 show the
+percentage of records at risk. The faceted plot 1 always shows it.}
 
 \item{facet_by}{character vector of variables of the record table. Plot 1
-is then drawn with one panel per subgroup (ggplot2).}
+is then drawn with ggplot2, one panel per value or combination of values.
+Use variables with few distinct values.}
 
 \item{bins}{integer, number of histogram bins (default 30)}
 
 \item{tau_range}{numeric vector of thresholds for plot 3, for rules that flag
-scores above the threshold (default \code{seq(0, 1, by = 0.05)})}
+scores above the threshold (default \code{seq(0, 1, by = 0.05)}). The
+scores of \code{RCS_conditional} are ratios that can exceed the default
+threshold 1. Pass a wider range there, for example
+\code{seq(0.5, 2, by = 0.05)}.}
 
 \item{epsilon_range}{numeric vector of tolerances for plot 3 under the point
 rule (default \code{seq(0, 1, by = 0.05)}). For the absolute metric the
@@ -64,7 +72,8 @@ example \code{at_risk ~ age * sex}. The default uses the main effects of
 all quasi-identifiers.}
 
 \item{top_n}{integer, the largest number of variables or terms shown in plots
-4, 5 and 6 (default 15)}
+4, 5 and 6 (default 15). Plot 4 keeps the variables with the largest
+importance, plots 5 and 6 the terms with the largest absolute coefficient.}
 }
 \value{
 Invisibly, the ggplot2 object for one ggplot2 type, a list named by the type
@@ -77,44 +86,104 @@ Draws one or several of six plot types for the result of
 documented in \code{\link{rapid-methods}}.
 }
 \details{
-\strong{Gain rules.} For the band rule and \code{RCS_marginal}, types 1 to 3
-are drawn with ggplot2. Type 1 is the histogram of the gain \eqn{r} with the
-threshold. When the predictions are stored, a grey outline adds the
-permutation null, the average histogram of one permutation. Type 2 shows the
-confidence \eqn{g} against the baseline \eqn{b} with the lines \eqn{g = b}
-and \eqn{g = b + \tau (1 - b)}{g = b + tau (1 - b)}. Records above the dashed
-line are at risk, records near the diagonal gain nothing over the marginal
-distribution. Type 3 shows RAPID against the threshold together with the
-chance curve, the share of records flagged under permuted true values. The
-permutations are drawn once per call from the stored predictions and the
-\code{n_perm} of the fit, starting from the seed of the fit when there is
-one. For a fit with a seed the chance curve passes through \code{x$chance}
-at the object's threshold, as long as the caller has not changed
-\code{RNGkind()} since the fit. For a fit without a seed the permutations
-are new draws, and the curve passes only near \code{x$chance}.
-The random stream of the caller is restored afterwards. Without stored predictions or
-with \code{n_perm = 0}, the outline and the chance curve are left out.
+In types 1 and 2 the records at risk (also called flagged) are drawn in
+coral and the other records in blue. For the band rule and
+\code{RCS_marginal} (the gain rules) types 1 to 3 are drawn with ggplot2.
+For the point rule, \code{RCS_conditional} and \code{NCE} they are drawn
+with base graphics. Types 4 to 6 use base graphics under every rule.
 
-\strong{Other rules.} The point rule, \code{RCS_conditional} and
-\code{NCE} draw types 1 to 3 with base graphics. Type 1 is the histogram of
-the score with the threshold as a red dashed line. Under the point rule the
-score is the error and low values are at risk. Type 2 (continuous target
-only, nothing is drawn for a categorical one) shows the prediction against
-the true value, coloured by the flag.
-Type 3 marks the threshold of the object with a red point. \code{which =
-1:2} draws both panels side by side.
+\strong{Type 1, distribution of the score.} A histogram of the score with the
+threshold as a red dashed line. Under a gain rule the score is the gain
+\eqn{r}, and the bars right of the line are the records at risk. When the
+predictions are stored and \code{n_perm} is above 0, a dark step line adds
+the permutation null. It gives the number of records per bin when the true
+values are permuted, averaged over the permutations. Right of the threshold,
+the bars count the records at risk and the step line counts the records that
+chance alone puts there. The surplus of the bars over the step line is the
+excess. The x-axis covers the observed scores, so the part of the null
+outside this range is cut off. Under the point rule the score is the error
+and the records at risk are left of the line. With \code{facet_by} the
+histogram is drawn per subgroup with ggplot2 under every rule. The
+permutation null and the chance level are then left out.
 
-\strong{Quasi-identifiers.} Type 4 is a lollipop chart of the variable
-importance of the attacker (impurity for rf, the importance of rpart for
-cart, gain for gbm, and the absolute coefficients scaled to sum 1 for lm and
-logit). Type 5
-fits a logistic regression of the flag on the quasi-identifiers with
-sum-to-zero contrasts and shows every level, including the reference level,
-with 95 percent intervals. Numeric quasi-identifiers are cut into quartile
-bins and factors with many levels are grouped, which avoids separation.
-Positive coefficients (red) raise the chance of being flagged, negative ones
-(blue) lower it. Type 6 fits the same model with all pairwise interactions
-and shows the interaction terms only.
+\strong{Type 2, confidence against baseline.} Under a gain rule, one point
+per record with the baseline \eqn{b} on the x-axis and the confidence \eqn{g}
+on the y-axis. On the dotted line \eqn{g = b} the attacker knows no more than
+the marginal distribution. The dashed line \eqn{g = b + \tau (1 - b)}{g = b +
+tau (1 - b)} is the threshold, and the points above it are the records at
+risk. For a categorical target \eqn{b} has one value per class, so the points
+form one column per class. Under the point rule the plot shows the point
+prediction against the true value with the diagonal of a perfect prediction.
+Nothing is drawn for \code{RCS_conditional} and \code{NCE}.
+
+\strong{Type 3, RAPID against the threshold.} RAPID for each threshold in
+\code{tau_range}, with the threshold of the object as a point. Under a gain
+rule a second curve gives the chance level at each threshold, and the
+vertical distance between the two curves is the excess. A result that holds
+over a range of thresholds does not hinge on the choice of
+\eqn{\tau}{tau}. Under the point rule the x-axis is the tolerance
+(\code{epsilon_range}).
+
+The permutations for the step line of type 1 and the chance curve of type 3
+are drawn once per call from the stored predictions and the \code{n_perm} of
+the fit, starting from the seed of the fit when there is one. For a fit with
+a seed the chance curve passes through \code{x$chance} at the threshold of
+the object, as long as \code{RNGkind()} has not changed since the fit. For a
+fit without a seed the permutations are new draws, and the curve passes near
+\code{x$chance}. The random stream of the caller is restored afterwards.
+Without stored predictions or with \code{n_perm = 0}, the step line and the
+chance curve are left out.
+
+\strong{Type 4, importance in the attacker's model.} A lollipop chart of
+the variable importance of the fitted attacker, divided by its maximum, so
+that the largest value is 1. It needs \code{store_model = TRUE}, otherwise
+the call stops with an error of class \code{"rapid_error_object"}. The
+importance is the impurity importance of ranger for \code{"rf"},
+\code{variable.importance} of rpart for \code{"cart"} and the gain of xgboost
+for \code{"gbm"}. For \code{"lm"} and \code{"logit"} it is the absolute value
+of each coefficient. These coefficients are not standardized. They depend on
+the units of the quasi-identifiers, and a numeric quasi-identifier with a
+wide range gets a small value even when it drives the prediction. For
+\code{"lm"}, \code{"logit"} and \code{"gbm"} a factor has one entry per dummy
+variable. Use \code{"rf"} or \code{"cart"} when the ranking matters. The
+lookup attacker and user-defined attackers have no importance, and a message
+says so.
+
+\strong{Type 5, which records are at risk.} A logistic regression of the flag
+(at risk or not) on the quasi-identifiers with effect coding (sum-to-zero
+contrasts). Each row is one level, the reference level included. The x-axis
+is the log-odds of being at risk for that level, as a deviation from the
+mean over the levels of the variable. Points right of zero (red) are levels
+with more records at risk, points left of zero (blue) levels with fewer. The
+bars are 95 percent Wald intervals. Numeric quasi-identifiers are cut into at
+most four quantile bins, fewer when the smaller of the two groups (at risk,
+not at risk) has under 20 records. Factors with more than 10 levels are
+grouped into bins of neighboring levels, labeled G1, G2 and so on. The
+binning reduces separation and does not rule it out. When all or none of the
+records of a level are at risk, the point of that level lies far from zero
+and has no interval, because intervals with a standard error of 10 or more
+are left out. Read such a point as "all" or "none" and ignore its size. When
+there are more than \code{top_n} rows, the \code{top_n} largest in absolute
+value are shown. Nothing is drawn, with a message, when all records or no
+records are at risk.
+
+\strong{Type 6, combinations of levels.} The model of type 5 with all
+pairwise interactions of the binned quasi-identifiers. Only the interaction
+coefficients are shown. They are labeled by the two levels, without the names
+of the variables. A numeric quasi-identifier appears with its bin. A point
+right of zero is a combination with more records at risk than the two main
+effects give. Combinations with a reference level are not shown. The model
+has many coefficients and can be separated as in type 5, so read this plot
+as exploratory. It needs at least two quasi-identifiers.
+
+Type 4 shows how much the fitted attacker relies on a variable. Types 5 and 6
+show which values of the quasi-identifiers the records at risk have. None of
+them says how much RAPID falls when the attacker does not know a variable.
+For that see \code{\link{rapid_qi_contribution}()}.
+
+Under the point rule, \code{which = 1:2} draws the two panels side by side.
+Under \code{RCS_conditional} and \code{NCE} the device is split in the same
+way and the right half stays empty.
 }
 \examples{
 set.seed(42)
@@ -135,16 +204,27 @@ Y$income <- round(Y$income * exp(rnorm(n, 0, 0.05)))
 idx <- sample(n, n * 0.3)
 Y$health[idx] <- sample(levels(X$health), length(idx), replace = TRUE)
 
-# Continuous target, band rule: score histogram, g against b, chance curve
+# Numeric target, band rule
 r <- rapid(X, Y, key_vars = c("age", "gender", "education"),
-           target_var = "income", model_type = "lm", store_model = TRUE, seed = 1)
+           target_var = "income", model_type = "lm", seed = 1)
+# Type 1: bars right of the dashed line are records at risk, the step line
+# is what chance gives
+# Type 2: points above the dashed line are at risk
+# Type 3: the gap between the two curves is the excess at each threshold
 plot(r, which = 1:3)
-plot(r, which = 4)
+
+# Type 4: importance of the quasi-identifiers in a forest (needs the stored
+# model)
+rf <- rapid(X, Y, key_vars = c("age", "gender", "education"),
+            target_var = "income", store_model = TRUE, seed = 1)
+plot(rf, which = 4)
 
 # The point rule draws with base graphics
 plot(update(r, num_eval_method = "point"), which = 1:2)
 
-# Categorical target: the quasi-identifiers behind the flags
+# Categorical target: the quasi-identifiers behind the records at risk.
+# All records at risk are men here, so the points of gender in type 5 lie
+# far out and have no interval
 if (requireNamespace("rpart", quietly = TRUE)) {
   rc <- rapid(X, Y, key_vars = c("age", "gender", "education"),
               target_var = "health", model_type = "cart", store_model = TRUE,
@@ -155,11 +235,15 @@ if (requireNamespace("rpart", quietly = TRUE)) {
 
 }
 \seealso{
-\code{\link{rapid}}, \code{\link{rapid-methods}}
+\code{\link{rapid}}, \code{\link{rapid-methods}},
+\code{\link{rapid_threshold_select}} for a threshold chosen from the
+permutations (type 3), \code{\link{rapid_qi_contribution}} for the
+contribution of each quasi-identifier to RAPID (types 4 to 6),
+\code{vignette("rapid", package = "riskutility")}
 
 Other rapid: 
-\code{\link{confint.rapid}()},
 \code{\link{rapid}()},
+\code{\link{rapid-methods}},
 \code{\link{rapid_learner}()},
 \code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_suite}()},

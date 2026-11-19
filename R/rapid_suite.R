@@ -7,7 +7,7 @@
 #' Every model is fitted with the arguments in \code{...} and the same
 #' \code{seed}, so that \code{suite[["rf"]]} equals
 #' \code{rapid(X, Y, key_vars, target_var, model_type = "rf", ..., seed = seed)}.
-#' A model whose backend package is not installed, or that does not support the
+#' A model whose package is not installed, or that does not support the
 #' type of the target, is skipped with a warning of class
 #' \code{"rapid_warning_skipped_model"}. If no model is left, the call stops
 #' with an error of class \code{"rapid_error_model"}. Every other error of
@@ -18,6 +18,13 @@
 #' When it is in the suite, compare the models by \code{excess_max} and
 #' \code{worst_model_excess}, as the print says.
 #'
+#' The worst case covers the attackers in the suite only. A small maximum is
+#' no proof that an attacker outside the suite infers as little. The largest
+#' of several estimated values tends to be too large, because each value has
+#' noise. A \code{\link{rapid_test}()} of the worst model, chosen after
+#' looking at all models, is exploratory in the same way as a threshold
+#' selected by \code{\link{rapid_threshold_select}()}.
+#'
 #' \code{rapid_suite()} on \code{rapid} objects combines objects that were
 #' fitted already. They must agree in \code{target_var}, \code{key_vars},
 #' \code{n_total} and scoring rule (else an error of class
@@ -27,9 +34,10 @@
 #'
 #' @param X the original data, a \code{\link{synth_pair}}, or a \code{rapid}
 #'   object
-#' @param Y data frame of synthetic data (not needed if X is a synth_pair)
-#' @param key_vars character vector of quasi-identifier variable names
-#' @param target_var character, name of the sensitive target variable
+#' @param Y data frame of the released (synthetic or anonymized) data the
+#'   attacker is fitted on. Not needed if \code{X} is a \code{synth_pair}.
+#' @param key_vars character vector with the names of the quasi-identifiers
+#' @param target_var character, name of the sensitive variable (the target)
 #' @param model_types character vector of attacker models, any of
 #'   \code{"rf"}, \code{"lm"}, \code{"cart"}, \code{"gbm"}, \code{"logit"},
 #'   \code{"lookup"} (default \code{c("rf", "cart", "gbm", "lookup")}). A
@@ -37,32 +45,49 @@
 #'   is accepted as well. The models are named by their \code{name}, which must
 #'   be distinct.
 #' @param ... for the data methods, arguments of \code{\link{rapid}} that go to
-#'   every model (for example \code{num_tau}, \code{n_perm}). The old argument
-#'   names are accepted. For the \code{rapid} method, further \code{rapid}
-#'   objects.
+#'   every model: the rule and its thresholds (for example \code{num_tau},
+#'   \code{cat_tau}), \code{n_perm} and \code{holdout}. The old argument names
+#'   are accepted. An argument of one model goes to every model as well.
+#'   \code{num.trees = 50} reaches ranger and rpart alike, and the call stops
+#'   when \code{"cart"} is in the suite. To give one model its own arguments,
+#'   fit the models with \code{rapid()} and combine the objects with
+#'   \code{rapid_suite(fit1, fit2)}. For the \code{rapid} method, further
+#'   \code{rapid} objects.
 #' @param seed random seed, passed to every \code{rapid()} call (default NULL:
-#'   the random stream is left alone)
+#'   the random stream is left alone). With a seed, \code{set.seed()} is
+#'   called and the random stream of the session is not restored afterwards.
+#'   In a simulation, set the seed once before the loop and leave
+#'   \code{seed = NULL}, or pass a different seed in every replication.
 #'
 #' @return An object of class \code{"rapid_suite"} with components:
 #' \describe{
 #'   \item{results}{Data frame with \code{model_type, rapid, chance, excess,
 #'     n_at_risk}, one row per model.}
 #'   \item{fits}{Named list of the \code{rapid} objects.}
-#'   \item{rapid_mean, rapid_max}{Mean and maximum RAPID over the models.}
+#'   \item{rapid_mean, rapid_max}{Mean and maximum RAPID over the models.
+#'     \code{rapid_mean} is a plain average over the attackers of the suite
+#'     and changes with the attackers in it. It is no risk measure. With a
+#'     lookup attacker in the suite, read \code{excess_max} in place of
+#'     \code{rapid_max} (see Details).}
 #'   \item{worst_model}{Name of the model with the largest RAPID (the first one
 #'     in case of ties).}
 #'   \item{excess_max, worst_model_excess}{Largest excess over the chance level
 #'     and the model that has it (\code{NA} without a chance level, that is
 #'     with \code{n_perm = 0}).}
-#'   \item{n_flagged_any}{Number of records flagged by at least one model.}
+#'   \item{n_flagged_any}{Number of records at risk (flagged) under at least
+#'     one model.}
 #'   \item{n_total, key_vars, target_var, rule, notes}{Settings shared by the
 #'     fits, and the notes of the models that carry one.}
 #' }
-#' \code{suite[["rf"]]} returns the \code{rapid} object of a model.
+#' \code{suite[["rf"]]} returns the \code{rapid} object of a model, by name or
+#' position. \code{[[} selects models only. Use \code{$} for the components
+#' listed above. With a holdout, every fit holds its \code{holdout} result and
+#' \code{release_specific}, for example \code{suite[["rf"]]$release_specific}.
+#' The table \code{results} does not show them.
 #' \code{format()} returns the printed lines and \code{print()} the object,
 #' invisibly. \code{summary()} returns an object of class
 #' \code{"summary.rapid_suite"} that adds \code{n_flagged_all}, the number of
-#' records flagged by every model. \code{plot()} draws RAPID and the chance
+#' records at risk under every model. \code{plot()} draws RAPID and the chance
 #' level of each model and returns the ggplot object, invisibly.
 #' \code{as.data.frame()} returns \code{results}.
 #'
@@ -71,25 +96,27 @@
 #' Prediction-Induced Disclosure. Manuscript under review at EPJ Data Science.
 #'
 #' @seealso \code{\link{rapid}}, \code{\link{rapid_learner}},
-#'   \code{\link{rapid_test}}
+#'   \code{\link{rapid_test}}.
+#'   The section "Model suite and worst case" of
+#'   \code{vignette("rapid", package = "riskutility")}.
 #'
 #' @family rapid
 #' @author Oscar Thees, Matthias Templ
 #' @examples
 #' set.seed(42)
 #' X <- data.frame(
-#'   age = sample(20:60, 80, replace = TRUE),
-#'   sex = sample(c("M", "F"), 80, replace = TRUE),
-#'   income = rnorm(80, 50000, 10000)
+#'   age = sample(20:60, 100, replace = TRUE),
+#'   hours = sample(10:50, 100, replace = TRUE)
 #' )
-#' X$income <- X$income + 500 * X$age
+#' X$income <- 20000 + 600 * X$age + 300 * X$hours + rnorm(100, 0, 5000)
 #' Y <- X
-#' Y$income <- Y$income + rnorm(80, 0, 5000)
+#' Y$income <- Y$income + rnorm(100, 0, 3000)
 #'
-#' # From fitted objects: they must share target, key variables, records and rule
-#' fit_lm <- rapid(X, Y, key_vars = c("age", "sex"), target_var = "income",
+#' # From fitted objects: they must share target, quasi-identifiers, records
+#' # and rule
+#' fit_lm <- rapid(X, Y, key_vars = c("age", "hours"), target_var = "income",
 #'                 model_type = "lm", n_perm = 3, seed = 1)
-#' fit_lookup <- rapid(X, Y, key_vars = c("age", "sex"), target_var = "income",
+#' fit_lookup <- rapid(X, Y, key_vars = c("age", "hours"), target_var = "income",
 #'                     model_type = "lookup", n_perm = 3, seed = 1)
 #' s <- rapid_suite(fit_lm, lookup = fit_lookup)
 #' s
@@ -97,6 +124,14 @@
 #' as.data.frame(s)
 #' s[["lookup"]]
 #' plot(s)
+#'
+#' # With a lookup attacker in the suite, read the excess
+#' s$worst_model_excess
+#' s$excess_max
+#'
+#' # From a synth_pair
+#' pair <- synth_pair(X, Y, key_vars = c("age", "hours"), target_var = "income")
+#' rapid_suite(pair, model_types = c("lm", "rf", "lookup"), seed = 1)
 #'
 #' # From the data, here with the linear model and a user-defined attacker
 #' my_lm <- rapid_learner(
@@ -108,13 +143,13 @@
 #'       outer(sqrt(p$se.fit^2 + p$residual.scale^2), qnorm(probs))
 #'   }
 #' )
-#' rapid_suite(X, Y, key_vars = c("age", "sex"), target_var = "income",
+#' rapid_suite(X, Y, key_vars = c("age", "hours"), target_var = "income",
 #'             model_types = list("lm", my_lm), n_perm = 3, seed = 1)
 #'
 #' \donttest{
 #' # The default suite: rf, cart, gbm and lookup (models whose package is
 #' # missing are skipped with a warning)
-#' s_all <- rapid_suite(X, Y, key_vars = c("age", "sex"), target_var = "income",
+#' s_all <- rapid_suite(X, Y, key_vars = c("age", "hours"), target_var = "income",
 #'                      n_perm = 3, seed = 1)
 #' s_all
 #' }

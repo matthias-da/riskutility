@@ -55,18 +55,26 @@ and rule, the old argument names \code{original_data},
 \code{sensitive_attribute} are accepted). Not allowed for a \code{rapid}
 object. Ignored by the methods for \code{rapid_test} objects.}
 
-\item{n_permutations}{number of permutations (default 199)}
+\item{n_permutations}{number of permutations of the test, a whole number
+of at least 1 (default 199). The p-value cannot fall below
+\code{1 / (1 + n_permutations)}. The permutations of the test are
+\code{n_permutations}, those of the fit \code{n_perm}.}
 
-\item{alpha}{significance level (default 0.05)}
+\item{alpha}{significance level, above 0 and below 1 (default 0.05)}
 
 \item{seed}{random seed of the permutations, and of the fit for the data
-methods (default NULL: the random stream is left alone)}
+methods (default NULL: the random stream is left alone). With a seed,
+\code{set.seed()} is called and the random stream of the session is not
+restored afterwards. In a simulation, set the seed once before the loop
+and leave \code{seed = NULL}, or pass a different seed in every
+replication.}
 
-\item{Y}{data frame of synthetic data (not needed if X is a synth_pair)}
+\item{Y}{data frame of the released (synthetic or anonymized) data the
+attacker is fitted on. Not needed if \code{X} is a \code{synth_pair}.}
 
-\item{key_vars}{character vector of quasi-identifier variable names}
+\item{key_vars}{character vector with the names of the quasi-identifiers}
 
-\item{target_var}{character, name of the sensitive target variable}
+\item{target_var}{character, name of the sensitive variable (the target)}
 
 \item{x}{an object of class \code{"rapid_test"}}
 
@@ -87,19 +95,25 @@ An object of class \code{"rapid_test"} with components:
 \item{null_distribution}{RAPID of each permutation.}
 \item{n_permutations, alpha}{Settings.}
 \item{significant}{Logical, \code{TRUE} if \code{p_value <= alpha}.}
-\item{null_mean, chance}{Mean of the null distribution (the chance level).}
+\item{null_mean, chance}{Mean of the null distribution (the chance level).
+It rests on \code{n_permutations} permutations, the chance level of the
+object on its \code{n_perm} (10 by default). In a report, give the
+chance level of the test together with its p-value.}
 \item{excess}{\code{rapid - chance}.}
 \item{wald}{List \code{(z, p_value, pi0)}: Wald test of \code{rapid} against the chance
 level \code{pi0 = null_mean}, one-sided \code{p_value = 1 - pnorm(z)}. \code{z} and
 \code{p_value} are \code{NA} when \code{pi0} is 0 or 1.}
-\item{null_sd}{Standard deviation of the null distribution.}
+\item{null_sd}{Standard deviation of the null distribution (\code{NA}
+with one permutation).}
 \item{null_quantiles}{Null quantiles (5, 50, 95 percent).}
 \item{observed_rapid}{The \code{rapid} object that was tested.}
 \item{method}{\code{"permutation"}.}
 }
 \code{format()} returns the printed lines and \code{print()} the object,
 invisibly. \code{summary()} returns an object of class
-\code{"summary.rapid_test"} that adds the rule and the effect size
+\code{"summary.rapid_test"} with the components above except
+\code{null_distribution} and \code{observed_rapid}, plus \code{rule} (the
+printed rule) and \code{effect_size},
 \code{(rapid - null_mean) / null_sd}. \code{plot()} returns the ggplot
 object, invisibly. \code{as.data.frame()} returns the null distribution as a
 data frame with the columns \code{permutation} and \code{rapid}.
@@ -132,12 +146,23 @@ value belongs to which record. The test holds the fitted attacker fixed, so
 it is exact given that attacker, and a significant result says that this
 attacker infers the sensitive value of more records than chance allows.
 
+The test says nothing beyond that. It holds the attacker and the release
+fixed, so the p-value does not cover the randomness of the model fit or of
+the synthesis. A result that is not significant does not show that the
+release is safe. It shows that under this attacker and this rule no more
+records are at risk than chance gives. Another attacker can do better (see
+\code{\link{rapid_suite}}). The smallest possible p-value is
+\eqn{1/(1 + B)}, so a significant result needs at least
+\code{1 / alpha - 1} permutations (19 for \code{alpha = 0.05}). The test
+covers the records of \code{X}. A holdout stored in the object takes no
+part in it.
+
 The mean of the \eqn{R_b} is the chance level \eqn{\pi_0}{pi0}, and the
 Wald statistic \eqn{z = (R - \pi_0) / \sqrt{\pi_0 (1 - \pi_0) / n}}{z = (R -
 pi0) / sqrt(pi0 (1 - pi0) / n)} with \eqn{n} scored records gives a
 one-sided p-value from the normal distribution. The Wald test needs a stable
 estimate of \eqn{\pi_0}{pi0}: use \code{n_permutations >= 999} (the print
-says so otherwise). Its variance treats every record as flagged with the same
+says so otherwise). Its variance treats every record as at risk with the same
 probability \eqn{\pi_0}{pi0}. When records differ in that probability, as
 they do under a forest attacker, the permutation distribution is narrower,
 and the Wald test is conservative.
@@ -156,32 +181,35 @@ The verdict of \code{rapid_test()} is the one of the p-value.
 \examples{
 set.seed(42)
 X <- data.frame(
-  age = sample(20:60, 80, replace = TRUE),
-  sex = sample(c("M", "F"), 80, replace = TRUE),
-  income = rnorm(80, 50000, 10000)
+  age = sample(20:60, 100, replace = TRUE),
+  hours = sample(10:50, 100, replace = TRUE)
 )
-X$income <- X$income + 500 * X$age
+X$income <- 20000 + 600 * X$age + 300 * X$hours + rnorm(100, 0, 5000)
 Y <- X
-Y$income <- Y$income + rnorm(80, 0, 5000)
+Y$income <- Y$income + rnorm(100, 0, 3000)
 
 # On a fitted object: no refit
-r <- rapid(X, Y, key_vars = c("age", "sex"), target_var = "income",
+r <- rapid(X, Y, key_vars = c("age", "hours"), target_var = "income",
            model_type = "lm")
-res <- rapid_test(r, n_permutations = 99, seed = 1)
+res <- rapid_test(r, n_permutations = 199, seed = 1)
 res
+res$p_value
+res$wald
 summary(res)
 head(as.data.frame(res))
 plot(res)
 
 # On the data: arguments in ... go to rapid()
-rapid_test(X, Y, key_vars = c("age", "sex"), target_var = "income",
-           model_type = "lm", n_permutations = 99, seed = 1)
+rapid_test(X, Y, key_vars = c("age", "hours"), target_var = "income",
+           model_type = "lm", n_permutations = 199, seed = 1)
 
-# A release without information on income
+# A release without information on income. Under the forest some records
+# are still at risk, and the test shows that they are no more than chance
+# gives.
 Y0 <- Y
 Y0$income <- sample(Y0$income)
-rapid_test(X, Y0, key_vars = c("age", "sex"), target_var = "income",
-           model_type = "lm", n_permutations = 99, seed = 1)
+rapid_test(X, Y0, key_vars = c("age", "hours"), target_var = "income",
+           model_type = "rf", n_permutations = 199, seed = 1)
 
 }
 \references{
@@ -190,12 +218,14 @@ Prediction-Induced Disclosure. Manuscript under review at EPJ Data Science.
 }
 \seealso{
 \code{\link{rapid}}, \code{\link[=confint.rapid]{confint}},
-\code{\link{rapid_threshold_select}}, \code{\link[=update.rapid]{update}}
+\code{\link{rapid_threshold_select}}, \code{\link[=update.rapid]{update}}.
+The section "Testing and intervals" of
+\code{vignette("rapid", package = "riskutility")}.
 
 Other rapid: 
-\code{\link{confint.rapid}()},
 \code{\link{plot.rapid}()},
 \code{\link{rapid}()},
+\code{\link{rapid-methods}},
 \code{\link{rapid_learner}()},
 \code{\link{rapid_qi_contribution}()},
 \code{\link{rapid_suite}()},

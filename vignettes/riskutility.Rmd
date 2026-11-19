@@ -676,15 +676,17 @@ in the original and in the synthetic data. The release therefore carries no
 information about income, and RAPID stays at its chance level. The threshold
 curve (`which = 3`) shows RAPID and the chance level across thresholds.
 
-RAPID complements the CAP family in two ways. First, it captures non-linear
-relationships and variable interactions. Second, it comes with inferential tools.
+RAPID complements the CAP family in two ways. First, with a forest or boosting
+attacker it captures non-linear relationships and interactions of the
+quasi-identifiers. Second, it comes with inferential tools.
 `rapid_test()` gives a permutation $p$-value and a Wald test against the chance
 level, `confint()` gives Wilson (default), Clopper-Pearson, Wald or bootstrap
-intervals, and `rapid_threshold_select()` chooses the threshold by permutation.
-`rapid_suite()` runs several attackers and reports the worst case, and the
-argument `holdout` separates the risk of the records used for the release from
-that of other records. The vignette `vignette("rapid", package = "riskutility")`
-explains the measure, its result object and the choice of the attacker.
+intervals, and `rapid_threshold_select()` explores how the result depends on
+the threshold. `rapid_suite()` runs several attackers and reports the worst
+case, and the argument `holdout` separates the risk of the records used for the
+release from that of other records. The vignette
+`vignette("rapid", package = "riskutility")` explains the measure, its result
+object and the choice of the attacker.
 
 ```{r rapid-models, echo=FALSE}
 models <- data.frame(

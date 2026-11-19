@@ -1,21 +1,31 @@
 #' Risk Contribution of Quasi-Identifiers to RAPID
 #'
+#' @description
 #' Quantifies how much each quasi-identifier contributes to the RAPID
 #' disclosure risk under a declared attack scenario.  Starting from the
 #' full set of quasi-identifiers \eqn{Q}, each quasi-identifier \eqn{j}
 #' (or a group of them) is removed from the attacker's knowledge, the
 #' attacker model is refitted on the synthetic data without it, and the
 #' drop in risk is recorded:
-#' \deqn{\Delta_j = \mathrm{RAPID}(Q) - \mathrm{RAPID}(Q \setminus \{j\}).}
+#' \deqn{\Delta_j = \mathrm{RAPID}(Q) - \mathrm{RAPID}(Q \setminus \{j\}).}{
+#'   Delta_j = RAPID(Q) - RAPID(Q without j).}
 #'
 #' Because part of every RAPID value is present even when the predictions
 #' carry no information about the true values, every scenario also reports
-#' the chance level of \code{\link{rapid}} (the share of records flagged
+#' the chance level of \code{\link{rapid}} (the share of records at risk
 #' when the true values are permuted) and the function reports the change
 #' in the excess over it,
-#' \eqn{\Delta^{exc}_j = [\mathrm{RAPID}(Q) - c(Q)] -
-#' [\mathrm{RAPID}(Q \setminus \{j\}) - c(Q \setminus \{j\})]}.
-#' This is the quantity to interpret.
+#' \deqn{\Delta^{exc}_j = [\mathrm{RAPID}(Q) - c(Q)] -
+#'   [\mathrm{RAPID}(Q \setminus \{j\}) - c(Q \setminus \{j\})],}{
+#'   Delta_exc_j = [RAPID(Q) - c(Q)] - [RAPID(Q without j) - c(Q without j)],}
+#' where \eqn{c(\cdot)}{c(.)} is the chance level of a scenario. This is the
+#' quantity to interpret.
+#'
+#' Every row is a scenario of its own, in which the attacker lacks one
+#' quasi-identifier or one group. The values are no decomposition of RAPID.
+#' They do not add up to the excess of the full scenario, and a value near
+#' zero does not show that a quasi-identifier is harmless when another one
+#' carries the same information (see Details).
 #'
 #' @details
 #' Every row of the result comes from one call of \code{\link{rapid}} with
@@ -23,19 +33,33 @@
 #' (model, scoring rule, thresholds) define the attack in the same way as
 #' there.
 #'
-#' \strong{Interpretation.} \eqn{\Delta_j} answers "how much risk would
-#' disappear if the attacker did not know \eqn{j}?", which is also the
+#' \strong{Interpretation.} \eqn{\Delta_j}{Delta_j} answers "how much risk
+#' would disappear if the attacker did not know \eqn{j}?", which is also the
 #' first-order effect of withholding or strongly coarsening \eqn{j}.  It is
-#' a drop-one (drop-column) quantity: the attacker model is refitted, so it
-#' measures the value of the \emph{knowledge}, not how much a fixed model
-#' relies on a variable (permutation importance).
+#' a drop-one (drop-column) quantity. The attacker model is refitted, so it
+#' measures the value of the \emph{knowledge} of a variable. How much a
+#' fixed model relies on a variable (permutation importance) is another
+#' question.
 #'
 #' \strong{Substitutes.} Quasi-identifiers that carry the same information
-#' mask each other: dropping either alone changes little, while dropping
-#' both changes a lot.  Use \code{groups} to drop such sets jointly
-#' (e.g. relationship and marital status in the Adult data).  A small
-#' \eqn{\Delta_j} therefore means "not needed given the others", not
-#' "harmless".
+#' mask each other. Dropping either alone changes little, while dropping
+#' both changes a lot (see the last example).  Use \code{groups} to drop
+#' such sets jointly (e.g. relationship and marital status in the Adult
+#' data).  A small \eqn{\Delta_j}{Delta_j} therefore means "not needed given
+#' the others". It does not mean "harmless".
+#'
+#' \strong{Complements.} Two quasi-identifiers that the attacker needs
+#' jointly each take the whole excess with them when they are dropped, so
+#' their values sum to more than the excess of the full scenario (see the
+#' first example). Under the default forest (\code{model_type = "rf"}) on a
+#' release that contains copies of original records, a quasi-identifier
+#' that is independent of the target can show a large drop. A linear model
+#' or a pruned tree (\code{"lm"} or \code{"cart"}) shows a drop near zero
+#' for such a quasi-identifier. Use one of them to see which
+#' quasi-identifiers carry information about the target. A small negative
+#' value means that the attacker did slightly better without the
+#' quasi-identifier, which is within model noise. In a tie \code{summary()}
+#' names the first row as the largest contribution.
 #'
 #' \strong{Uncertainty.} A single synthetic release gives one value per
 #' quasi-identifier. Differences of a few thousandths are within model
@@ -44,21 +68,34 @@
 #' permutations starts from the same seed (common random numbers), which
 #' reduces this noise.
 #'
+#' \strong{Holdout.} The table holds the values of the records of \code{X}
+#' only. The holdout of a \code{synth_pair} takes no part. A \code{holdout}
+#' given in \code{...} is passed to \code{rapid()} and is not reported.
+#'
 #' @param X The original (confidential) data: a data frame, or a
-#'   \code{\link{synth_pair}}.
-#' @param Y The synthetic data used to train the attacker model.
-#' @param key_vars Character vector: the full set of quasi-identifiers
-#'   known to the attacker in the reference scenario (at least two).
-#' @param target_var Character string naming the sensitive (target)
-#'   variable.
-#' @param groups Optional named list of character vectors; each element is
+#'   \code{\link{synth_pair}}. A \code{rapid} object is not accepted, because
+#'   every scenario needs a new fit.
+#' @param Y data frame of the released (synthetic or anonymized) data the
+#'   attacker is fitted on. Not needed if \code{X} is a \code{synth_pair}.
+#' @param key_vars character vector with the names of the quasi-identifiers.
+#'   It is the full set that the attacker knows in the reference scenario.
+#'   At least two are needed.
+#' @param target_var character, name of the sensitive variable (the target)
+#' @param groups Optional named list of character vectors. Each element is
 #'   a set of quasi-identifiers that is dropped jointly, in addition to the
 #'   single drops.  Names are used as labels.
 #' @param n_permutations Number of permutations of the true values for the
-#'   chance level of each attacker model (default 99).  Set to 0 to skip
-#'   the chance level. The excess columns are then \code{NA}.
-#' @param seed Optional random seed (see Details).
-#' @param verbose Logical; print progress?
+#'   chance level of each attacker model (default 99). It is passed to
+#'   \code{rapid()} as \code{n_perm}. Set to 0 to skip the chance level. The
+#'   excess columns are then \code{NA}, and \code{plot()} draws the drop in
+#'   RAPID. The function fits \code{1 + length(key_vars) + length(groups)}
+#'   attacker models and runs \code{n_permutations} permutations for each.
+#' @param seed Optional random seed (see Details). With a seed,
+#'   \code{set.seed()} is called and the random stream of the session is not
+#'   restored afterwards. In a simulation, set the seed once before the loop
+#'   and leave \code{seed = NULL}, or pass a different seed in every
+#'   replication.
+#' @param verbose Logical. Print progress (default \code{FALSE})?
 #' @param ... Further arguments passed to \code{\link{rapid}}: the model
 #'   (\code{model_type}), the scoring rule and its thresholds.  The old
 #'   argument names \code{original_data}, \code{synthetic_data},
@@ -69,10 +106,12 @@
 #' @return An object of class \code{"rapid_contribution"}, a list with
 #' \describe{
 #'   \item{results}{Data frame with one row for the full scenario
-#'     (\code{dropped = "(none)"}) and one per dropped quasi-identifier or
-#'     group: \code{dropped}, \code{n_qi}, \code{rapid}, \code{chance},
-#'     \code{excess}, \code{delta_rapid}, \code{delta_excess}.  Rows are
-#'     sorted by decreasing contribution.}
+#'     (\code{dropped = "(none)"}, always first) and one per dropped
+#'     quasi-identifier or group: \code{dropped}, \code{n_qi} (number of
+#'     quasi-identifiers the attacker keeps), \code{rapid}, \code{chance},
+#'     \code{excess}, \code{delta_rapid}, \code{delta_excess}. The rows after
+#'     the first are sorted by decreasing \code{delta_excess}, or by
+#'     \code{delta_rapid} when \code{n_permutations = 0}.}
 #'   \item{reference}{The row of the full scenario.}
 #'   \item{rapid, chance, excess}{Values of the full scenario.}
 #'   \item{rule}{The scoring rule of the full scenario.}
@@ -88,7 +127,13 @@
 #' as triangles) and returns the ggplot object, or a list of two for both
 #' measures, invisibly.
 #'
-#' @seealso \code{\link{rapid}}, \code{\link{rapid_test}}
+#' @references
+#' Templ, M., Thees, O. and Müller, R. (2026). RAPID: Risk of Attribute
+#' Prediction-Induced Disclosure. Manuscript under review at EPJ Data Science.
+#'
+#' @seealso \code{\link{rapid}}, \code{\link{rapid_test}}.
+#'   The section "Contribution of the quasi-identifiers" of
+#'   \code{vignette("rapid", package = "riskutility")}.
 #' @family rapid
 #' @author Matthias Templ
 #' @examples
@@ -123,6 +168,21 @@
 #'                                seed = 1)
 #' res_g
 #' plot(res_g, measure = c("excess", "rapid"))
+#'
+#' # Two quasi-identifiers with the same information mask each other. Each
+#' # single drop changes nothing, the joint drop removes the whole excess.
+#' set.seed(2)
+#' X2 <- data.frame(age = sample(20:70, n, replace = TRUE),
+#'                  region = factor(sample(letters[1:4], n, replace = TRUE)))
+#' X2$birth_year <- 2026 - X2$age
+#' X2$income <- round(exp(9 + 0.03 * X2$age + rnorm(n, 0, 0.1)))
+#' Y2 <- X2
+#' Y2$income <- round(X2$income * exp(rnorm(n, 0, 0.05)))
+#' rapid_qi_contribution(X2, Y2,
+#'                       key_vars = c("age", "birth_year", "region"),
+#'                       target_var = "income",
+#'                       groups = list(age_info = c("age", "birth_year")),
+#'                       model_type = "lm", n_permutations = 19, seed = 1)
 #' @export
 rapid_qi_contribution <- function(X, ...) {
   if (missing(X)) {
@@ -298,7 +358,7 @@ as.data.frame.rapid_contribution <- function(x, row.names = NULL, optional = FAL
 }
 
 #' @rdname rapid_qi_contribution
-#' @param measure \code{"excess"} (default; change in excess over the
+#' @param measure \code{"excess"} (default, the change in excess over the
 #'   chance level) or \code{"rapid"} (change in raw RAPID). Both may be
 #'   given and are drawn in this order.
 #' @export

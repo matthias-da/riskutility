@@ -20,7 +20,8 @@
 #' @param at_risk_only logical, if \code{TRUE} return only the records at risk
 #' @param common_share share of records treated as common, between 0 and 1
 #'   (default 0.7). See the section "Summary".
-#' @param level confidence level (default 0.95)
+#' @param level confidence level of the interval, between 0 and 1 (the
+#'   default is 0.95). \code{summary()} uses it for its Wilson interval.
 #' @param newdata data frame with the quasi-identifiers and, optionally, the
 #'   target
 #' @param evaluate logical, if \code{FALSE} return the changed call instead of
@@ -32,9 +33,10 @@
 #'   \code{method = "bootstrap"}
 #' @param seed random seed of the bootstrap (default \code{NULL})
 #' @param ... for \code{update()}: the arguments of \code{\link{rapid}()} to
-#'   change, as \code{name = value}. \code{predict()} takes none and stops with
-#'   an error of class \code{"rapid_error_input"} when given one. Ignored by the
-#'   other methods.
+#'   change, as \code{name = value}. For \code{print()}: passed to
+#'   \code{format()}, so \code{print(x, digits = 2)} works. \code{predict()}
+#'   takes none and stops with an error of class \code{"rapid_error_input"} when
+#'   given one. Ignored by the other methods.
 #'
 #' @section Printing:
 #' \code{format()} returns the lines that \code{print()} shows: the target, the
@@ -44,12 +46,18 @@
 #' release-specific RAPID when there is a holdout, and the note of the lookup
 #' attacker. A line says that RAPID is not distinguishable from the chance
 #' level when the excess is at most twice the standard deviation of the shares
-#' flagged in the permutations.
+#' flagged in the permutations. A flagged record is a record at risk.
+#'
+#' The print does not say how many records were removed for a missing value of
+#' a numeric target (\code{na_strategy = "drop"}). \code{nobs(x)} gives the
+#' number of scored records and \code{x$na$dropped} the row numbers of the
+#' removed records in \code{X}.
 #'
 #' @section Summary:
 #' \code{summary()} reports RAPID with its Wilson interval at \code{level}, the
-#' chance level and the excess, how the flagged records are spread over rare
-#' and common values of the target, and the accuracy of the attacker's point
+#' chance level and the excess, how the records at risk (the flagged records)
+#' are spread over rare and common values of the target, and the accuracy of the
+#' attacker's point
 #' prediction or predicted class. \code{as.data.frame()} of the summary returns
 #' its one-row table, so that the summaries of several releases or rules can be
 #' stacked with \code{rbind()}.
@@ -59,7 +67,12 @@
 #' of the rule. Under the band and the point rule it is the share of original
 #' values inside the record's tolerance band, and under \code{RCS_marginal} the
 #' share of the record's class in the original data. A low baseline then marks a
-#' rare value, where a close guess carries information. Under
+#' rare value, where a close guess carries information. For a categorical target
+#' the baseline has one value per class, so the rare records are whole classes:
+#' those with a share below the quantile. When the smallest class holds more
+#' than \code{1 - common_share} of the records, no record is rare, \code{n_rare}
+#' is 0 and \code{rare_hit_rate} is \code{NA}. Lower \code{common_share} to
+#' look at the smallest class. Under
 #' \code{RCS_conditional} the baseline is the mean predicted probability of the
 #' true class among the records of that class. A low baseline there marks a
 #' class to which the attacker gives little probability on average, which need
@@ -68,10 +81,19 @@
 #' both flagged and rare. Under \code{NCE}, which has no baseline, both are
 #' \code{NA}.
 #'
+#' Model performance is the error of the attacker's point prediction on the
+#' scored original records. For a numeric target the summary lists the mean
+#' absolute error (MAE), the root mean squared error (RMSE), the MAE divided by
+#' the mean absolute original value (Relative MAE) and the RMSE divided by the
+#' standard deviation of the original values (Relative RMSE). A relative RMSE
+#' near 1 means that the prediction is no better than the mean of the original
+#' values. For a categorical target the summary lists the accuracy, the share
+#' of records whose predicted class is the true class.
+#'
 #' @section Record table:
 #' \code{as.data.frame()} returns the field \code{records}: one row per scored
 #' record with the prepared target and quasi-identifiers, the true value of a
-#' continuous target (\code{original_value}), the columns of the rule (for the
+#' numeric target (\code{original_value}), the columns of the rule (for the
 #' band rule \code{predicted_value, band_lo, band_hi, g, b, r}) and
 #' \code{at_risk}. The columns of each rule are listed under the value of
 #' \code{\link{rapid}}. \code{nobs()} returns the number of scored records, which
@@ -95,15 +117,25 @@
 #' \code{num_error_metric} also refits when the linear model chose its scale
 #' under \code{num_scale = "auto"}, because that choice depends on the metric.
 #'
+#' A rescore keeps the predictions of the attacker. To check that they are
+#' unchanged, compare the record tables. For a numeric target this is
+#' \code{identical(as.data.frame(x)$predicted_value,
+#' as.data.frame(x_new)$predicted_value)}, and for a categorical target the same
+#' with \code{predicted_class}. A refit of a deterministic attacker such as the
+#' linear model gives the same predictions as well.
+#'
 #' @section Predict:
 #' \code{predict()} applies the attacker to new records. It needs an object
 #' created with \code{store_model = TRUE}, which keeps the model and, in the
 #' field \code{predictor}, the prepared synthetic data. The records are prepared
 #' like the original data: the column types of the synthetic data, the factor
-#' levels, and \code{na_strategy} for the target. A missing target value gets
-#' the value a missing value of the original data got (\code{na_constant_value},
-#' or the median of the original values), or the record is dropped under
-#' \code{na_strategy = "drop"}. Factor levels that occur neither in the original
+#' levels, and \code{na_strategy} for the target. A missing value of a numeric
+#' target gets the value a missing value of the original data got
+#' (\code{na_constant_value}, or the median of the original values), or the
+#' record is dropped under \code{na_strategy = "drop"}. A missing value of a
+#' categorical target becomes the class \code{"missing"}. It is refused with the
+#' error below unless the original or the synthetic data had a missing target
+#' value. Factor levels that occur neither in the original
 #' nor in the synthetic data are refused with an error of class
 #' \code{"rapid_error_levels"}, and so are, for the linear and logistic model
 #' and user-defined attackers, levels of the quasi-identifiers that the
@@ -114,8 +146,10 @@
 #' @section Confidence intervals:
 #' RAPID is a share of \eqn{n} flags, \eqn{\hat p = k / n}{p = k / n}. Given the
 #' fitted attacker, \code{confint()} treats the flags as independent Bernoulli
-#' trials. The interval is for RAPID itself. It does not include the
-#' uncertainty of the chance level, for which see \code{\link{rapid_test}()}.
+#' trials. The interval covers the sampling variation of the records for this
+#' fitted attacker. It does not cover the randomness of the fit, of the release,
+#' or of the chance level. There is no interval for the excess.
+#' \code{\link{rapid_test}()} tests RAPID against the chance level.
 #' \describe{
 #'   \item{wilson}{Score interval (Wilson, 1927), the default. It stays inside
 #'     \eqn{[0, 1]} and keeps its coverage near 0 and 1.}
@@ -166,7 +200,8 @@
 #'
 #' @seealso \code{\link{rapid}}, \code{\link{plot.rapid}},
 #'   \code{\link{rapid_test}}, \code{\link{rapid_threshold_select}},
-#'   \code{\link{rapid_suite}}
+#'   \code{\link{rapid_suite}}, and the section "Working with the result object"
+#'   of \code{vignette("rapid", package = "riskutility")}
 #' @author Oscar Thees, Matthias Templ
 #' @examples
 #' set.seed(1)
@@ -180,15 +215,17 @@
 #'            model_type = "lm", store_model = TRUE, seed = 1)
 #'
 #' # Printing and the record table
-#' format(r)
 #' r
+#' format(r)[3]                    # the printed lines as a character vector
 #' nobs(r)
 #' head(as.data.frame(r))
 #' head(as.data.frame(r, at_risk_only = TRUE))
 #'
-#' # Summary, and the summaries of two rules in one table
+#' # Summary. Rare values are the records with a baseline below its 30 percent
+#' # quantile, where a close guess is most informative
 #' s <- summary(r)
 #' s
+#' # The summaries of two rules in one table
 #' r_point <- update(r, num_eval_method = "point")   # rescored, no refit
 #' rbind(as.data.frame(s), as.data.frame(summary(r_point)))
 #'
@@ -275,6 +312,54 @@ as.data.frame.rapid <- function(x, row.names = NULL, optional = FALSE, ...,
 nobs.rapid <- function(object, ...) {
   .rapid_require(object, "version")
   object$n_total
+}
+
+#' @rdname rapid-methods
+#' @export
+confint.rapid <- function(object, parm = NULL, level = 0.95,
+                          method = c("wilson", "wald", "clopper-pearson", "bootstrap"),
+                          n_bootstrap = 1000, seed = NULL, ...) {
+  .rapid_require(object, "version")
+  method <- .rapid_choice(method, c("wilson", "wald", "clopper-pearson", "bootstrap"),
+                           "method")
+
+  p <- object$rapid
+  n <- object$n_total
+  alpha <- 1 - level
+  z <- stats::qnorm(1 - alpha / 2)
+
+  ci <- switch(method,
+    wald = {
+      se <- sqrt(p * (1 - p) / n)
+      c(p - z * se, p + z * se)
+    },
+
+    wilson = {
+      denom <- 1 + z^2 / n
+      centre <- (p + z^2 / (2 * n)) / denom
+      margin <- z * sqrt(p * (1 - p) / n + z^2 / (4 * n^2)) / denom
+      c(centre - margin, centre + margin)
+    },
+
+    "clopper-pearson" = {
+      k <- object$n_at_risk
+      c(if (k == 0) 0 else stats::qbeta(alpha / 2, k, n - k + 1),
+        if (k == n) 1 else stats::qbeta(1 - alpha / 2, k + 1, n - k))
+    },
+
+    bootstrap = {
+      if (!is.null(seed)) set.seed(seed)
+      # Resampling the n flags with replacement gives a binomial count
+      boot_props <- stats::rbinom(n_bootstrap, n, p) / n
+      stats::quantile(boot_props, probs = c(alpha / 2, 1 - alpha / 2),
+                      names = FALSE)
+    }
+  )
+
+  ci_mat <- matrix(ci, nrow = 1,
+                   dimnames = list("RAPID",
+                                   paste0(100 * c(alpha / 2, 1 - alpha / 2), "%")))
+  ci_mat
 }
 
 #' @rdname rapid-methods
