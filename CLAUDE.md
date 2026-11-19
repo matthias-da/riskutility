@@ -86,21 +86,21 @@ Each class follows the pattern:
    - Require `key_vars` (quasi-identifiers) and `target_var` (sensitive attribute)
    - Use exact or fuzzy matching between original and synthetic records
 
-2. **ML-based (RAPID)**: `rapid.R`
-   - Uses machine learning models to predict sensitive attributes from quasi-identifiers
-   - Trains on synthetic data, evaluates on original data
-   - Captures complex non-linear relationships that CAP methods may miss
-   - Supports: random forest (`rf`, default), linear model (`lm`), CART (`cart`), XGBoost (`gbm`), logistic (`logit`)
-   - Requires optional packages: `ranger`, `rpart`, or `xgboost` depending on model choice
-   - For numeric targets: `at_risk = TRUE` when prediction error < threshold (accurate prediction = disclosure risk)
-   - For categorical targets: `at_risk = TRUE` when ratio/gain/score >= threshold
-   - Default `cat_eval_method = "RCS_conditional"` with `cat_tau = 1`
-   - Default `return_all_records = TRUE` ensures both at-risk and not-at-risk records are available for plotting
-   - ranger defaults to `importance = "impurity"` so variable importance plots work out of the box
-   - `store_model = TRUE` needed for `plot(result, which = 4)` (variable importance)
-   - 6 plot types: histogram (1), scatter (2), threshold sensitivity (3), QI importance (4), QI attribution (5), QI interactions (6)
-   - Attribution plots (5, 6) use sum-to-zero contrasts with reference-level recovery, adaptive quantile binning, and robust CI scaling
-   - This is the canonical RAPID implementation; the research version lives in `~/workspace26/RAPID/`
+2. **ML-based (RAPID)**: `rapid*.R` (rebuilt for 0.3.0 on the RAPID paper, Templ, Thees & Müller 2026, under review at EPJ Data Science; bib key `templ2026rapid`)
+   - Attacker fits a model on the synthetic data (target ~ quasi-identifiers) and is applied to the original records
+   - One measure for both target types: confidence `g_i` (predicted mass on the true class, or on the tolerance band `B_i = {v : e(y_i, v) < eps}` for numeric targets), marginal baseline `b_i` (share of original values in the class / band), gain `r_i = (g_i - b_i)/(1 - b_i)` (0 where `b_i = 1`), at risk when `r_i > tau`. Band is open.
+   - Missing values of a continuous target: `na_strategy = "drop"` is the default since 0.3.0 (records removed; 0.2.0 was `"constant"`, value 0, records kept in the denominator). A missing categorical target is the level `"missing"`
+   - Defaults: numeric `num_eval_method = "band"`, `num_tau = 0.3`, `num_epsilon = 0.1` (proportion; >= 1 read as percent with warning), `num_error_metric = "symmetric"`, `num_delta = 0.01`; categorical `cat_eval_method = "RCS_marginal"`, `cat_tau = 0.3`. Old rules kept: `"point"`, `"RCS_conditional"` (`cat_tau = 1`), `"NCE"` (0.5)
+   - Chance level in every result: `n_perm = 10` permutations of the true values with the fitted attacker held fixed; fields `rapid`, `chance`, `excess` (same names in every RAPID class). `threshold_rule = "permutation"` uses the `perm_level` quantile of permuted gains
+   - Attackers (`model_type`): `rf` (default, ranger in Imports), `lm` (scale by `num_scale = "auto"`: log when relative metric, positive values and higher likelihood), `cart` (rpart, pruned by CV: `cp = 0`, `minbucket = 5`, `xval = 10`; `prune = FALSE` keeps the tree), `gbm` (xgboost), `logit`, `lookup` (one fully grown ranger tree; read only its excess), or a `rapid_learner()` object. rpart and xgboost are in Suggests
+   - Predictive distributions (`num_dist = "auto"/"grid"/"exact"`, `n_quantiles = 100`): lm normal/lognormal, cart and lookup leaf values, rf quantile regression forest (exact = Meinshausen 2006 weights), gbm quantile model (grid only)
+   - Internal classes: `rapid_rule_*` (`.rule_score()`), `rapid_learner_*` (`.learner_fit()` etc.), `rapid_pdist_*` (`.pdist_mass()`); no code outside these methods branches on rule or model names
+   - Methods on `rapid`: `print`/`format` (attacker line), `summary`, `plot` (types 1-6; 1-3 ggplot for gain rules with permutation null and chance curve), `as.data.frame` (`at_risk_only`), `nobs`, `confint` (wilson default, wald, clopper-pearson, bootstrap), `update` (rescore without refit when only the rule changes), `predict` (needs `store_model = TRUE`)
+   - Companions: `rapid_test()` (199 permutations, Wald test), `rapid_threshold_select()`, `rapid_qi_contribution()`, `rapid_synthesizer_cv()` (no default seed), `rapid_suite()` (worst case, default rf/cart/gbm/lookup), `rapid_learner()`; all take `X` first (data, `synth_pair` or `rapid` object) and accept the old argument names as aliases
+   - `holdout =` scores unseen original records; `release_specific = rapid - holdout$rapid`
+   - Reproducing the paper / Oscar Thees' RAPID package: `num_dist = "grid"`, `num_scale = "identity"`, and for cart `prune = FALSE, cp = 0.01, minsplit = 20, minbucket = 7` (minsplit is needed: rpart derives 21 from minbucket 7)
+   - Errors and warnings via `.rapid_abort()` / `.rapid_warn()` with classes; no default seed anywhere
+   - Vignette `vignettes/rapid.Rmd`; this is the canonical RAPID implementation, the research versions live in `~/workspace26/RAPID/` and `~/workspace26/RAPID_Dev/` (branch `numeric-band`)
 
 3. **Distance-based (holdout method)**: `dcr.R`, `nndr.R`, `ims.R`
    - Detect memorization by comparing distances to training vs. holdout data
@@ -189,7 +189,8 @@ rumap(original, synthetic,
 - `R/divergence.R` and `R/divergence2.R`: Entropy measures (KL, JS divergence)
 - `R/evaluation_stats.R`: Error metrics (MAE, MSE, RMSE, MAPE)
 - `R/propscore.R`: Propensity score utility
-- `R/rapid.R`: RAPID metric with ML-based attribute inference risk assessment (~1940 lines; includes all S3 methods, internal plot helpers, and model fitting)
+- `R/rapid.R`: `rapid()` generic, methods and object assembly (~1060 lines). The rest of RAPID is split: `rapid_score.R` (rules), `rapid_models.R` (learners, distributions, `rapid_learner()`), `rapid_inputs.R` (data preparation, aliases, classed errors), `rapid_methods.R` (print/summary/update/predict etc.), `rapid_plot.R`, `rapid_test.R`, `rapid_threshold_select.R`, `rapid_qi_contribution.R`, `rapid_synthesizer_cv.R`, `rapid_suite.R`, `confint_rapid.R`
+- `vignettes/rapid.Rmd`: RAPID vignette (measure, chance level, testing, attackers, holdout, migration from 0.2.0)
 - `R/dcap.R`, `R/tcap.R`: CAP-based attribution metrics
 - `R/dcr.R`, `R/nndr.R`, `R/ims.R`: Distance-based metrics
 - `R/recordLinkage.R`: Record linkage risk (~3385 lines; 8 methods, independent/bijective/OT matching, S3 dispatch, blocking, direction; shared risk back-end `.true_match_risk()`, PRAM `.pram_expected_risk()`)
@@ -271,7 +272,7 @@ Reference: Yao, Z., Krco, N., Ganev, G., & de Montjoye, Y.-A. (2025). arXiv:2505
 - Follow existing S3 class pattern: main function + print/summary/plot methods
 - `summary()` methods should return a typed summary object (e.g., `summary.rapid`), with its own `print.summary.classname()` method
 - `plot()` methods use integer `which` parameter for multiple plot types (e.g., `plot(x, which = 1:6)`)
-- Internal helpers prefixed with `.` (e.g., `.fit_rapid_model`, `.plot_qi_importance`)
+- Internal helpers prefixed with `.` (e.g., `.rapid_assess`, `.plot_qi_importance`)
 - Model fitting uses `modifyList(defaults, user_args)` pattern to allow user overrides via `...`
 - Use ASCII text in plot labels (no `expression()` with Greek letters) for cross-platform compatibility
 - Risk measures: higher values = higher risk (bad)
@@ -279,14 +280,15 @@ Reference: Yao, Z., Krco, N., Ganev, G., & de Montjoye, Y.-A. (2025). arXiv:2505
 
 ## RAPID Porting Notes
 
-The RAPID implementation in riskutility is the canonical version, ported and improved from the research package at `~/workspace26/RAPID/`. Key differences from the research version:
-
-- **Flat result object** (`result$rapid`, `result$threshold`) vs nested (`result$risk$confidence_rate`)
-- **Proper summary pattern** (returns `summary.rapid` object) vs direct printing
-- **6 plot types** (vs 3 in research version), with lollipop/forest plots instead of barplots
-- **Attribution robustness**: adaptive quantile binning, reference-level recovery, robust CI scaling
-- **Default importance**: ranger gets `importance = "impurity"` automatically via `modifyList` pattern
-- **Not yet ported**: new error metrics (`mae`, `rmse`, `rmae`, `rrmse`) — the research package has an inconsistency between `rapid.R` and `evaluate_numeric.R`, so this was deferred
+riskutility holds the canonical RAPID implementation. Since 0.3.0 it implements the band method and
+chance level of Oscar Thees' research package (`~/workspace26/RAPID_Dev/`, branch `numeric-band`)
+and goes beyond it: exact predictive mass where the attacker has one (lm, cart, rf with
+`num_dist = "exact"`), no default seed, user arguments reach the model through `...`, lm scale and
+cart pruning chosen from the data, lookup attacker, model suite, holdout, Wald test,
+Clopper-Pearson, `update()`/`predict()`. Differences to the paper and to Oscar's package (items
+D1 to D12 and others): `~/SecondBrain/00-Inbox/2026-11-18-rapid-paper-vs-implementations.md`.
+The research package scrambles multiclass gbm probabilities under xgboost 3 (D12); riskutility is
+fixed. Model metrics `mae`, `rmse`, `rmae`, `rrmse` are in `model_metrics`.
 
 ## References
 
@@ -300,13 +302,27 @@ The RAPID implementation in riskutility is the canonical version, ported and imp
 - Snoke, J., et al. (2018). "General and Specific Utility Measures for Synthetic Data." JRSS-A, 181(3), 663-688.
 - Related research code: `/Users/matthias/workspace25/PCA_RU/`, `/Users/matthias/workspace26/RAPID/`
 
+## synthpop TCAP Compatibility (since 0.2.0)
+
+synthpop 1.9-3 redefined its `allCAPs$TCAP` (denominator per Little, Allmendinger & Elliot 2025,
+JOS 41(1), 255-308: only originals matched to a *disclosive* synthetic key class); synthpop
+<= 1.9-2 divided by all key-matched originals. `tcap()` therefore always returns three variants:
+`tcap_certain` (riskutility default: key uniquely determines target in original AND synthetic),
+`tcap_matched` (= synthpop <= 1.9-2 TCAP), `tcap_conditional` (= Little et al. 2025 = synthpop
+>= 1.9-3); the `kind` argument only selects the print/summary headline. Ordering on any data:
+certain <= matched <= conditional. **Test policy**: every test that calls synthpop is
+`skip_on_cran()` and TCAP comparisons are version-guarded (see `test-tcap-dcap-synthpop.R`) —
+never add cross-package equality assertions that run on CRAN. Related: `vip` was dropped from
+Suggests in 0.2.0 (archived from CRAN 2026-07-08); permutation importance in
+`compare_feature_importance()` is computed internally (`.permutation_importance()`).
+
 ## Package Status
 
-- **CRAN**: On CRAN since 2026-06-22 (v0.1.0, first release) — <https://CRAN.R-project.org/package=riskutility>. Title: "Disclosure Risk and Data Utility Metrics for Synthetic and Anonymized Data".
+- **CRAN**: v0.2.0 published 2026-09-02 (first release 0.1.0 on 2026-06-22) — <https://CRAN.R-project.org/package=riskutility>. Title: "Disclosure Risk and Data Utility Metrics for Synthetic and Anonymized Data". 0.2.0: value-changing bug fixes documented in the JSS paper, `tcap()` `kind` variants for the synthpop 1.9-3 TCAP redefinition, vip dependency dropped.
 - **Authors**: Matthias Templ (aut, cre); Oscar Thees (ctb)
-- **Tests**: 69 test files, ~3900 tests passing
+- **Tests**: 81 test files, 5277 tests passing (check of 0.3.0, 2026-11-18)
 - **R CMD check**: `Status: OK` (0 errors / 0 warnings / 0 notes) with vignettes rebuilt
-- **Vignettes**: Main vignette (`riskutility.Rmd`) ships to CRAN; record linkage deep-dive (`recordLinkage.Rmd`) is repo-only (build-excluded — see "Record Linkage: sdcMicro Name Collision")
+- **Vignettes**: Main vignette (`riskutility.Rmd`) and RAPID vignette (`rapid.Rmd`, since 0.3.0) ship to CRAN; record linkage deep-dive (`recordLinkage.Rmd`) is repo-only (build-excluded — see "Record Linkage: sdcMicro Name Collision")
 - **CITATION**: Available in `inst/CITATION`
 
 
