@@ -20,7 +20,8 @@ The `riskutility` package provides comprehensive methods to measure disclosure r
 
 ### Attribution-Based Measures (CAP Family)
 
-These metrics measure the probability that an adversary can correctly infer sensitive attributes from quasi-identifiers.
+These metrics measure the probability that an adversary can correctly infer a sensitive target
+variable (`target_var`) from quasi-identifiers (`key_vars`).
 
 | Function | Description |
 |----------|-------------|
@@ -62,11 +63,24 @@ result <- dcr(original_data, synthetic_data,
 
 ### ML-Based Measure (RAPID)
 
-`rapid()` trains a model on the synthetic data and scores attribute-inference
-risk on the original data (random-forest default; also `lm`/`cart`/`gbm`/`logit`).
-Every result reports the chance level next to the risk. Confidence intervals, a
-permutation test, threshold selection and six diagnostic plots come with it. See
-`vignette("rapid", package = "riskutility")`.
+`rapid()` fits an attacker model on the synthetic data (random forest by default; also `lm`,
+`cart`, `gbm`, `logit`, `lookup` or a user-defined learner) and applies it to the original
+records. A record is at risk when the attacker gains clearly over the marginal baseline of its
+target. Every result reports the chance level and the excess over it.
+
+```r
+r <- rapid(original_data, synthetic_data,
+           key_vars = c("age", "gender", "region"),
+           target_var = "income", seed = 1)
+r                                         # RAPID, chance level, excess
+confint(r)                                # interval for RAPID
+head(as.data.frame(r, at_risk_only = TRUE))   # the records at risk
+rapid_test(r, seed = 1)                   # permutation test against chance
+```
+
+Companions are `rapid_test()` (permutation test), `rapid_threshold_select()`,
+`rapid_qi_contribution()`, `rapid_synthesizer_cv()` and `rapid_suite()` (worst case over several
+attackers). See `vignette("rapid", package = "riskutility")`.
 
 ### Classical SDC Privacy Models
 
@@ -210,9 +224,12 @@ library(riskutility)
 
 # Load or create your data
 data(eusilc13puf, package = "simPop")
-original <- eusilc13puf[1:500, ]
+d <- eusilc13puf[, c("age", "rb090", "db040", "pb220a", "hgrossIncome")]
+d$age <- as.numeric(as.character(d$age))
+original <- d[complete.cases(d), ][1:500, ]
 
-# Create synthetic data (example: shuffle sensitive variable)
+# Create synthetic data (example: shuffle the sensitive variable)
+set.seed(1)
 synthetic <- original
 synthetic$pb220a <- sample(synthetic$pb220a)
 
@@ -226,22 +243,26 @@ target_var <- "pb220a"
 dcap_result <- dcap(original, synthetic, key_vars, target_var)
 print(dcap_result)
 
-# 2. Distance-based privacy check
+# 2. Attribute inference by a model, with its chance level
+rapid_result <- rapid(original, synthetic, key_vars, target_var, seed = 1)
+print(rapid_result)
+
+# 3. Distance-based privacy check
 dcr_result <- dcr(original, synthetic, holdout_fraction = 0.5, seed = 123)
 print(dcr_result)
 
-# 3. Check for exact copies
+# 4. Check for exact copies
 ims_result <- ims(original, synthetic)
 print(ims_result)
 
 # === Utility Assessment ===
 
-# 4. Propensity score
+# 5. Propensity score
 ps_result <- propscore(original, synthetic, na = "remove")
 print(ps_result)
 
-# 5. Distribution comparison
-compare_histograms(original, synthetic, var = "age")
+# 6. Distribution comparison
+compare_histograms(original, synthetic, num_var = "hgrossIncome", cat_vars = "rb090")
 ```
 
 ## Interpretation Guide

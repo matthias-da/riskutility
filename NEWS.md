@@ -4,27 +4,28 @@ RAPID (`rapid()` and its companion functions) is rebuilt on the measure of the R
 (Templ, Thees and Müller, 2026, under review). It measures a gain over a marginal baseline for
 both types of target and reports the chance level in every result. The new vignette
 `vignette("rapid", package = "riskutility")` explains the measure and the result object.
-Several defaults change reported values. Each item below gives the call that reproduces the
-0.2.0 rule, as in the section "Changes in 0.3.0" of `?rapid`.
+Several defaults change reported values. Where a call reproduces the 0.2.0 rule, the item gives
+it. The section "Changes in 0.3.0" of `?rapid` lists these calls too.
 
 ## Value-changing
 
-* For a continuous target the default rule is the band rule (`num_eval_method = "band"`). A
-  record is at risk when the attacker's predictive distribution puts clearly more probability
-  into a tolerance band around the true value than the marginal distribution of the original
-  values does (gain `r = (g - b) / (1 - b) > num_tau`, default `num_tau = 0.3`). The 0.2.0 rule
-  is `rapid(X, Y, kv, tv, num_eval_method = "point", num_epsilon = 0.1)`.
+* For a numeric target the default rule is the band rule (`num_eval_method = "band"`). The
+  attacker's predictive distribution gives a confidence `g`, its probability in a tolerance band
+  around the true value. The marginal distribution of the original values gives a baseline `b`,
+  its probability in the same band. A record is at risk when the gain `r = (g - b) / (1 - b)`
+  exceeds `num_tau` (default 0.3). The 0.2.0 rule is
+  `rapid(X, Y, kv, tv, num_eval_method = "point", num_epsilon = 0.1)`.
 * For a categorical target the default rule is the gain over the marginal baseline
-  (`cat_eval_method = "RCS_marginal"`, `cat_tau = 0.3`), as in the paper. The 0.2.0 rule is
+  (`cat_eval_method = "RCS_marginal"`, `cat_tau = 0.3`), as in the RAPID paper. The 0.2.0 rule is
   `rapid(X, Y, kv, tv, cat_eval_method = "RCS_conditional")` (its default `cat_tau` stays 1).
-* A threshold on a gain (`num_tau` under the band rule, `cat_tau` under `RCS_marginal`, also
-  through `update()`) must be at least 0 and below 1. Another value is an error of class
-  `rapid_error_input`. A gain is at most 1, so a threshold of 1 or more flags no record, and a
-  negative threshold flags records on which the attacker does worse than the marginal
-  distribution. A 0.2.0 call with `cat_tau = 1` is therefore an error that names its rule, `rapid(X,
-  Y, kv, tv, cat_tau = 1, cat_eval_method = "RCS_conditional")`.
+* A threshold on a gain (`num_tau` under the band rule, `cat_tau` under `RCS_marginal`, also in
+  `update()`) must be at least 0 and below 1. Any other value is an error of class
+  `rapid_error_input`. A gain is at most 1, so a threshold of 1 or more would flag no record.
+  A negative threshold would flag records on which the attacker does worse than the marginal
+  distribution. A 0.2.0 call with `cat_tau = 1` therefore needs its rule named:
+  `rapid(X, Y, kv, tv, cat_tau = 1, cat_eval_method = "RCS_conditional")`.
 * The tolerance `num_epsilon` of the relative error metrics is a proportion (default 0.1, that
-  is 10 %), as in the paper. `num_epsilon = 10` is now `num_epsilon = 0.1`. A relative tolerance
+  is 10 %), as in the RAPID paper. `num_epsilon = 10` is now `num_epsilon = 0.1`. A relative tolerance
   of 1 or more is still read as percent, with a warning.
 * `rapid_threshold_select()` under the point rule takes its grid `epsilon_range` as proportions
   (default `seq(0.01, 0.5, by = 0.02)`) and recommends the smallest significant tolerance, the
@@ -41,32 +42,30 @@ Several defaults change reported values. Each item below gives the call that rep
   rpart defaults, is
   `model_type = "cart", prune = FALSE, cp = 0.01, minsplit = 20, minbucket = 7`. `minsplit` must
   be given, because with `minbucket = 7` alone rpart sets `minsplit = 21`.
-* Records with a missing value of a continuous target are removed (`na_strategy = "drop"`), in
+* Records with a missing value of a numeric target are removed (`na_strategy = "drop"`), in
   `X`, `Y`, the holdout and the `newdata` of `predict()`. RAPID is the share among the records
   with an observed target. 0.2.0 set the missing values to 0 and kept the records in the
   denominator, where they are rarely flagged, so RAPID tended to be lower. The 0.2.0 rule is
   `rapid(X, Y, kv, tv, na_strategy = "constant")`. A missing value of a categorical target is
   the level `"missing"`, as before.
-* `rapid_test()`, `rapid_threshold_select()`, `rapid_qi_contribution()` and
-  `rapid_synthesizer_cv()` fit through `rapid()` and use its defaults. Their numeric results
-  change with the band rule as above.
+* `rapid_test()`, `rapid_threshold_select()` and `rapid_synthesizer_cv()` fit through `rapid()`
+  and use its defaults. Their numeric results change with the band rule as above.
 * `rumap()` reports for RAPID the excess of a random forest attacker over its chance level,
-  `max(0, rapid - chance)`. 0.2.0 reported the raw RAPID of a linear model under the point rule,
-  which is now
-  `rapid(X, Y, kv, tv, model_type = "lm", num_eval_method = "point", num_scale = "identity",
-  num_epsilon = 0.1)$rapid`. For a categorical target 0.2.0 reported `NA` with a warning,
-  because its linear model does not take a categorical target.
+  `max(0, rapid - chance)`. 0.2.0 reported the raw RAPID of a linear model under the point rule.
+  That value is
+  `rapid(X, Y, kv, tv, model_type = "lm", num_eval_method = "point", num_scale = "identity", num_epsilon = 0.1)$rapid`.
+  For a categorical target 0.2.0 reported `NA` with a warning, because the linear model does not
+  take a categorical target.
 * `disclosure_report()` passes RAPID when the p-value of `rapid_test()` (199 permutations) is
   above the new argument `rapid_alpha` (default 0.05). Its row reports the chance level and the
-  excess. 0.2.0 passed RAPID when it was below 0.15 under the 0.2.0 rule. With the default
-  attacker `rapid_model = "rf"` that verdict is now
-  `rapid(X, Y, kv, tv, model_type = "rf", num_eval_method = "point",
-  num_epsilon = 0.1)$rapid < 0.15`
-  for a continuous target and
+  excess, and the test object is stored in `results$rapid_test`. 0.2.0 passed RAPID when it was
+  below 0.15 under the 0.2.0 rule.
+* The 0.2.0 verdict of `disclosure_report()` with the default attacker `rapid_model = "rf"` is
+  `rapid(X, Y, kv, tv, model_type = "rf", num_eval_method = "point", num_epsilon = 0.1)$rapid < 0.15`
+  for a numeric target and
   `rapid(X, Y, kv, tv, model_type = "rf", cat_eval_method = "RCS_conditional")$rapid < 0.15`
-  for a categorical one. For `rapid_model = "lm"` or `"cart"` add the settings of the
-  attacker items above (`num_scale = "identity"`, or `prune = FALSE, cp = 0.01, minsplit = 20,
-  minbucket = 7`).
+  for a categorical one. For `rapid_model = "lm"` add `num_scale = "identity"`. For `"cart"` add
+  `prune = FALSE, cp = 0.01, minsplit = 20, minbucket = 7`.
 * `summary()` of a `rapid` object no longer labels the result LOW, MEDIUM or HIGH (cut-offs 0.05
   and 0.15). Read the excess over the chance level and `rapid_test()` instead.
 * The 95 % interval of `rapid_synthesizer_cv()` for the mean RAPID over the folds uses the t
@@ -96,8 +95,8 @@ Several defaults change reported values. Each item below gives the call that rep
   shares of the single permutations (`chance_rates`) and the excess `excess = rapid - chance`.
   The print says when RAPID is not distinguishable from the chance level. The functions that
   build on `rapid()` report the three values as well.
-* `threshold_rule = "permutation"` replaces the threshold by the `perm_level` quantile (default
-  0.95) of all permuted gains.
+* `threshold_rule = "permutation"` replaces the fixed threshold of a gain rule (band,
+  `RCS_marginal`) by the `perm_level` quantile (default 0.95) of all permuted gains.
 * `num_scale` (`"auto"`, `"identity"`, `"log"`) sets the working scale of the linear model.
 * New lookup attacker `model_type = "lookup"`, one fully grown ranger tree that reads off the
   synthetic records with the same key values. It measures whether the release reproduces the
@@ -105,7 +104,7 @@ Several defaults change reported values. Each item below gives the call that rep
 * The print of a `rapid` object starts with the attack scenario and an attacker line with the
   settings that drive the result (for example `rf: 500 trees, min.node.size 5` or
   `cart: 12 leaves, pruned by cross-validation`), stored in the field `attacker`.
-* Continuous targets get a predictive distribution per attacker. It is normal or lognormal for
+* Numeric targets get a predictive distribution per attacker. It is normal or lognormal for
   lm, the leaf values for cart and lookup, a quantile regression forest for rf, a quantile model
   for gbm. `num_dist` chooses between the exact probability (`"exact"`), `n_quantiles` quantiles
   (`"grid"`, default 100) and the exact form where the attacker has one (`"auto"`, default).
@@ -138,13 +137,13 @@ Several defaults change reported values. Each item below gives the call that rep
 * `as.data.frame()` for `rapid` objects (the record table, `at_risk_only = TRUE` for the flagged
   records) and for the objects of `rapid_test()`, `rapid_threshold_select()`,
   `rapid_qi_contribution()`, `rapid_synthesizer_cv()` and `rapid_suite()`. `nobs()` and
-  `format()` for `rapid` objects.
+  `format()` methods exist for `rapid` objects.
 * `rapid_test()` adds the Wald test against the chance level, with
   `z = (R - pi0) / sqrt(pi0 (1 - pi0) / n)` and `pi0` the mean of the permutation distribution.
 * `confint()` for `rapid` objects gains `method = "clopper-pearson"`.
 * `rapid_test()`, `rapid_threshold_select()` and `rapid_suite()` accept a fitted `rapid` object
-  and work on its stored predictions without a refit. `rapid_test()` and
-  `rapid_synthesizer_cv()` gain a `plot()` method.
+  and work on its stored predictions without a refit.
+* `rapid_test()` and `rapid_synthesizer_cv()` gain a `plot()` method.
 * All RAPID functions take the data as `X, Y, key_vars, target_var`. The old names
   `original_data`, `synthetic_data`, `quasi_identifiers` and `sensitive_attribute` are accepted
   as aliases. An argument whose name is a near miss of a `rapid()` argument is an error.
@@ -165,27 +164,26 @@ Several defaults change reported values. Each item below gives the call that rep
   is the histogram of the gains with the permutation null as an outline, type 2 the confidence
   `g` against the baseline `b`, and type 3 RAPID against the threshold with the chance level as
   a curve. Each ggplot type is returned invisibly, a list for several types.
-* `disclosure_report()` gains `rapid_alpha` (see above) and stores the `rapid_test()` object in
-  `results$rapid_test`.
-* `rapid_qi_contribution()` measures the risk contribution of each quasi-identifier under a
-  declared attack scenario. Each quasi-identifier (or a named group of substitutes, via
-  `groups`) is removed from the attacker's knowledge, the attacker model is refitted, and the
-  drop in RAPID is reported. Each scenario also reports its chance level, from `n_permutations`
+* New function `rapid_qi_contribution()` measures the risk contribution of each quasi-identifier
+  (`key_vars`) under a declared attack scenario. Each quasi-identifier (or a named group of
+  substitutes, via `groups`) is removed from the attacker's knowledge, the attacker model is
+  refitted, and the drop in RAPID is reported. Each scenario also reports its chance level, from `n_permutations`
   permutations of the true values (default 99) with the refitted attacker held fixed, and the
   drop in the excess over it. Comes with `print()`, `summary()`, `as.data.frame()` and a
   `plot()` dot plot.
-* New vignette `vignette("rapid", package = "riskutility")`.
 
 ## Deprecated
 
 * `rapid(return_all_records = )` is ignored with a warning. The result always holds all records.
   Use `as.data.frame(x, at_risk_only = TRUE)` for the flagged ones.
-* `rapid(num_epsilon_type = )` is honoured with a warning. `"percentage"` becomes a proportion
+* `rapid(num_epsilon_type = )` is honored with a warning. `"percentage"` becomes a proportion
   in `num_epsilon`, `"absolute"` becomes `num_error_metric = "absolute"`.
 * `rapid_synthesizer_cv(return_details = , return_all_records = )` are ignored with a warning.
   The object always holds the fold table `folds` and the fold objects `fits`.
 
 ## Fixed
+
+Faults of 0.2.0 unless stated otherwise.
 
 * `model_type = "gbm"` failed with xgboost 3.x (`ALTLIST classes must provide a Set_elt method`)
   for numeric and categorical targets.
@@ -195,13 +193,12 @@ Several defaults change reported values. Each item below gives the call that rep
 * An ordered-factor target failed (`comparison of these types is not implemented`).
 * `confint(method = "bootstrap")` returned `[1, 1]` for an object fitted with
   `return_all_records = FALSE`, because it resampled the flagged records only.
-* `rapid_synthesizer_cv()` stored `RCS_marginal` as the method of a categorical target while its
-  folds used the `rapid()` default `RCS_conditional`. The stored method is now the one the folds
-  use.
+* `rapid_synthesizer_cv()` stored `RCS_marginal` as the method of a categorical target in 0.2.0,
+  while its folds used `RCS_conditional`. The stored method is now the one the folds use.
 * `plot(x, which = c(1, 3))` drew only the last type. All requested types are drawn, in the
   order given.
 * A class held by every original record gave a gain of `NaN`, counted as not at risk. The gain
-  is 0 there, as in the paper.
+  is 0 there, as in the RAPID paper.
 * `rapid_test()` and `rapid_threshold_select()` on the data fitted the attacker twice and used
   the missing-value strategy `"constant"` for the permutations whatever the call said. They now
   fit once, through `rapid()`, and permute the fitted object's predictions.
